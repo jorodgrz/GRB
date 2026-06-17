@@ -1,0 +1,146 @@
+# pyproject.toml
+#
+# Minimal pyproject for the GRB classification project.  The project
+# is *not* packaged for distribution; this file hosts the
+# pytest, ruff, mypy, and coverage configuration.
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests"]
+# The grb_*.py modules live in src/; put it on sys.path so the flat
+# ``import grb_physics`` style keeps working without a packaging step.
+pythonpath = ["src"]
+addopts = "-q --strict-markers --cov=grb_classify --cov=grb_io --cov=grb_offsets --cov=grb_physics --cov=grb_plot_style --cov=grb_rates --cov-report=term-missing:skip-covered --no-cov-on-fail"
+markers = [
+    "slow: tests that take more than ~5 s wall-clock (deselect with '-m \"not slow\"')",
+    "requires_data: tests that need the COMPAS HDF5 catalogues in Data/ (skipped if absent)",
+    "requires_compas: tests that need the upstream compas_python_utils package (skipped if not importable)",
+    "unit: pure module-level tests (auto-applied to tests/unit/)",
+    "integration: data-bound or notebook-coupled tests (auto-applied to tests/integration/)",
+    "anchors: literature-anchor / physics-audit tests (auto-applied to tests/anchors/)",
+    "section_1: Mass Plane (BNS and BHNS)",
+    "section_2: Component Mass Distributions by GRB Class",
+    "section_3: Delay Time Distributions by GRB Class",
+    "section_3b: Delay Time per GRB Class split by Broekgaarden Channel",
+    "section_4: Cosmic Integration / MSSFR Grid Setup",
+    "section_5: Metallicity Dependence of GRB Formation Efficiency",
+    "section_5b: Metallicity Efficiency per GRB Class split by Broekgaarden Channel",
+    "section_6: Formation Channel Breakdown per GRB Class",
+    "section_7: BNS Merger Rate R(z) per GRB Class",
+    "section_7b: BNS Local Rate vs LVK GWTC-5.0 90 percent CR",
+    "section_7c: BNS R(z) per GRB Class split by Broekgaarden Channel",
+    "section_8: BHNS Merger Rate R(z) with BH Spin Sensitivity",
+    "section_8c: BHNS Local Rate vs LVK GWTC-5.0 90 percent CR",
+    "section_8d: BHNS R(z) per GRB Class split by Broekgaarden Channel",
+    "section_9: Physical Host-Galaxy Offset Distributions",
+    "section_9b: Host-Galaxy Offsets across SN-Kick Variations",
+    "section_10: Beaming Correction (Intrinsic vs Observable)",
+    "section_11: EOS, Channels, Offset CDFs, Beaming Comparator",
+    "section_12: Population-Synthesis Variations (Models A, F, G, J, K)",
+    "section_13: Appendix sbGRB + blue KN bimodality mechanism",
+    "section_14: Full 20-Model Broekgaarden+ 2021 Grid Scan",
+]
+filterwarnings = [
+    # The COMPAS Foucart calibration warnings are intentional bulk-call
+    # signals for analysts, not test failures; downgrade them here.
+    "ignore:Foucart \\(2018\\) formula applied:UserWarning",
+    # The MEAN_MASS_EVOLVED deprecation warning fires whenever someone
+    # imports the legacy constant; tests that exercise the deprecation
+    # explicitly catch it themselves.
+    "ignore::DeprecationWarning:grb_physics",
+    # The HDF5 metadata validation prints a one-time "no embedded model
+    # identifier" warning on un-annotated catalogues.  Tests that load
+    # archives without first running tools/embed_model_metadata.py are
+    # expected; suppress the noise.
+    "ignore:COMPAS HDF5.*has no embedded model identifier:UserWarning",
+    # classify_grid emits a one-time UserWarning when synthetic mass
+    # grids include cells with m_light < ns_min (1.1 Msun); the section
+    # tests use uniform mass grids by design.
+    "ignore:classify_grid. excluded.*cells with m_light:UserWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    "COMPAS",
+    "Demos",
+    "Papers",
+    "Plots",
+    "Data",
+    "*.ipynb",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter; long literature comments are intentional)
+    "E741",  # ambiguous variable names ('l', 'I') match physics literature
+    "B008",  # function call in default argument (matplotlib style mutable defaults)
+    "B028",  # no explicit stacklevel (most warnings here are user-visible signals)
+    "SIM108",  # ternary preference; explicit if-else reads better in physics code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B", "SIM", "UP"]
+"tools/**/*.py" = ["B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+files = [
+    "src/grb_classify.py",
+    "src/grb_io.py",
+    "src/grb_offsets.py",
+    "src/grb_physics.py",
+    "src/grb_plot_style.py",
+    "src/grb_rates.py",
+]
+ignore_missing_imports = true
+follow_imports = "silent"
+no_implicit_optional = false
+warn_unused_ignores = false
+warn_redundant_casts = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+
+[tool.coverage.run]
+source = [
+    "grb_classify",
+    "grb_io",
+    "grb_offsets",
+    "grb_physics",
+    "grb_plot_style",
+    "grb_rates",
+]
+omit = [
+    "tests/*",
+    "tools/*",
+]
+# Narrow test scopes (e.g. a single section file) intentionally skip
+# modules in `source`; coverage's "module-not-imported" warning is
+# noise in that case.  The 70 percent floor in `make coverage` runs
+# the full unit + anchors selector, which does import every module.
+disable_warnings = ["module-not-imported"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+skip_covered = false

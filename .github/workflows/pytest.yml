@@ -1,0 +1,115 @@
+name: pytest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint and type check (ruff + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install lint and type tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff>=0.5" "mypy>=1.10"
+
+      - name: ruff format --check
+        run: ruff format --check .
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: mypy
+        run: mypy src/grb_classify.py src/grb_io.py src/grb_offsets.py src/grb_physics.py src/grb_plot_style.py src/grb_rates.py
+
+  unit:
+    name: Unit and anchor tests (no Data, no compas pin)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install minimal runtime + pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1"
+          pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
+
+      - name: Run unit + anchors with coverage gate
+        run: python -m pytest -m "unit or anchors" --cov-fail-under=70 --tb=short
+
+  notebook:
+    name: Notebook smoke (manual dispatch)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install minimal runtime + pytest + nbclient
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1" "nbclient>=0.10" "nbformat>=5.10"
+          pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
+
+      - name: Note about Data/
+        run: |
+          echo "The notebook smoke test requires Data/COMPASCompactOutput_BNS_A.h5"
+          echo "and Data/COMPASCompactOutput_BHNS_A.h5 (Broekgaarden+ 2021,"
+          echo "Zenodo 5189849 / 5178777).  Add a Data/ staging step before"
+          echo "this one (Zenodo download or artifact restore) so the test"
+          echo "actually executes the notebook instead of skipping."
+
+      - name: Run notebook execution test (skips without Data/)
+        run: python -m pytest tests/integration/test_grb_main_notebook.py -q --tb=short
+
+  full:
+    name: Full integration suite (manual dispatch)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install minimal runtime + pytest + nbclient
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1" "nbclient>=0.10" "nbformat>=5.10"
+          pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
+
+      - name: Note about Data/
+        run: |
+          echo "Tests gated by @pytest.mark.requires_data auto-skip when the"
+          echo "Data/ HDF5 catalogues are missing.  Add a Data/ staging step"
+          echo "(Zenodo download or artifact restore) before this one to"
+          echo "exercise the full suite end-to-end."
+
+      - name: Run full pytest suite
+        run: python -m pytest -q --tb=short

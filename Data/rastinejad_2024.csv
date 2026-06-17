@@ -1,0 +1,44 @@
+# Rastinejad et al. 2024, ApJ 979, 190.
+# Component ejecta masses (M_B, M_P, M_R) and asymmetric +/- intervals are
+# taken from Table 3 medians.  GRB 230307A uses the paper-favored KN Fit 1.
+#
+# Component-to-origin mapping (Metzger 2019, Rev. Mod. Phys. 89, 023001;
+# Kasen et al. 2017, Nature 551, 80):
+#   M_B (lanthanide-poor)  : fast dynamical ejecta (tidal + shocked).
+#   M_P (intermediate Ye)  : disk-wind ejecta; thermal / neutrino-driven.
+#   M_R (lanthanide-rich)  : disk-wind ejecta; MHD/viscous component.
+# M_wind = M_P + M_R is the disk-wind total and is the apples-to-apples
+# quantity to compare against Gottlieb+25 Eq. (11) (BH engine) and
+# 0.3 * M_d (HMNS engine), both of which predict disk-wind mass only.
+# comparison.ipynb uses M_wind for the Fig. 2 residual; the Fig. 1 plot
+# still shows M_tot = M_B + M_P + M_R for continuity with Rastinejad+24.
+#
+# T_50 source and prior notes (see notebook T50_PRIOR_OVERRIDES):
+#   050709  : T_90 = 0.07 +/- 0.04 s from Villasenor+2005, Nature 437, 855
+#             (HETE-II FREGATE).  No published T_50.  The Gaussian prior
+#             previously used biased posterior mass toward the T_90 value;
+#             the notebook now draws T_50 log-uniformly on [0.02, 0.07] s
+#             to reflect the "upper bound only" status.
+#   170817A : T_50 = 0.6 +/- 0.1 s from Goldstein+2017, ApJL 848 L14 Table 1
+#             (Fermi-GBM 50-300 keV main pulse; T_90 = 2.0 +/- 0.5 s).
+#             Default Gaussian prior.
+#   230307A : No published T_50.  T_90 ~ 35 s (Levan+2024).  The burst's
+#             main-pulse fluence is concentrated within the first ~10 s,
+#             with an extended-emission tail extending T_90 to ~35 s.
+#             The previous symmetric Gaussian (T_50 = 17.5 +/- 10 s) leaked
+#             posterior mass to unphysically short durations; the notebook
+#             now draws T_50 log-normally with geomean 17.5 s and
+#             multiplicative sigma = 2 (factor-2 width, brackets the
+#             5 s "main pulse only" and 35 s "full T_90" interpretations).
+#
+# E_iso uncertainties for events without published errors (050709 and
+# 230307A) are set to 30% relative.
+name,grb_class,T50_s,T50_err_s,T50_ref,E_iso_52,E_iso_err52,E_iso_ref,M_B_med,M_B_lo,M_B_hi,M_P_med,M_P_lo,M_P_hi,M_R_med,M_R_lo,M_R_hi
+050709, sb, 0.07,  0.04, Villasenor+2005,    0.0310, 0.0093,  R+24T1, 0.003, 0.002, 0.004, 0.029, 0.009, 0.010, 0.015, 0.012, 0.072
+060614, lb, 43.2,  0.8,  R+24T1,             0.5100, 0.0700,  R+24T1, 0.014, 0.010, 0.013, 0.029, 0.027, 0.034, 0.146, 0.120, 0.072
+130603B,sb, 0.06,  0.004,R+24T1,             0.2900, 0.0200,  R+24T1, 0.006, 0.004, 0.017, 0.075, 0.037, 0.063, 0.023, 0.020, 0.160
+160821B,sb, 0.28,  0.05, R+24T1Swift,        0.0050, 0.0010,  R+24T1, 0.003, 0.001, 0.001, 0.011, 0.002, 0.002, 0.011, 0.009, 0.021
+170817A,gw, 0.6,   0.1,  Goldstein+2017L14,  0.0006, 0.00004, R+24T1, 0.004, 0.0005,0.0005,0.019, 0.001, 0.001, 0.052, 0.002, 0.003
+200522A,sb, 0.38,  0.05, R+24T1,             0.0810, 0.0200,  R+24T1, 0.046, 0.009, 0.009, 0.020, 0.018, 0.068, 0.019, 0.016, 0.124
+211211A,lb, 21.2,  0.2,  R+24T1Swift,        1.7200, 0.0300,  R+24T1, 0.007, 0.001, 0.000, 0.010, 0.002, 0.001, 0.130, 0.054, 0.051
+230307A,lb, 17.5,  10.0, T90/2_Levan+2024,   2.9000, 0.8700,  R+24T1, 0.012, 0.001, 0.001, 0.025, 0.003, 0.003, 0.054, 0.022, 0.019

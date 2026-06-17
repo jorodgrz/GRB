@@ -1,0 +1,92 @@
+# Large data files
+*.h5
+*.hdf5
+*.fits
+
+# Python environments
+grb-env/
+venv/
+env/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IPython
+.cache/
+.ipython/
+
+# macOS
+.DS_Store
+
+# Demos (vendored tutorials, not part of the project deliverable)
+Demos/
+
+# Reference papers (local PDFs, not part of the project deliverable)
+Papers/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.code-workspace
+.pdf_extract/
+CLAUDE.md
+COMPAS/
+
+# Data products (only the observational comparison CSV is tracked)
+Data/*
+!Data/rastinejad_2024.csv
+
+# Download cache for tools/download_compas_data.py (Zenodo zips and
+# parsed manifests).  Already covered by Data/* above, but called out
+# explicitly so it is obvious where partial downloads live.
+Data/_cache/
+
+# Local research notes (LLM council transcripts, literature synthesis)
+council/
+
+# Matplotlib font cache
+.mpl-cache/
+
+# Pytest run cache
+.pytest_cache/
+
+# mypy / ruff caches (also self-ignored by nested .gitignore inside each
+# cache dir, but listed here so a fresh cache or a force-add cannot leak)
+.mypy_cache/
+.ruff_cache/
+
+# Local PDF-extraction virtualenv
+.venv_pdf/
+
+# Smoke-test marker written by tests/test_grb_main_notebook.py
+Plots/.smoke_marker
+
+# Coverage.py / pytest-cov outputs
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Notebook-run cache/logs (nbrun execution artifacts)
+.nbrun/
+
+# LaTeX build artifacts (track sources .tex/.bib/.cls/.bst, not build products)
+*.aux
+*.log
+*.out
+*.blg
+*.bbl
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+aastex702/*.pdf
+aastex702/overleaf_grb_paper.zip
+
+# Stray scratch file
+zisHCU3D
+.cursor/

@@ -1,0 +1,39 @@
+# Conda environment for the GRB classification project.
+# See README.md for project description and setup notes.
+#
+# Usage:
+#     conda env create -f environment.yml
+#     conda activate grb-env
+#
+# Python 3.10.  Lower bounds reflect API features actually used in the
+# codebase.  COMPAS is installed via pip from upstream at the
+# project-pinned commit (compas_python_utils is not on PyPI or
+# conda-forge).
+
+name: grb-env
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - numpy>=1.23
+  - scipy>=1.10
+  - matplotlib>=3.7
+  - seaborn>=0.13
+  - h5py>=3.7
+  - pandas>=2.0
+  - astropy>=5.0
+  - jupyterlab>=4.0
+  - ipykernel>=6.20
+  - ipython>=8.10
+  - pytest>=7.4
+  - pytest-cov>=4.1
+  - ruff>=0.5
+  - mypy>=1.10
+  - pre-commit>=3.5
+  - nbclient>=0.10
+  - nbformat>=5.10
+  - pip
+  - pip:
+      - git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils
