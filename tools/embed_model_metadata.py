@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """One-shot helper to embed Broekgaarden+ 2021 model identifiers as HDF5
-root attributes on the COMPAS catalogues in ``Data/``.
+root attributes on the COMPAS catalogues in ``data/``.
 
 The Zenodo files do not encode their model identity (A, J, K, ...) or
 ``ns_max`` value, so filename-only identification would let a renamed
@@ -25,7 +25,7 @@ loader-level checks).
 
 Usage
 -----
-    python tools/embed_model_metadata.py                # all known files in Data/
+    python tools/embed_model_metadata.py                # all known files in data/
     python tools/embed_model_metadata.py --dry-run      # log only
     python tools/embed_model_metadata.py path/to/file.h5 \\
         --model A --ns-max 2.5 --kind BNS \\
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument(
-        "path", nargs="?", default=None, help="Path to a single HDF5 file (default: walk Data/)."
+        "path", nargs="?", default=None, help="Path to a single HDF5 file (default: walk data/)."
     )
     p.add_argument(
         "--model",
@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, meta in KNOWN_FILES.items():
         path = os.path.join(data_dir, name)
         if not os.path.exists(path):
-            print(f"[skip] {name} not present in Data/")
+            print(f"[skip] {name} not present in data/")
             continue
         _annotate(
             path,

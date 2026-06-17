@@ -1,6 +1,6 @@
 """Validation tests for the per-class BNS rate curve shape.
 
-Section 7 of ``grb_main.ipynb`` produces ``Plots/rate_bns_by_class.{pdf,png}``,
+Section 7 of ``grb_main.ipynb`` produces ``plots/rate_bns_by_class.{pdf,png}``,
 where the cyan ``sbGRB + blue KN`` channel exhibits a peak near z ~ 1.5, a
 ~10x dip near z ~ 4-5, and a recovery near z ~ 7.  The author's caption
 attributes this to low-Z formation-channel dominance for the lightest BNS
@@ -32,7 +32,7 @@ The two tests in this file close that gap on the actual production curve:
     above the few-binary regime that would make the curve sensitive to
     individual STROOPWAFEL outliers.
 
-Both tests are gated on ``Data/COMPASCompactOutput_BNS_A.h5`` (via the
+Both tests are gated on ``data/COMPASCompactOutput_BNS_A.h5`` (via the
 ``bns_a_path`` fixture in ``conftest.py``) and on the upstream
 ``compas_python_utils`` package (via ``pytest.importorskip``); they skip
 cleanly on machines lacking either.  Each test runs at least one full
@@ -291,7 +291,7 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
     (``smooth_sigma * redshift_step = 0.30``): ``smooth_sigma=30`` at
     ``dz=0.01`` (the production setting) and ``smooth_sigma=60`` at
     ``dz=0.005``.  This is the same low-pass the cyan plot in
-    ``Plots/rate_bns_by_class`` actually applies.
+    ``plots/rate_bns_by_class`` actually applies.
     """
     setup = _build_setup(bns_a_path)
 

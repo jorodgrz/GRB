@@ -28,7 +28,7 @@ All tests are gated by ``@pytest.mark.requires_data`` and
 ``@pytest.mark.requires_compas``; they skip cleanly on machines without
 the COMPAS HDF5 catalogues or without the upstream package.
 
-Reference papers (in ``Papers/``):
+Reference papers (in ``papers/``):
 - Madau and Dickinson (2014) ARA&A 52, 415 [Madau_2014.pdf]
 - Neijssel et al. (2019) MNRAS 490, 3740 [Neijssel_2019.pdf]
 - Broekgaarden et al. (2021) arXiv:2103.02608 [Broekgaarden_2021.pdf]

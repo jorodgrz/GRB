@@ -1,6 +1,6 @@
 """Integration tests for ``comparison.ipynb`` data plumbing.
 
-Loads ``Data/rastinejad_2024.csv`` via the shared ``rastinejad_csv_path``
+Loads ``data/rastinejad_2024.csv`` via the shared ``rastinejad_csv_path``
 fixture and asserts the column schema and the ``classify_observed_mergers``
 contract that the comparison notebook consumes.
 

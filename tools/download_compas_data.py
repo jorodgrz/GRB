@@ -3,7 +3,7 @@
 
 Fetches the full 20-model grid for each population from Zenodo records
 5189849 (BNS / NSNS in paper-II nomenclature) and 5178777 (BHNS), extracts
-each zip into ``Data/``, renames the embedded HDF5 to the project's paper-I
+each zip into ``data/``, renames the embedded HDF5 to the project's paper-I
 letter convention where the model exists in paper I, and runs the
 embed-metadata annotator so loaders can validate model identity at load
 time.
@@ -65,7 +65,7 @@ import embed_model_metadata as _emm  # noqa: E402
 # Project paths
 # ---------------------------------------------------------------------------
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(REPO_ROOT, "Data")
+DATA_DIR = os.path.join(REPO_ROOT, "data")
 CACHE_DIR = os.path.join(DATA_DIR, "_cache")
 MANIFEST_DIR = os.path.join(CACHE_DIR, "manifests")
 
@@ -130,7 +130,7 @@ class ModelEntry:
 
     @property
     def output_filename(self) -> str:
-        """On-disk filename under ``Data/`` after rename."""
+        """On-disk filename under ``data/`` after rename."""
         return f"COMPASCompactOutput_{self.kind}_{self.project_suffix}.h5"
 
     @property
@@ -286,7 +286,7 @@ MODEL_REGISTRY: dict[tuple[str, str], ModelEntry] = _build_registry()
 def fetch_zenodo_manifest(zenodo_id: int, *, refresh: bool = False) -> dict[str, dict]:
     """Return ``{zip_name: {"url", "md5", "size"}}`` for ``zenodo_id``.
 
-    Caches the parsed manifest under ``Data/_cache/manifests/<id>.json``
+    Caches the parsed manifest under ``data/_cache/manifests/<id>.json``
     so a typical run hits Zenodo at most twice (once per population).
     """
     os.makedirs(MANIFEST_DIR, exist_ok=True)
@@ -647,7 +647,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument(
         "--keep-zips",
         action="store_true",
-        help="Keep cached zips under Data/_cache/ after extraction.",
+        help="Keep cached zips under data/_cache/ after extraction.",
     )
     p.add_argument(
         "--refresh-manifest",
@@ -739,7 +739,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n[error] {zip_name}: {e}", file=sys.stderr)
             return 1
 
-    print("\nDone.  All requested files are present under Data/.")
+    print("\nDone.  All requested files are present under data/.")
     return 0
 
 

@@ -76,7 +76,7 @@ def get_model(letter: str) -> Dict[str, Any]:
     bhns_path = data_path(f"COMPASCompactOutput_BHNS_{letter}.h5")
     for p in (bns_path, bhns_path):
         if not os.path.exists(p):
-            pytest.skip(f"{os.path.basename(p)} not present in Data/")
+            pytest.skip(f"{os.path.basename(p)} not present in data/")
 
     from astropy.cosmology import Planck15
 

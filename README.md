@@ -19,7 +19,7 @@ python tools/download_compas_data.py --tier 1 --confirm    # 5 core models A, F,
 python tools/download_compas_data.py --confirm             # full 20-model grid, ~45 GB
 ```
 
-Files land in `Data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from [Zenodo 5189849](https://zenodo.org/records/5189849), BHNS from [Zenodo 5178777](https://zenodo.org/records/5178777). The observational comparison in [comparison.ipynb](comparison.ipynb) reads `Data/rastinejad_2024.csv` (Rastinejad et al. 2024 component decomposition).
+Files land in `data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from [Zenodo 5189849](https://zenodo.org/records/5189849), BHNS from [Zenodo 5178777](https://zenodo.org/records/5178777). The observational comparison in [comparison.ipynb](comparison.ipynb) reads `data/rastinejad_2024.csv` (Rastinejad et al. 2024 component decomposition).
 
 The downloader chains `tools/embed_model_metadata.py`, which writes `model` and `ns_max` as HDF5 root attributes. Loaders validate these against `expected_model` / `expected_ns_max` and fail loudly on filename or metadata drift.
 
@@ -38,7 +38,7 @@ The downloader chains `tools/embed_model_metadata.py`, which writes `model` and 
 
 The six `grb_*.py` modules live in `src/` but import as flat modules (`import grb_physics`): `src/` is placed on the path via `pyproject.toml` (`pythonpath = ["src"]`), `tests/conftest.py`, and the first import cell of each notebook.
 
-`Plots/` is tracked; `Data/`, `COMPAS/`, `Papers/`, `Demos/` are not.
+`plots/` is tracked; `data/`, `COMPAS/`, `papers/`, `demos/` are not.
 
 ## Classification
 
@@ -72,9 +72,9 @@ All disk-mass-based GRB rates are upper bounds: 100 percent jet launching above 
 
 ```bash
 make ci         # lint + typecheck + smoke; what CI runs on every push and PR
-make smoke      # fast subset (no Data/, no compas), under ~15 s
+make smoke      # fast subset (no data/, no compas), under ~15 s
 make coverage   # 70 percent coverage floor on grb_*.py over unit + anchors
-make test       # full suite; data-bound tests auto-skip if Data/ is empty
+make test       # full suite; data-bound tests auto-skip if data/ is empty
 ```
 
 See [tests/README.md](tests/README.md) for the per-folder, per-section layout and the marker reference.

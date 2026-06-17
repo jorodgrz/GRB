@@ -7,7 +7,7 @@ Neijssel+ 2019, Madau and Dickinson 2014, Wanderman and Piran 2015) and
 ``compas_python_utils.cosmic_integration.FastCosmicIntegration``.
 
 The COMPAS-vs-grb_rates agreement test is marked ``requires_data`` plus
-``requires_compas`` because it loads ``Data/COMPASCompactOutput_BNS_A.h5``
+``requires_compas`` because it loads ``data/COMPASCompactOutput_BNS_A.h5``
 and runs the upstream find_formation_and_merger_rates side by side with
 ``compute_merger_rate``; it is skipped cleanly on machines that do not
 have either piece available.

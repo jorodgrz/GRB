@@ -13,7 +13,7 @@ pythonpath = ["src"]
 addopts = "-q --strict-markers --cov=grb_classify --cov=grb_io --cov=grb_offsets --cov=grb_physics --cov=grb_plot_style --cov=grb_rates --cov-report=term-missing:skip-covered --no-cov-on-fail"
 markers = [
     "slow: tests that take more than ~5 s wall-clock (deselect with '-m \"not slow\"')",
-    "requires_data: tests that need the COMPAS HDF5 catalogues in Data/ (skipped if absent)",
+    "requires_data: tests that need the COMPAS HDF5 catalogues in data/ (skipped if absent)",
     "requires_compas: tests that need the upstream compas_python_utils package (skipped if not importable)",
     "unit: pure module-level tests (auto-applied to tests/unit/)",
     "integration: data-bound or notebook-coupled tests (auto-applied to tests/integration/)",
@@ -64,10 +64,10 @@ line-length = 100
 target-version = "py310"
 extend-exclude = [
     "COMPAS",
-    "Demos",
-    "Papers",
-    "Plots",
-    "Data",
+    "demos",
+    "papers",
+    "plots",
+    "data",
     "*.ipynb",
 ]
 

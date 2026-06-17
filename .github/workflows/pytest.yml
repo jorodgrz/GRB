@@ -74,15 +74,15 @@ jobs:
           pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1" "nbclient>=0.10" "nbformat>=5.10"
           pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
 
-      - name: Note about Data/
+      - name: Note about data/
         run: |
-          echo "The notebook smoke test requires Data/COMPASCompactOutput_BNS_A.h5"
-          echo "and Data/COMPASCompactOutput_BHNS_A.h5 (Broekgaarden+ 2021,"
-          echo "Zenodo 5189849 / 5178777).  Add a Data/ staging step before"
+          echo "The notebook smoke test requires data/COMPASCompactOutput_BNS_A.h5"
+          echo "and data/COMPASCompactOutput_BHNS_A.h5 (Broekgaarden+ 2021,"
+          echo "Zenodo 5189849 / 5178777).  Add a data/ staging step before"
           echo "this one (Zenodo download or artifact restore) so the test"
           echo "actually executes the notebook instead of skipping."
 
-      - name: Run notebook execution test (skips without Data/)
+      - name: Run notebook execution test (skips without data/)
         run: python -m pytest tests/integration/test_grb_main_notebook.py -q --tb=short
 
   full:
@@ -104,10 +104,10 @@ jobs:
           pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1" "nbclient>=0.10" "nbformat>=5.10"
           pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
 
-      - name: Note about Data/
+      - name: Note about data/
         run: |
           echo "Tests gated by @pytest.mark.requires_data auto-skip when the"
-          echo "Data/ HDF5 catalogues are missing.  Add a Data/ staging step"
+          echo "data/ HDF5 catalogues are missing.  Add a data/ staging step"
           echo "(Zenodo download or artifact restore) before this one to"
           echo "exercise the full suite end-to-end."
 

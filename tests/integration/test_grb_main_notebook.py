@@ -4,7 +4,7 @@ The literature-anchor tests in `test_literature_anchors.py` lock the
 module-level constants and pure-function physics; this file locks the
 *production-pipeline* output by re-running the master notebook through
 `nbclient` and checking class-fraction summary lines, the rate
-calibration anchor, and `Plots/` artifact freshness.
+calibration anchor, and `plots/` artifact freshness.
 
 Mechanism:
 
@@ -14,7 +14,7 @@ Mechanism:
   the `_summary` helper at the top of the notebook) and for the
   Section 4 cosmic-integration anchor lines (`BNS R_loc expected = ...`
   and `BHNS R_loc expected = ...`).
-- Generated PDF / PNG files in `Plots/` are checked for non-zero
+- Generated PDF / PNG files in `plots/` are checked for non-zero
   size and an mtime newer than a marker file written before the
   notebook executes.
 
@@ -396,7 +396,7 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_noteboo
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Plots/ artifact freshness
+# plots/ artifact freshness
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.slow
 @pytest.mark.requires_data
@@ -429,9 +429,9 @@ def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook, repo_ro
         if p.stat().st_mtime < marker_mtime:
             stale.append(name)
 
-    assert not missing, f"Missing Plots/ files after notebook run: {missing}"
-    assert not empty, f"Empty Plots/ files after notebook run: {empty}"
+    assert not missing, f"Missing plots/ files after notebook run: {missing}"
+    assert not empty, f"Empty plots/ files after notebook run: {empty}"
     assert not stale, (
-        f"Stale Plots/ files (mtime older than pre-run marker): {stale}; "
+        f"Stale plots/ files (mtime older than pre-run marker): {stale}; "
         f"the notebook may not have regenerated them."
     )

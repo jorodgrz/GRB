@@ -164,7 +164,7 @@ def test_eos_models_carry_M_crit_R_1p4_M_TOV():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Data-bound tests (skipped if Data/ empty)
+# Data-bound tests (skipped if data/ empty)
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 def test_load_bns_mass_ordering(bns_a_path):

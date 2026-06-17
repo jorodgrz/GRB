@@ -257,7 +257,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
 
 # ─────────────────────────────────────────────────────────────────────
 # LIGO O4 envelope: Abbott et al. (2023) ApJ 949, 76 (GWTC-3 BNS / BHNS).
-# [no Papers/ entry; the published rate posteriors are cited below.]
+# [no papers/ entry; the published rate posteriors are cited below.]
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 @pytest.mark.requires_compas

@@ -12,7 +12,7 @@ import warnings
 import h5py as h5
 import numpy as np
 
-_DATA_DIR = os.path.join(os.path.dirname(__file__), "Data")
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 
 DEFAULT_BNS_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BNS_A.h5")
 DEFAULT_BHNS_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BHNS_A.h5")
@@ -183,7 +183,7 @@ def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=N
     Parameters
     ----------
     path : str, optional
-        Path to HDF5 file. Defaults to Data/COMPASCompactOutput_BNS_A.h5.
+        Path to HDF5 file. Defaults to data/COMPASCompactOutput_BNS_A.h5.
     sort_masses : bool
         If True, m1 >= m2 is enforced (heavier/lighter).
     expected_model : str, optional
@@ -358,7 +358,7 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
     Parameters
     ----------
     path : str, optional
-        HDF5 path; defaults to Data/COMPASCompactOutput_BHNS_A.h5.
+        HDF5 path; defaults to data/COMPASCompactOutput_BHNS_A.h5.
     expected_model : str, optional
         See ``load_bns``.  When the embedded ``model`` attribute is
         present and differs, raises ``ValueError``.

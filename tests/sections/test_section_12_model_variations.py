@@ -58,8 +58,8 @@ import pytest
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # tests/sections/ -> tests/ -> repo root.  Two dirname() calls; the
 # single-dirname stale value was resolving to tests/ and pointing
-# _data_path() at a tests/Data/ that does not exist, so every
-# parametrize case skipped silently with "not present in Data/" even
+# _data_path() at a tests/data/ that does not exist, so every
+# parametrize case skipped silently with "not present in data/" even
 # on a fully populated download.
 _REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _REPO_ROOT not in sys.path:
@@ -298,7 +298,7 @@ def test_channel_fractions_sum_to_one_per_model(letter, kind):
     fname = f"COMPASCompactOutput_{kind}_{letter}.h5"
     path = _data_path(fname)
     if not os.path.exists(path):
-        pytest.skip(f"{fname} not present in Data/")
+        pytest.skip(f"{fname} not present in data/")
 
     loader = load_bns_with_channels if kind == "BNS" else load_bhns_with_channels
     d = loader(path=path, expected_model=letter)

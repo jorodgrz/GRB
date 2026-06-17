@@ -267,7 +267,7 @@ def mcrit_to_r14(mc):
 # double-Gaussian fit to the Galactic NS mass distribution.  Component 1
 # captures the recycled + slow-pulsar peak near 1.34 Msun; component 2
 # captures the high-mass tail (e.g. PSR J0740+6620, J1614-2230) near
-# 1.80 Msun.  PDF not present in the project Papers/ folder; values
+# 1.80 Msun.  PDF not present in the project papers/ folder; values
 # below are taken from arXiv:1810.03548 Table 3 (their two-Gaussian fit).
 NS_REMAP_W1 = 0.66
 NS_REMAP_MU1 = 1.34  # [Msun]

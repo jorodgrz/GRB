@@ -1,7 +1,7 @@
 """Strict literature-anchor tests for `grb_*.py` modules.
 
 Each test pins a numerical constant or a function output to the
-corresponding paper in ``Papers/``.  Policy (``strict_paper``): any
+corresponding paper in ``papers/``.  Policy (``strict_paper``): any
 in-code value that lies outside the paper-quoted central plus
 uncertainty band fails this suite even when the docstring rationalizes
 it.  Failures here are not regressions; they are scientific
@@ -11,7 +11,7 @@ Each test docstring states paper, equation or table number, and the
 exact number being pinned, so the failure message is actionable.
 
 Conventions:
-- Pure-function tests; no ``Data/`` access.  All run in well under one
+- Pure-function tests; no ``data/`` access.  All run in well under one
   second per test.
 - Where a paper quotes a 1-sigma band, the test asserts membership.
   Where it quotes a range (e.g. Bauswein 2013 ``k = M_thresh / M_TOV in
@@ -33,9 +33,9 @@ import pytest
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Bauswein, Baumgarte and Janka (2013) PRL 111, 131101 [Papers/Bauswein_2013.pdf]
-# Bauswein, Bastian, Blaschke et al. (2020) [Papers/Bauswein_2020.pdf]
-# Koppel, Bovard and Rezzolla (2019) ApJL 872, L16 [Papers/Koppel_2019.pdf]
+# Bauswein, Baumgarte and Janka (2013) PRL 111, 131101 [papers/Bauswein_2013.pdf]
+# Bauswein, Bastian, Blaschke et al. (2020) [papers/Bauswein_2020.pdf]
+# Koppel, Bovard and Rezzolla (2019) ApJL 872, L16 [papers/Koppel_2019.pdf]
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.xfail(
     strict=True,
@@ -108,7 +108,7 @@ def test_eos_models_M_crit_over_M_TOV_in_bauswein_band(eos_name, k_min, k_max):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Read, Lackey, Owen, Friedman (2009) PRD 79, 124032 [Papers/Read_2009.pdf]
+# Read, Lackey, Owen, Friedman (2009) PRD 79, 124032 [papers/Read_2009.pdf]
 # EOS table III: NS radius at 1.4 Msun and maximum mass.
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize(
@@ -165,7 +165,7 @@ def test_eos_models_R14_and_MTOV_against_read_2009_table_III(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Read et al. (2009) PRD 79, 124032 [Papers/Read_2009.pdf]
+# Read et al. (2009) PRD 79, 124032 [papers/Read_2009.pdf]
 # `mcrit_to_r14`: linear interpolation between APR4 and DD2 anchors.
 # ─────────────────────────────────────────────────────────────────────
 def test_mcrit_to_r14_recovers_apr4_and_dd2_read_2009_anchors():
@@ -193,7 +193,7 @@ def test_mcrit_to_r14_recovers_apr4_and_dd2_read_2009_anchors():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Raaijmakers et al. (2021) ApJL 918, L29 [Papers/Raaijmakers_2021.pdf]
+# Raaijmakers et al. (2021) ApJL 918, L29 [papers/Raaijmakers_2021.pdf]
 # Combined NICER + GW + KN posterior on M_TOV.
 # ─────────────────────────────────────────────────────────────────────
 def test_raaijmakers_2021_M_TOV_inside_combined_posterior():
@@ -243,8 +243,8 @@ def test_ns_radius_heuristic_drops_by_15_percent_from_1p4_to_M_TOV():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Lattimer and Prakash (2001) ApJ 550, 426 [Papers/Lattimer_2000.pdf]
-# Gao, Hu, Lu, Tian, Lu (2020) [Papers/Gao_2020.pdf]
+# Lattimer and Prakash (2001) ApJ 550, 426 [papers/Lattimer_2000.pdf]
+# Gao, Hu, Lu, Tian, Lu (2020) [papers/Gao_2020.pdf]
 # NS baryon mass: M_b = M_g + 0.080 * M_g^2 (L&P 2001 Eq. 56).
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("M_g", [1.20, 1.30, 1.35, 1.40, 1.60, 1.80, 2.00])
@@ -317,7 +317,7 @@ def test_alsing_2018_double_gaussian_constants_match_table3():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Mandel and Muller (2020) MNRAS 499, 3214 [Papers/Mandel_Muller_2020.pdf]
+# Mandel and Muller (2020) MNRAS 499, 3214 [papers/Mandel_Muller_2020.pdf]
 # Patton and Sukhbold (2020) MNRAS 499, 2803
 # Fryer (2012) Eq. 12-13 baryonic-to-gravitational mass conversion
 # produces a ~1.65-1.80 Msun NS mass deficit in both delayed and rapid
@@ -381,7 +381,7 @@ def test_remap_closes_fryer_gap_in_1p65_to_1p80_msun():
 
 # ─────────────────────────────────────────────────────────────────────
 # Foucart, Hinderer and Nissanke (2018) PRD 98, 081501
-# [Papers/Foucart_2018.pdf]
+# [papers/Foucart_2018.pdf]
 # Eq. (4) coefficients and validity ranges.
 # ─────────────────────────────────────────────────────────────────────
 def test_foucart_2018_eq4_coefficients_match_paper():
@@ -481,7 +481,7 @@ def test_foucart_2018_qualitative_low_Q_below_FF12():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Kruger and Foucart (2020) PRD 101, 103002 [Papers/Kruger_2020.pdf]
+# Kruger and Foucart (2020) PRD 101, 103002 [papers/Kruger_2020.pdf]
 # Eqs. (4), (6), (9): BNS disk mass, BNS dyn ejecta, BHNS dyn ejecta.
 # ─────────────────────────────────────────────────────────────────────
 def test_kruger_foucart_2020_bhns_dyn_ejecta_eq9_coefficients_by_hand():
@@ -602,8 +602,8 @@ def test_kruger_foucart_bns_dyn_ejecta_gw170817_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Abbott et al. (2019) PRX 9, 011001  -- GW170817 [Papers/Abbott_2019_GW170817.pdf]
-# Abbott et al. (2020) ApJL 892, L3   -- GW190425 [Papers/Abbott_2020_GW190425.pdf]
+# Abbott et al. (2019) PRX 9, 011001  -- GW170817 [papers/Abbott_2019_GW170817.pdf]
+# Abbott et al. (2020) ApJL 892, L3   -- GW190425 [papers/Abbott_2020_GW190425.pdf]
 # Pin `OBSERVED_GW_EVENTS` to the published low-spin 90% CL ranges and
 # source-frame chirp masses so the plot annotations cannot drift from the
 # discovery papers.
@@ -668,7 +668,7 @@ def test_observed_gw_events_in_published_bands(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Hernquist (1990) ApJ 356, 359 [Papers/Hernquist_1990.pdf]
+# Hernquist (1990) ApJ 356, 359 [papers/Hernquist_1990.pdf]
 # Closed-form anchors for `grb_offsets`.
 # ─────────────────────────────────────────────────────────────────────
 def test_hernquist_scale_radius_uses_projected_half_light_ratio():
@@ -794,8 +794,8 @@ def test_R_CAP_FACTOR_pileup_matches_hernquist_eq38_closed_form():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Fong and Berger (2013) ApJ 776, 18 [Papers/Fong_2013.pdf]
-# Fong et al. (2022) hosts I/II [Papers/Fong_2022_hosts_I.pdf, II]
+# Fong and Berger (2013) ApJ 776, 18 [papers/Fong_2013.pdf]
+# Fong et al. (2022) hosts I/II [papers/Fong_2022_hosts_I.pdf, II]
 # Default host R_e and host-type weights.
 # ─────────────────────────────────────────────────────────────────────
 def test_fong_berger_2013_default_R_e_within_observed_sgrb_band():
@@ -841,8 +841,8 @@ def test_fong_berger_2013_host_model_weights_sum_to_one():
 
 # ─────────────────────────────────────────────────────────────────────
 # Leibler and Berger (2010) ApJ 725, 1202 [arXiv:1009.1147]
-# Nugent et al. (2022) ApJ 940, 57 [Papers/Fong_2022_hosts_II.pdf]
-# Fong et al. (2022) ApJ 940, 56 [Papers/Fong_2022_hosts_I.pdf]
+# Nugent et al. (2022) ApJ 940, 57 [papers/Fong_2022_hosts_II.pdf]
+# Fong et al. (2022) ApJ 940, 56 [papers/Fong_2022_hosts_I.pdf]
 # sGRB host stellar masses and effective radii per host type.
 # ─────────────────────────────────────────────────────────────────────
 def test_host_models_stellar_masses_within_leibler_berger_2010_bands():
@@ -988,8 +988,8 @@ def test_fong_berger_2013_sgrb_offset_array_matches_published_summary():
 # ─────────────────────────────────────────────────────────────────────
 # Long-GRB-with-kilonova projected offsets
 # Della Valle et al. (2006) Nature 444, 1050 [060614];
-# Rastinejad et al. (2022) Nature 612, 223 [Papers/...] [211211A];
-# Levan et al. (2024) Nature 626, 737 [Papers/Yang_Levan_2024_JWST.pdf]
+# Rastinejad et al. (2022) Nature 612, 223 [papers/...] [211211A];
+# Levan et al. (2024) Nature 626, 737 [papers/Yang_Levan_2024_JWST.pdf]
 # [230307A].
 # ─────────────────────────────────────────────────────────────────────
 def test_lgrb_kn_offsets_match_primary_source_values():
@@ -1023,8 +1023,8 @@ def test_lgrb_kn_offsets_match_primary_source_values():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Madau and Dickinson (2014) ARA&A 52, 415 [Papers/Madau_2014.pdf]
-# Neijssel et al. (2019) MNRAS 490, 3740, Eq. 6 [Papers/Neijssel_2019.pdf]
+# Madau and Dickinson (2014) ARA&A 52, 415 [papers/Madau_2014.pdf]
+# Neijssel et al. (2019) MNRAS 490, 3740, Eq. 6 [papers/Neijssel_2019.pdf]
 # SFR(z) Madau-Dickinson functional form with Neijssel COMPAS-default fits.
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_compas
@@ -1074,7 +1074,7 @@ def test_neijssel_2019_compas_default_sfr_peak_at_z_2p13():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Kroupa (2001) MNRAS 322, 231 [Papers/Kroupa_2001.pdf]
+# Kroupa (2001) MNRAS 322, 231 [papers/Kroupa_2001.pdf]
 # IMF slopes (0.3, 1.3, 2.3); mean stellar mass.
 # ─────────────────────────────────────────────────────────────────────
 def test_kroupa_2001_imf_slopes_and_breakpoints():
@@ -1175,7 +1175,7 @@ def test_kroupa_2001_mean_stellar_mass_in_published_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Wanderman and Piran (2015) MNRAS 448, 3026 [Papers/Wanderman_2015.pdf]
+# Wanderman and Piran (2015) MNRAS 448, 3026 [papers/Wanderman_2015.pdf]
 # Eq. (9): piecewise-exponential R(z), peak at z = 0.9.
 # ─────────────────────────────────────────────────────────────────────
 def test_wanderman_piran_2015_piecewise_exponential_continuity_and_slopes():
@@ -1227,8 +1227,8 @@ def test_wanderman_piran_2015_R0_normalization_within_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Fong et al. (2015) ApJ 815, 102 [Papers/Fong_2015.pdf]
-# Beniamini and Nakar (2019) MNRAS 482, 5430 [Papers/Beniamini_2019.pdf]
+# Fong et al. (2015) ApJ 815, 102 [papers/Fong_2015.pdf]
+# Beniamini and Nakar (2019) MNRAS 482, 5430 [papers/Beniamini_2019.pdf]
 # Jet half-opening angle bands per class.
 # ─────────────────────────────────────────────────────────────────────
 def test_class_theta_j_sbgrb_band_matches_fong_beniamini_nakar():
@@ -1281,7 +1281,7 @@ def test_fong_2015_beaming_factor_for_fiducial_sbgrb_in_published_range():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Kawaguchi et al. (2015) ApJ 825, 52 [Papers/Kawaguchi_2015.pdf]
+# Kawaguchi et al. (2015) ApJ 825, 52 [papers/Kawaguchi_2015.pdf]
 # Fragos et al. (2010) misalignment population.
 # ─────────────────────────────────────────────────────────────────────
 def test_kawaguchi_2015_misalignment_factor_in_physical_band():
@@ -1319,7 +1319,7 @@ def test_kawaguchi_2015_aligned_spin_projection_matches_paper_definition():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Margalit and Metzger (2017) ApJL 850, L19 [Papers/Margalit_Metzger_2017.pdf]
+# Margalit and Metzger (2017) ApJL 850, L19 [papers/Margalit_Metzger_2017.pdf]
 # HMNS supramassive remnant heuristic.
 # ─────────────────────────────────────────────────────────────────────
 def test_margalit_metzger_2017_hmns_factor_in_supramassive_band():
@@ -1341,7 +1341,7 @@ def test_margalit_metzger_2017_hmns_factor_in_supramassive_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Levina et al. (2026) arXiv:2601.20202 [Papers/Levina_2026.pdf]
+# Levina et al. (2026) arXiv:2601.20202 [papers/Levina_2026.pdf]
 # Table 1: TNG100-1 best-fit S(Z, z) parameters (project fiducial).
 # Eq. (2) Madau and Dickinson (2014) S(z), Eq. (3-6) Azzalini skew-log-normal
 # dP/dlnZ; the COMPAS ``find_metallicity_distribution`` parametrisation maps
@@ -1697,7 +1697,7 @@ def test_broekgaarden_2021_formation_efficiency_band():
 
     Anchored on representative Model A numbers (total STROOPWAFEL DCO
     weight ~ 1.0e4, published-rate-calibrated mean_mass_evolved ~ 2.8e9
-    Msun, Section 4) so the anchors job needs no Data/.  The integrated
+    Msun, Section 4) so the anchors job needs no data/.  The integrated
     value is an exact identity (sum(w) / mean_mass_evolved); the per-Z
     band is the physically meaningful target.
     """
@@ -1771,7 +1771,7 @@ def test_planck15_cosmology_constants_match_compas_pin():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Bardeen, Press and Teukolsky (1972) ApJ 178, 347 [Papers/Bardeen_1972.pdf]
+# Bardeen, Press and Teukolsky (1972) ApJ 178, 347 [papers/Bardeen_1972.pdf]
 # ISCO closed-form anchor values (extends test_isco.py).
 # ─────────────────────────────────────────────────────────────────────
 def test_bardeen_1972_isco_textbook_anchors():
@@ -1792,7 +1792,7 @@ def test_bardeen_1972_isco_textbook_anchors():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Gottlieb (2023, 2024) classification thresholds [Papers/Gottlieb_2023.pdf,
+# Gottlieb (2023, 2024) classification thresholds [papers/Gottlieb_2023.pdf,
 # Gottlieb_2024.pdf]
 # ─────────────────────────────────────────────────────────────────────
 def test_gottlieb_2023_disk_mass_thresholds_match_paper():
@@ -1887,7 +1887,7 @@ def test_classify_bns_2024_default_hmns_factor_matches_HMNS_FACTOR_DEFAULT():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Gottlieb et al. (2025) arXiv:2411.13657 [Papers/Gottlieb_2024.pdf]
+# Gottlieb et al. (2025) arXiv:2411.13657 [papers/Gottlieb_2024.pdf]
 # Eq. (11) BH-engine disk-wind kilonova ejecta normalisation.
 # ─────────────────────────────────────────────────────────────────────
 def test_gottlieb_2025_eq11_canonical_normalisation_matches_paper():
@@ -1911,7 +1911,7 @@ def test_gottlieb_2025_eq11_canonical_normalisation_matches_paper():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Broekgaarden et al. (2021) [Papers/Broekgaarden_2021.pdf]
+# Broekgaarden et al. (2021) [papers/Broekgaarden_2021.pdf]
 # Project-level NS_MAX_BNS pin.
 # ─────────────────────────────────────────────────────────────────────
 def test_metallicity_grid_endpoints_and_size_match_broekgaarden_2021_prior():
@@ -2285,7 +2285,7 @@ def test_broekgaarden21_wolf_rayet_wind_grid_values():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Pais, Piran, Kiuchi and Shibata (2025) [Papers/2407.19002v3.pdf]
+# Pais, Piran, Kiuchi and Shibata (2025) [papers/2407.19002v3.pdf]
 #   BNS jet breakout, Eq. (3)/(4)/(5), Gottlieb and Nakar (2022) adapted
 # ─────────────────────────────────────────────────────────────────────
 def test_pais25_breakout_coefficient():

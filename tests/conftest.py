@@ -1,6 +1,6 @@
 """Shared pytest fixtures.
 
-Tests that depend on the COMPAS HDF5 catalogues in ``Data/`` should
+Tests that depend on the COMPAS HDF5 catalogues in ``data/`` should
 mark themselves with ``@pytest.mark.requires_data``.  Per-file
 fixtures (``bns_a_path``, ``bhns_a_path``, or the parametrize-friendly
 ``compas_file`` indirect fixture) skip cleanly when the requested
@@ -44,7 +44,7 @@ _TOOLS_DIR = os.path.join(_REPO_ROOT, "tools")
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
-_DATA_DIR = os.path.join(_REPO_ROOT, "Data")
+_DATA_DIR = os.path.join(_REPO_ROOT, "data")
 
 
 try:
@@ -69,10 +69,10 @@ def _data_path(name: str) -> str:
 
 
 def _skip_if_absent(name: str) -> str:
-    """Return ``Data/<name>`` or call ``pytest.skip`` if the file is missing."""
+    """Return ``data/<name>`` or call ``pytest.skip`` if the file is missing."""
     path = _data_path(name)
     if not os.path.exists(path):
-        pytest.skip(f"{name} not present in Data/")
+        pytest.skip(f"{name} not present in data/")
     return path
 
 
@@ -85,7 +85,7 @@ def repo_root() -> str:
 def compas_data_available() -> bool:
     """True if the Tier-1 COMPAS HDF5 files (BNS/BHNS A and K) are present.
 
-    Retained for callers that want a coarse "is Data/ usable" check;
+    Retained for callers that want a coarse "is data/ usable" check;
     per-test fixtures below skip individually rather than relying on
     this all-or-nothing boolean.  With 40 files in the Broekgaarden+
     2021 grid, no realistic developer machine has the full set, so
@@ -138,7 +138,7 @@ def compas_file(request) -> str:
 def rastinejad_csv_path() -> str:
     path = _data_path("rastinejad_2024.csv")
     if not os.path.exists(path):
-        pytest.skip("Data/rastinejad_2024.csv not present")
+        pytest.skip("data/rastinejad_2024.csv not present")
     return path
 
 
@@ -192,7 +192,7 @@ def pytest_collection_modifyitems(config, items):
                         item.add_marker(getattr(pytest.mark, f"section_{num}{suffix}"))
 
     skip_compas = pytest.mark.skip(reason="compas_python_utils not importable")
-    skip_data = pytest.mark.skip(reason="Data/ has no COMPAS HDF5 catalogues")
+    skip_data = pytest.mark.skip(reason="data/ has no COMPAS HDF5 catalogues")
     for item in items:
         if not _COMPAS_AVAILABLE and "requires_compas" in item.keywords:
             item.add_marker(skip_compas)

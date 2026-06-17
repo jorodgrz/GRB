@@ -2,7 +2,7 @@
 
 The Section 14 scan loops ``grb_io.BROEKGAARDEN21_MODELS`` and loads one
 HDF5 per (model, population).  This module pins, for every one of the 40
-files actually present in ``Data/``, that:
+files actually present in ``data/``, that:
 
 1. the embedded ``model`` / ``ns_max`` / ``kind`` attributes agree with the
    registry entry the scan will look up;

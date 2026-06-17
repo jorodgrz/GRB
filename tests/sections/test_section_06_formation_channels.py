@@ -64,7 +64,7 @@ _PINS = {
 }
 
 # Common parametrize set; tests skip cleanly per-file via the ``compas_file``
-# fixture if the requested HDF5 is not present in Data/.
+# fixture if the requested HDF5 is not present in data/.
 _PARAMS = sorted(_PINS.keys())
 
 

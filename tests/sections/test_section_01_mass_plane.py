@@ -3,7 +3,7 @@
 Smoke-level invariants on ``classify_grid`` over a synthetic (M1, M2)
 meshgrid: every labelled class is reachable, the ``ns_max`` truncation
 matches the requested model, and STROOPWAFEL-weighted class fractions
-sum to 1.  Pure unit-style; runs in CI without ``Data/``.
+sum to 1.  Pure unit-style; runs in CI without ``data/``.
 
 The second block of tests below covers the four ingredients of the
 Section 1 mass-plane figures that are not exercised elsewhere: the

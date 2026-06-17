@@ -8,7 +8,7 @@
 #   make ci       -- the bundle CI runs on every push and pull request
 #
 # Heavier targets (run locally; manual dispatch in CI):
-#   make test     -- full pytest suite (data-bound tests skip if Data/ empty)
+#   make test     -- full pytest suite (data-bound tests skip if data/ empty)
 #
 # Conda is the canonical dependency manager (see environment.yml); the
 # Makefile assumes the active environment already has pytest, ruff, mypy,

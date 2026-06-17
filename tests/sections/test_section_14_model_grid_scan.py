@@ -3,7 +3,7 @@
 Section 14 loops the complete Broekgaarden et al. (2021) variation grid,
 classifies each model under the Gottlieb (2024) hybrid, calibrates the local
 intrinsic rate, and caches per-model summaries to
-``Plots/grid_scan_results.npz``.  The heavy data-bound loop lives in the
+``plots/grid_scan_results.npz``.  The heavy data-bound loop lives in the
 notebook; this module pins the synthetic-data invariants the scan relies on
 (class and channel partitions are closed; the channel x class table is a
 proper conditional) and the cached-results schema the figure cells read back.

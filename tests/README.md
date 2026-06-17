@@ -17,7 +17,7 @@ tests/
 
 ### `unit/` (fast, every PR)
 
-Pure module-level invariants over `grb_*.py`. No `Data/`, no
+Pure module-level invariants over `grb_*.py`. No `data/`, no
 `compas_python_utils`, no notebook coupling. Runs in `make smoke` and
 `make ci`.
 
@@ -63,13 +63,13 @@ paper citation, this is the file that will tell you.
 
 ### `integration/` (manual dispatch in CI)
 
-Tests that need `Data/`, `compas_python_utils`, or notebook execution.
+Tests that need `data/`, `compas_python_utils`, or notebook execution.
 Runs locally via `make test`; in CI only on manual `workflow_dispatch`.
 
 | File | Why it is integration |
 |---|---|
 | `test_compas_pin.py` | Imports the upstream `compas_python_utils` pin |
-| `test_comparison_notebook.py` | Reads `Data/rastinejad_2024.csv` |
+| `test_comparison_notebook.py` | Reads `data/rastinejad_2024.csv` |
 | `test_cosmic_integration_vs_compas.py` | Bin-for-bin cross-check with COMPAS |
 | `test_grb_io_realdata.py` | Audits real Broekgaarden+ 2021 HDF5 archives |
 | `test_grb_main_notebook.py` | Executes `grb_main.ipynb` via `nbclient` |
@@ -88,7 +88,7 @@ Defined in [pyproject.toml](../pyproject.toml) under
 | `integration` | folder | Heavy / data-bound / notebook |
 | `section_1` ... `section_13` | filename | Notebook-section coupling |
 | `slow` | manual | Wall-clock above ~5 s |
-| `requires_data` | manual | Needs `Data/COMPASCompactOutput_*.h5` |
+| `requires_data` | manual | Needs `data/COMPASCompactOutput_*.h5` |
 | `requires_compas` | manual | Needs `compas_python_utils` importable |
 
 ## Running subsets

@@ -10,7 +10,7 @@ HDF5 files: file identity, NS-mass remap determinism + M_TOV cap +
 the printed class fractions the notebook's summary cell emits.
 
 All tests are ``@pytest.mark.requires_data`` and skip on machines
-without ``Data/COMPASCompactOutput_{BNS,BHNS}_A.h5``.  The expected
+without ``data/COMPASCompactOutput_{BNS,BHNS}_A.h5``.  The expected
 class-fraction targets in
 ``test_printed_class_fractions_match_classifier_on_remapped_sample``
 come from the latest committed run of ``grb_main.ipynb`` (cell at the
@@ -100,7 +100,7 @@ def bhns_modelA_remapped(bhns_a_path):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# File identity: catch a future ``Data/`` swap to a different model.
+# File identity: catch a future ``data/`` swap to a different model.
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 def test_bns_a_metadata_matches_modelA(bns_a_path):

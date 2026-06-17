@@ -1,7 +1,7 @@
 """Real-data audit for ``grb_io.py`` across the Broekgaarden+ 2021 grid.
 
 Pins the COMPAS HDF5 contract against the actual Zenodo files in
-``Data/``:
+``data/``:
 
 1. No NaN in ``w[mask]`` for every available model file.
 2. ``_match_sn_to_dco`` returns NaN for at most 1 percent of the
