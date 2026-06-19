@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/jorodgrz/GRBproject/actions/workflows/pytest.yml/badge.svg)](https://github.com/jorodgrz/GRBproject/actions/workflows/pytest.yml)
 
-Population-level predictions for merger-driven short and long GRBs. The pipeline applies the Gottlieb et al. (2023, 2024) classification frameworks to COMPAS binary population synthesis (Broekgaarden et al. 2021, Models A, F, G, J, K).
+Population-level predictions for merger-driven short and long GRBs. The pipeline applies the Gottlieb et al. (2023, 2024) classification frameworks to COMPAS binary population synthesis (Broekgaarden et al. 2021, the full 20-model grid).
 
 ## Setup
 
@@ -15,8 +15,8 @@ python -m ipykernel install --user --name grb-env --display-name "GRB (grb-env)"
 ## Data
 
 ```bash
-python tools/download_compas_data.py --tier 1 --confirm    # 5 core models A, F, G, J, K
-python tools/download_compas_data.py --confirm             # full 20-model grid, ~45 GB
+python tools/download_compas_data.py --confirm             # full 20-model grid, ~45 GB (canonical)
+python tools/download_compas_data.py --tier 1 --confirm    # optional lightweight subset (A, F, G, J, K)
 ```
 
 Files land in `data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from [Zenodo 5189849](https://zenodo.org/records/5189849), BHNS from [Zenodo 5178777](https://zenodo.org/records/5178777). The observational comparison in [comparison.ipynb](comparison.ipynb) reads `data/rastinejad_2024.csv` (Rastinejad et al. 2024 component decomposition).
@@ -27,7 +27,7 @@ The downloader chains `tools/embed_model_metadata.py`, which writes `model` and 
 
 | File | Purpose |
 |---|---|
-| [grb_main.ipynb](grb_main.ipynb) | Main figures, Sections 1 to 10 with sub-sections 4b TNG-resolution sweep, 7b / 8c LVK GWTC-5.0 local-rate comparison, 7c / 8d channel x class decomposition, 10.1 to 10.8 five-model robustness |
+| [grb_main.ipynb](grb_main.ipynb) | Main figures, Sections 1 to 14 with sub-sections 4b TNG-resolution sweep, 7b / 8c LVK GWTC-5.0 local-rate comparison, 7c / 8d channel x class decomposition, 14 full 20-model grid scan |
 | [comparison.ipynb](comparison.ipynb) | BH-engine vs HMNS-engine prediction against the Rastinejad et al. (2024) sample, using Gottlieb et al. (2025) Eq. 11 |
 | [grb_physics.py](src/grb_physics.py) | Remnant mass, ejecta, EOS, Gottlieb thresholds, ISCO |
 | [grb_classify.py](src/grb_classify.py) | BNS, BHNS, unified grid, formation channels, observed-merger classifier |
@@ -59,7 +59,7 @@ The six `grb_*.py` modules live in `src/` but import as flat modules (`import gr
 | Faint lbGRB (BHNS) | $0.01 \leq M_\mathrm{disk} < 0.1\,M_\odot$ |
 | lbGRB + red KN (BHNS disk) | $M_\mathrm{disk} \geq 0.1\,M_\odot$ |
 
-All disk-mass-based GRB rates are upper bounds: 100 percent jet launching above threshold (Gottlieb 2023).
+All disk-mass-based GRB rates are upper bounds: 100 percent jet launching above threshold (Gottlieb 2023). The BNS rates carry an optional jet-breakout correction (`breakout_fraction_bns_eos` then `apply_bns_jet_breakout`, Section 10 of `grb_main.ipynb`): the Pais et al. (2025) breakout criterion is evaluated per system, EOS-marginalized over the four `EOS_MODELS`, and remnant-conditioned (HMNS classes carry the long post-collapse launch delay and a disk-wind obstruction). A breakout-corrected rate is no longer a pure upper bound; the uncorrected rate still is.
 
 ## Assumptions
 
@@ -138,6 +138,7 @@ See [tests/README.md](tests/README.md) for the per-folder, per-section layout an
 - Metzger (2019), [arXiv:1910.01617](https://arxiv.org/abs/1910.01617), Living Rev. Rel. 23, 1
 - Mooley et al. (2018), [arXiv:1806.09693](https://arxiv.org/abs/1806.09693), Nature 561, 355
 - Neijssel et al. (2019), [arXiv:1906.08136](https://arxiv.org/abs/1906.08136)
+- Pais, Piran, Kiuchi, and Shibata (2025), [arXiv:2407.19002](https://arxiv.org/abs/2407.19002) (BNS jet breakout)
 - Patton and Sukhbold (2020), [arXiv:2005.03055](https://arxiv.org/abs/2005.03055), MNRAS 499, 2803
 - Planck Collaboration / Ade et al. (2016), [arXiv:1502.01589](https://arxiv.org/abs/1502.01589), A&A 594, A13
 - Raaijmakers et al. (2021), [arXiv:2105.06981](https://arxiv.org/abs/2105.06981)

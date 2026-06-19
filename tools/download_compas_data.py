@@ -27,11 +27,11 @@ Usage
 -----
 ::
 
+    python tools/download_compas_data.py --confirm            # full 20-model grid (canonical)
     python tools/download_compas_data.py --dry-run            # show plan
-    python tools/download_compas_data.py --tier 1 --confirm   # core 5 models
+    python tools/download_compas_data.py --tier 1 --confirm   # optional lightweight subset (A, F, G, J, K)
     python tools/download_compas_data.py --models J F G K     # explicit set
     python tools/download_compas_data.py --kind BNS --confirm # BNS only
-    python tools/download_compas_data.py --confirm            # everything
 
 After each h5 is extracted, model identity is written as HDF5 root
 attributes (``model``, ``ns_max``, ``kind``, ``zenodo_id``,

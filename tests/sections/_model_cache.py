@@ -1,6 +1,6 @@
-"""Shared per-model load + calibration cache for Section 7b / 8c / 12 tests.
+"""Shared per-model load + calibration cache for Section 7b / 8c / 14 tests.
 
-The cache mirrors the Section 12.0 setup cell of ``grb_main.ipynb`` end to
+The cache mirrors the Section 14 grid scan of ``grb_main.ipynb`` end to
 end (per-model load, Alsing remap with an independent RNG seed, per-model
 ``MEAN_MASS_EVOLVED`` calibration via the shared ``P_DRAW_BROEKGAARDEN21``)
 and additionally retains the cosmology grid + Levina-TNG100-1 MSSFR
@@ -28,8 +28,6 @@ from typing import Any, Dict
 
 import numpy as np
 import pytest
-
-MODEL_LETTERS = ["A", "F", "G", "J", "K"]
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
@@ -83,6 +81,7 @@ def get_model(letter: str) -> Dict[str, Any]:
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
     from grb_io import (
+        ALL_MODEL_SUFFIXES,
         METALLICITY_GRID,
         load_bhns_with_channels,
         load_bhns_with_kicks,
@@ -104,11 +103,12 @@ def get_model(letter: str) -> Dict[str, Any]:
     # Same physical sample as `bhns`, only the parsed columns differ.
     bhns_ch = load_bhns_with_channels(path=bhns_path, expected_model=letter)
 
-    # Independent RNG seeds per population per model: matches Section 12.0
-    # of grb_main.ipynb (`42 + i` for BNS, `43 + i` for BHNS).  bhns_ch
-    # reuses the BHNS seed so both loader dicts carry the same remapped
-    # M_NS draw and downstream rates are bit-identical.
-    i = MODEL_LETTERS.index(letter)
+    # Independent RNG seeds per population per model: matches the Section 14
+    # grid scan of grb_main.ipynb (`42 + i` for BNS, `43 + i` for BHNS, with
+    # `i` the registry index in ALL_MODEL_SUFFIXES).  bhns_ch reuses the BHNS
+    # seed so both loader dicts carry the same remapped M_NS draw and
+    # downstream rates are bit-identical.
+    i = ALL_MODEL_SUFFIXES.index(letter)
     rng_bns = np.random.default_rng(42 + i)
     rng_bhns = np.random.default_rng(43 + i)
     bns["m1"], bns["m2"] = remap_ns_masses_double_gaussian(

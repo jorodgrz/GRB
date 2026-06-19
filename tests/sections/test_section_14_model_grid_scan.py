@@ -96,16 +96,18 @@ def test_channel_class_crosstab_rows_are_conditional_distributions():
 
 
 def test_grid_scan_npz_schema_roundtrip(tmp_path):
-    """The cached results carry every array the 14.1-14.6 figure cells read.
+    """The cached results carry every array the 14.1-14.9 figure cells read.
 
     Builds a minimal NPZ with the Section 14 schema and asserts the keys and
     shapes are internally consistent (20 models, 4 BNS classes, 3 BHNS
-    classes, 5 channels).  This is the contract between the scan cell and the
-    figure cells; a dropped or renamed array fails here rather than in the
-    notebook.
+    classes, 5 channels, 4 EOS).  This is the contract between the scan cell
+    and the figure cells; a dropped or renamed array fails here rather than in
+    the notebook.
     """
     n_models = len(BNS_CLASS_KEYS) * 0 + 20
     n_bins = 45
+    n_eos = 4
+    n_dt = 256
     path = tmp_path / "grid_scan_results.npz"
     np.savez(
         path,
@@ -118,10 +120,14 @@ def test_grid_scan_npz_schema_roundtrip(tmp_path):
         chfrac_bns=np.zeros((n_models, len(CH_KEYS))),
         chfrac_bhns=np.zeros((n_models, len(CH_KEYS))),
         crosstab_bns=np.zeros((n_models, len(CH_KEYS), len(BNS_CLASS_KEYS))),
+        eos_hmns=np.zeros((n_models, n_eos)),
+        dtcdf_bns=np.zeros((n_models, n_dt)),
         mbh_hist=np.zeros((n_models, n_bins)),
         mtot_hist=np.zeros((n_models, n_bins)),
         mbh_bins=np.linspace(2.0, 25.0, n_bins + 1),
         mtot_bins=np.linspace(2.0, 6.0, n_bins + 1),
+        dt_grid=np.logspace(0.0, np.log10(1.5e4), n_dt),
+        eos_names=np.array(["APR4", "SFHo", "LS220", "DD2"]),
         bns_class_keys=np.array(BNS_CLASS_KEYS),
         bhns_class_keys=np.array(BHNS_CLASS_KEYS),
         ch_keys=np.array(CH_KEYS),
@@ -129,19 +135,25 @@ def test_grid_scan_npz_schema_roundtrip(tmp_path):
     d = np.load(path, allow_pickle=False)
     required = {
         "suffixes", "families", "R0_bns", "R0_bhns", "frac_bns", "frac_bhns",
-        "chfrac_bns", "chfrac_bhns", "crosstab_bns", "mbh_hist", "mtot_hist",
-        "mbh_bins", "mtot_bins", "bns_class_keys", "bhns_class_keys", "ch_keys",
+        "chfrac_bns", "chfrac_bhns", "crosstab_bns", "eos_hmns", "dtcdf_bns",
+        "mbh_hist", "mtot_hist", "mbh_bins", "mtot_bins", "dt_grid",
+        "eos_names", "bns_class_keys", "bhns_class_keys", "ch_keys",
     }  # fmt: skip
     assert required <= set(d.files)
     assert d["frac_bns"].shape == (n_models, 4)
     assert d["frac_bhns"].shape == (n_models, 3)
     assert d["crosstab_bns"].shape == (n_models, 5, 4)
+    assert d["eos_hmns"].shape == (n_models, n_eos)
+    assert d["dtcdf_bns"].shape[0] == n_models
+    assert d["dtcdf_bns"].shape[1] == d["dt_grid"].shape[0]
+    assert d["eos_names"].shape[0] == n_eos
     assert d["mbh_bins"].shape[0] == d["mbh_hist"].shape[1] + 1
 
 
-def test_scan_suffix_order_matches_registry_core_first():
-    """The scan iterates ALL_MODEL_SUFFIXES; core five lead for seed parity."""
-    from grb_io import ALL_MODEL_SUFFIXES
+def test_scan_suffix_order_matches_registry():
+    """The scan iterates ALL_MODEL_SUFFIXES in registry order."""
+    from grb_io import ALL_MODEL_SUFFIXES, BROEKGAARDEN21_MODELS
 
-    assert ALL_MODEL_SUFFIXES[:5] == ["A", "F", "G", "J", "K"]
+    assert ALL_MODEL_SUFFIXES == list(BROEKGAARDEN21_MODELS)
+    assert ALL_MODEL_SUFFIXES[0] == "A"
     assert len(ALL_MODEL_SUFFIXES) == 20

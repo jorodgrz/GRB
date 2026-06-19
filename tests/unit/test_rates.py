@@ -1031,3 +1031,140 @@ def test_breakout_fraction_bns_mixed_population_in_literature_band():
         w_frac = float(weights[mask].sum()) / float(weights.sum())
         agg += w_frac * out[label]["med"]
     assert 0.3 < agg < 0.8
+
+
+# ─────────────────────────────────────────────────────────────────────
+# EOS-marginalized BNS jet breakout (breakout_fraction_bns_eos)
+# ─────────────────────────────────────────────────────────────────────
+_CANON_BNS_CLASSES = (
+    "sbGRB + blue KN",
+    "lbGRB + red KN (HMNS)",
+    "lbGRB + red KN (disk)",
+    "Faint lbGRB",
+)
+
+
+def _bns_masses(n, seed):
+    """Realistic m1 >= m2 BNS masses [Msun] for the EOS-marginalized tests."""
+    rng = np.random.default_rng(seed)
+    a = rng.uniform(1.15, 1.65, n)
+    b = rng.uniform(1.10, 1.55, n)
+    return np.maximum(a, b), np.minimum(a, b)
+
+
+def test_breakout_fraction_bns_eos_returns_all_classes_ordered():
+    """All four canonical classes return ordered bands in [0, 1]."""
+    from grb_rates import breakout_fraction_bns_eos
+
+    m1, m2 = _bns_masses(500, seed=11)
+    rng = np.random.default_rng(11)
+    w = rng.uniform(0.1, 1.0, m1.size)
+    # Partition the sample across the four classes by m1 quartile so each is
+    # populated; the membership rule is irrelevant to the band invariants.
+    q = np.quantile(m1, [0.25, 0.5, 0.75])
+    masks = {
+        "sbGRB + blue KN": m1 < q[0],
+        "lbGRB + red KN (HMNS)": (m1 >= q[0]) & (m1 < q[1]),
+        "lbGRB + red KN (disk)": (m1 >= q[1]) & (m1 < q[2]),
+        "Faint lbGRB": m1 >= q[2],
+    }
+
+    out = breakout_fraction_bns_eos(masks, m1, m2, w, n_draws=48, rng=rng)
+    assert set(out) == set(_CANON_BNS_CLASSES)
+    for label, band in out.items():
+        assert band["lo"] <= band["med"] <= band["hi"], label
+        assert 0.0 <= band["lo"] <= 1.0 and 0.0 <= band["hi"] <= 1.0, label
+
+
+def test_breakout_fraction_bns_eos_envelope_contains_single_eos():
+    """The EOS envelope brackets any single-EOS band (spread is propagated).
+
+    ``EOS_MODELS`` iterates APR4 first, so a single-EOS run keyed on APR4 with
+    the same seed reproduces the APR4 contribution inside the full run exactly;
+    the full envelope (min lo, max hi over EOS) must then contain it.
+    """
+    from grb_physics import EOS_MODELS
+    from grb_rates import breakout_fraction_bns_eos
+
+    m1, m2 = _bns_masses(400, seed=5)
+    w = np.random.default_rng(5).uniform(0.1, 1.0, m1.size)
+    masks = {
+        "sbGRB + blue KN": np.arange(m1.size) % 2 == 0,
+        "lbGRB + red KN (disk)": np.arange(m1.size) % 2 == 1,
+    }
+
+    full = breakout_fraction_bns_eos(masks, m1, m2, w, n_draws=48, rng=np.random.default_rng(99))
+    apr4 = breakout_fraction_bns_eos(
+        masks,
+        m1,
+        m2,
+        w,
+        eos_models={"APR4": EOS_MODELS["APR4"]},
+        n_draws=48,
+        rng=np.random.default_rng(99),
+    )
+    for label in masks:
+        assert full[label]["lo"] <= apr4[label]["lo"] + 1e-12, label
+        assert full[label]["hi"] >= apr4[label]["hi"] - 1e-12, label
+
+
+def test_breakout_fraction_bns_eos_disk_wind_suppresses_hmns():
+    """Adding the disk wind to the HMNS obstruction never raises its breakout.
+
+    With a fixed seed the only difference between the two runs is the extra
+    ``hmns_wind_frac * M_disk`` obstruction on the HMNS class, so its breakout
+    fraction can only drop.  Prompt classes are untouched.
+    """
+    from grb_rates import breakout_fraction_bns_eos
+
+    m1, m2 = _bns_masses(500, seed=7)
+    w = np.ones(m1.size)
+    masks = {
+        "lbGRB + red KN (HMNS)": np.arange(m1.size) % 2 == 0,
+        "lbGRB + red KN (disk)": np.arange(m1.size) % 2 == 1,
+    }
+
+    wind = breakout_fraction_bns_eos(
+        masks, m1, m2, w, hmns_wind_frac=0.3, n_draws=64, rng=np.random.default_rng(3)
+    )
+    nowind = breakout_fraction_bns_eos(
+        masks, m1, m2, w, hmns_wind_frac=0.0, n_draws=64, rng=np.random.default_rng(3)
+    )
+    hmns = "lbGRB + red KN (HMNS)"
+    assert wind[hmns]["med"] <= nowind[hmns]["med"] + 1e-12
+    # The prompt class carries no wind term, so it is bit-for-bit unchanged.
+    disk = "lbGRB + red KN (disk)"
+    assert wind[disk]["med"] == pytest.approx(nowind[disk]["med"])
+
+
+def test_breakout_fraction_bns_eos_empty_class_is_nan():
+    """A class with zero weighted population yields NaN band entries."""
+    from grb_rates import breakout_fraction_bns_eos
+
+    m1, m2 = _bns_masses(120, seed=2)
+    w = np.ones(m1.size)
+    masks = {
+        "sbGRB + blue KN": np.zeros(m1.size, dtype=bool),  # empty
+        "lbGRB + red KN (disk)": np.ones(m1.size, dtype=bool),
+    }
+    out = breakout_fraction_bns_eos(masks, m1, m2, w, n_draws=32, rng=np.random.default_rng(0))
+    assert np.isnan(out["sbGRB + blue KN"]["med"])
+    assert np.isnan(out["sbGRB + blue KN"]["lo"])
+    assert np.isnan(out["sbGRB + blue KN"]["hi"])
+
+
+def test_breakout_fraction_bns_eos_reproducible_under_fixed_seed():
+    """Identical seeds give identical per-class bands."""
+    from grb_rates import breakout_fraction_bns_eos
+
+    m1, m2 = _bns_masses(300, seed=4)
+    w = np.random.default_rng(4).uniform(0.1, 1.0, m1.size)
+    masks = {
+        "lbGRB + red KN (HMNS)": np.arange(m1.size) % 2 == 0,
+        "Faint lbGRB": np.arange(m1.size) % 2 == 1,
+    }
+    a = breakout_fraction_bns_eos(masks, m1, m2, w, n_draws=40, rng=np.random.default_rng(13))
+    b = breakout_fraction_bns_eos(masks, m1, m2, w, n_draws=40, rng=np.random.default_rng(13))
+    for label in masks:
+        for k in ("med", "lo", "hi"):
+            assert a[label][k] == pytest.approx(b[label][k]), (label, k)

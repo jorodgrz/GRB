@@ -183,7 +183,7 @@ def test_validate_hdf5_metadata_warning_emits_once_per_path(tmp_path):
     """A second call on the same un-annotated path must not re-warn.
 
     The ``_METADATA_WARN_CACHE`` set deduplicates per-path warnings so
-    iterating over Section 12's five models does not spam the
+    the Section 14 grid scan over all 20 models does not spam the
     notebook log.
     """
     from grb_io import _METADATA_WARN_CACHE, _validate_hdf5_metadata

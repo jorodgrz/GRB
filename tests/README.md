@@ -50,8 +50,8 @@ Thin smoke tests aligned with the figures in
 | 9 | `test_section_09_offsets.py` | Physical Host-Galaxy Offset Distributions |
 | 10 | `test_section_10_beaming.py` | Beaming Correction (Intrinsic vs Observable) |
 | 11 | `test_section_11_eos_comparator.py` | EOS, Channels, Offset CDFs, Beaming Comparator |
-| 12 | `test_section_12_model_variations.py` | Population-Synthesis Variations (A, F, G, J, K) |
 | 13 | `test_section_13_sbgrb_bluekn.py` | Appendix sbGRB + blue KN bimodality mechanism |
+| 14 | `test_section_14_model_grid_scan.py` | Full 20-model Broekgaarden+ 2021 grid scan (population-synthesis robustness) |
 
 ### `anchors/` (literature audit)
 

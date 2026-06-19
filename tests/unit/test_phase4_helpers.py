@@ -500,7 +500,7 @@ def test_offsets_mixed_hosts_regression_within_5_percent():
 
 # ─────────────────────────────────────────────────────────────────────
 # remap_ns_marginal: BHNS-side equivalent of the BNS pair remap.
-# Used in Section 0 and Section 12.0 of grb_main.ipynb to close the
+# Used in Section 0 and the Section 14 grid scan of grb_main.ipynb to close the
 # ~1.7 Msun Fryer 2012 Eq. 12-13 baryonic-to-gravitational artifact on
 # the BHNS NS-mass column (Broekgaarden+ 2021 footnote 3).
 # ─────────────────────────────────────────────────────────────────────

@@ -376,10 +376,10 @@ def test_weighted_sample_handles_empty_mask():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Loader return-dict carries `model` and `ns_max` (Section 12 prereq)
+# Loader return-dict carries `model` and `ns_max` (Section 14 prereq)
 # ─────────────────────────────────────────────────────────────────────
-# Section 12 of grb_main.ipynb iterates over Broekgaarden+ 2021 Models
-# A, F, G, J, K and feeds bns['ns_max'] straight into classify_grid.
+# The Section 14 grid scan of grb_main.ipynb iterates over all 20
+# Broekgaarden+ 2021 models and feeds bns['ns_max'] straight into classify_grid.
 # These tests pin (a) the round-trip from the embedded HDF5 attribute
 # to the loader output dict and (b) the model-substitution defense on
 # the four variant loaders that previously skipped validation.
@@ -540,15 +540,16 @@ def test_registry_alpha_ce_matches_ce_prescription_constant():
         )
 
 
-def test_all_model_suffixes_core_first():
-    """``ALL_MODEL_SUFFIXES`` lists the manuscript core (A, F, G, J, K) first.
+def test_all_model_suffixes_registry_order():
+    """``ALL_MODEL_SUFFIXES`` mirrors ``BROEKGAARDEN21_MODELS`` in registry order.
 
-    The grid scan reproduces the Section 12 Alsing-remap RNG seeds by index,
-    so the five-model core must keep its leading positions; the remaining 15
-    follow in registry order.
+    The grid scan keys the per-model Alsing-remap RNG seeds off this index, so
+    the list must stay a faithful, de-duplicated mirror of the registry with
+    the fiducial Model A leading.
     """
     from grb_io import ALL_MODEL_SUFFIXES, BROEKGAARDEN21_MODELS
 
-    assert ALL_MODEL_SUFFIXES[:5] == ["A", "F", "G", "J", "K"]
+    assert ALL_MODEL_SUFFIXES == list(BROEKGAARDEN21_MODELS)
+    assert ALL_MODEL_SUFFIXES[0] == "A"
     assert set(ALL_MODEL_SUFFIXES) == set(BROEKGAARDEN21_MODELS)
     assert len(ALL_MODEL_SUFFIXES) == len(set(ALL_MODEL_SUFFIXES)) == 20

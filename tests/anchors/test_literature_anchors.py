@@ -2284,6 +2284,28 @@ def test_broekgaarden21_wolf_rayet_wind_grid_values():
     assert BROEKGAARDEN21_MODELS["fWR5"]["f_WR"] == 5.0
 
 
+def test_broekgaarden22_paper_ii_letter_map():
+    """`BROEKGAARDEN22_PAPER_II_LETTERS` maps paper I onto the paper II release.
+
+    The Broekgaarden et al. (2022) Zenodo records relabel the grid; the two
+    conventions agree through model E and diverge afterwards (paper II K is the
+    optimistic-CE variation, not M_NS,max = 3.0 Msun).
+    """
+    from grb_io import BROEKGAARDEN21_MODELS, BROEKGAARDEN22_PAPER_II_LETTERS
+
+    # Bijection covering exactly the 20 registry models.
+    assert set(BROEKGAARDEN22_PAPER_II_LETTERS) == set(BROEKGAARDEN21_MODELS)
+    letters = list(BROEKGAARDEN22_PAPER_II_LETTERS.values())
+    assert sorted(letters) == list("ABCDEFGHIJKLMNOPQRST")
+    # Agreement through E, then the documented divergence.
+    for s in ("A", "B", "C", "D", "E"):
+        assert BROEKGAARDEN22_PAPER_II_LETTERS[s] == s
+    assert BROEKGAARDEN22_PAPER_II_LETTERS["EH"] == "F"
+    assert BROEKGAARDEN22_PAPER_II_LETTERS["F"] == "H"
+    assert BROEKGAARDEN22_PAPER_II_LETTERS["I"] == "L"
+    assert BROEKGAARDEN22_PAPER_II_LETTERS["K"] == "N"
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Pais, Piran, Kiuchi and Shibata (2025) [papers/2407.19002v3.pdf]
 #   BNS jet breakout, Eq. (3)/(4)/(5), Gottlieb and Nakar (2022) adapted

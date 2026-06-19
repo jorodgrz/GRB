@@ -17,15 +17,20 @@ from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
 
 from grb_physics import (
+    EOS_MODELS,
     EPS_JET,
     GOTTLIEB25_T_HMNS_RANGE,
+    GOTTLIEB25_WIND_FRAC,
     MISALIGNMENT_SYSTEMATIC_FACTOR,
     T_D_PROMPT_RANGE,
     T_E_RANGE,
     V_EJ_BNS,
+    bns_disk_mass,
+    bns_dynamical_ejecta,
     ejecta_energy_in_cone,
     jet_breaks_out_pais,
     jet_energy_from_disk,
+    ns_radius_from_eos,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -954,6 +959,140 @@ def apply_bns_jet_breakout(rate, f_breakout):
     double-counts.
     """
     return np.asarray(rate) * np.asarray(f_breakout)
+
+
+def breakout_fraction_bns_eos(
+    class_masks,
+    m1,
+    m2,
+    weights,
+    eos_models=None,
+    hmns_wind_frac=GOTTLIEB25_WIND_FRAC,
+    hmns_labels=_HMNS_CLASS_LABELS,
+    theta_j_by_class=None,
+    n_draws=512,
+    rng=None,
+):
+    """EOS-marginalized, remnant-conditioned BNS jet-breakout fraction per class.
+
+    Wraps :func:`breakout_fraction_bns` to remove its dependence on a single
+    NS radius.  ``bns_disk_mass`` is knife-edge sensitive near R_1.4 ~ 12 km
+    (its docstring warns of ~100x swings for a 1 km radius change), so a
+    science-grade breakout fraction must average over an EOS prior rather
+    than fix one radius.  For each EOS in ``eos_models`` this routine derives
+    self-consistent component radii from ``ns_radius_from_eos`` and rebuilds
+    the per-system disk mass (``bns_disk_mass``) and obstructing ejecta
+    (``bns_dynamical_ejecta``), then runs the full Pais et al. (2025) Monte
+    Carlo breakout test.
+
+    Ejecta composition follows the launch geometry.  Prompt-collapse classes
+    launch their jet at ``t_d ~ 0.01-0.1 s`` (``T_D_PROMPT_RANGE``), before
+    the secular disk wind is blown, so their obstruction is the dynamical
+    ejecta alone.  The two HMNS classes launch only after the remnant
+    collapses, by which point a wind of ``hmns_wind_frac * M_disk`` has
+    polluted the funnel; that wind is added to their obstructing ejecta.
+
+    The returned band brackets two independent sources of spread: the Pais
+    MC over the uncertain jet/ejecta parameters (inside each
+    ``breakout_fraction_bns`` call) and the EOS systematic across
+    ``eos_models``.  Per class the envelope is the min ``lo`` and max ``hi``
+    over the EOS set, with ``med`` the median of the per-EOS medians.
+
+    Parameters
+    ----------
+    class_masks : dict[str, 1-D bool array]
+        Gottlieb (2024) class membership keyed by the canonical labels
+        (so the HMNS conditioning in ``hmns_labels`` matches).
+    m1, m2 : 1-D array
+        Component gravitational masses [Msun], aligned with ``weights``.
+    weights : 1-D array
+        STROOPWAFEL weights.
+    eos_models : dict, optional
+        Mapping of EOS name to a dict carrying ``R_1p4`` / ``M_TOV``
+        (as in ``grb_physics.EOS_MODELS``, the default).
+    hmns_wind_frac : float, optional
+        Disk-wind ejected fraction added to the HMNS-class obstruction.
+        Defaults to ``GOTTLIEB25_WIND_FRAC``.  Set to 0.0 to disable the
+        wind contribution (used in tests).
+    hmns_labels : container of str, optional
+        Class labels treated as HMNS remnants for both the launch-delay
+        window and the disk-wind addition.
+    theta_j_by_class, n_draws, rng :
+        Forwarded to ``breakout_fraction_bns``.
+
+    Returns
+    -------
+    dict[str, dict]
+        ``{class_label: {'med': float, 'lo': float, 'hi': float}}``; a class
+        with zero weighted population yields NaN entries.
+    """
+    if rng is None:
+        rng = np.random.default_rng(0)
+    if eos_models is None:
+        eos_models = EOS_MODELS
+
+    m1 = np.asarray(m1, dtype=float)
+    m2 = np.asarray(m2, dtype=float)
+    weights = np.asarray(weights, dtype=float)
+
+    prompt_masks = {k: v for k, v in class_masks.items() if k not in hmns_labels}
+    hmns_masks = {k: v for k, v in class_masks.items() if k in hmns_labels}
+
+    # Per-EOS percentile triples, collected per class then enveloped.
+    per_eos = {label: {"med": [], "lo": [], "hi": []} for label in class_masks}
+
+    for eos_name in eos_models:
+        R1 = ns_radius_from_eos(m1, eos_name)
+        R2 = ns_radius_from_eos(m2, eos_name)
+        M_disk = bns_disk_mass(m1, m2, R1_km=R1, R2_km=R2)
+        M_dyn = bns_dynamical_ejecta(m1, m2, R1_km=R1, R2_km=R2)
+        M_ej_hmns = M_dyn + hmns_wind_frac * M_disk
+
+        results = {}
+        if prompt_masks:
+            results.update(
+                breakout_fraction_bns(
+                    prompt_masks,
+                    M_disk,
+                    M_dyn,
+                    weights,
+                    theta_j_by_class=theta_j_by_class,
+                    n_draws=n_draws,
+                    rng=rng,
+                )
+            )
+        if hmns_masks:
+            results.update(
+                breakout_fraction_bns(
+                    hmns_masks,
+                    M_disk,
+                    M_ej_hmns,
+                    weights,
+                    theta_j_by_class=theta_j_by_class,
+                    n_draws=n_draws,
+                    rng=rng,
+                )
+            )
+
+        for label, band in results.items():
+            per_eos[label]["med"].append(band["med"])
+            per_eos[label]["lo"].append(band["lo"])
+            per_eos[label]["hi"].append(band["hi"])
+
+    out = {}
+    for label, triples in per_eos.items():
+        meds = np.asarray(triples["med"], dtype=float)
+        los = np.asarray(triples["lo"], dtype=float)
+        his = np.asarray(triples["hi"], dtype=float)
+        if meds.size == 0 or np.all(np.isnan(meds)):
+            out[label] = {"med": float("nan"), "lo": float("nan"), "hi": float("nan")}
+            continue
+        out[label] = {
+            "med": float(np.nanmedian(meds)),
+            "lo": float(np.nanmin(los)),
+            "hi": float(np.nanmax(his)),
+        }
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════

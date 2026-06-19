@@ -801,14 +801,37 @@ BROEKGAARDEN21_MODELS: dict[str, dict] = {
     },
 }
 
-# Stable ordering for the grid scan: the manuscript-core five (A, F, G, J, K)
-# come first so the per-model Alsing-remap RNG seeds (42 + i for BNS, 43 + i
-# for BHNS) reproduce the Section 12 draws bit-for-bit; the remaining 15
-# variations follow in registry order.
-_CORE_MODEL_SUFFIXES = ["A", "F", "G", "J", "K"]
-ALL_MODEL_SUFFIXES: list[str] = _CORE_MODEL_SUFFIXES + [
-    s for s in BROEKGAARDEN21_MODELS if s not in _CORE_MODEL_SUFFIXES
-]
+# Grid-scan order follows the registry (BROEKGAARDEN21_MODELS insertion order);
+# the per-model Alsing-remap RNG seeds (42 + i for BNS, 43 + i for BHNS) are
+# keyed off this index.
+ALL_MODEL_SUFFIXES: list[str] = list(BROEKGAARDEN21_MODELS)
+
+# Paper I suffix -> Broekgaarden+ 2022 paper II letter. The Zenodo records
+# (5189849 BNS, 5178777 BHNS) package every catalog under the paper II letter,
+# so figures keyed to the data release use these labels; the two conventions
+# diverge after model E.
+BROEKGAARDEN22_PAPER_II_LETTERS: dict[str, str] = {
+    "A": "A",
+    "B": "B",
+    "C": "C",
+    "D": "D",
+    "E": "E",
+    "EH": "F",
+    "alpha0p1": "G",
+    "F": "H",
+    "G": "I",
+    "alpha10": "J",
+    "H": "K",
+    "I": "L",
+    "J": "M",
+    "K": "N",
+    "L": "O",
+    "M": "P",
+    "N": "Q",
+    "O": "R",
+    "fWR0p1": "S",
+    "fWR5": "T",
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
