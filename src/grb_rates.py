@@ -121,7 +121,7 @@ LEVINA26_BBH_LOCAL_RATES = {
 # COMPAS modifications from Vinciguerra+ 2020 (MNRAS 498, 4705).  We do
 # NOT adopt the Hirai+ updated stability prescription; switching to that
 # would require a fresh COMPAS run and would trip the regression tests
-# in tests/sections/test_section_06_formation_channels.py.
+# in tests/sections/test_section_06d_formation_channels.py.
 # alpha_CE per Broekgaarden+ 2021 Sec. 5.2 Table 2.
 CE_PRESCRIPTION_BROEKGAARDEN21 = {
     "energy_formalism": "Webbink 1984",

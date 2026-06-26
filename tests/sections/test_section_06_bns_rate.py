@@ -1,4 +1,4 @@
-"""Section 7 of grb_main.ipynb: BNS Merger Rate R(z) per GRB Class.
+"""Section 6 of grb_main.ipynb: BNS Merger Rate R(z) per GRB Class.
 
 Smoke-level invariant on the per-class partition that the figure
 relies on: the four ``classify_bns_2024`` boolean masks are mutually

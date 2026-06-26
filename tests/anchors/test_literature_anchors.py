@@ -2011,7 +2011,7 @@ def test_CE_PRESCRIPTION_BROEKGAARDEN21_full_string_schema():
     A future swap to the Hirai+ updated stability prescription would
     trip this exact-string check before the regression manifests in
     the formation-channel rates pinned in
-    `tests/sections/test_section_06_formation_channels.py`.
+    `tests/sections/test_section_06d_formation_channels.py`.
     """
     from grb_rates import CE_PRESCRIPTION_BROEKGAARDEN21 as CE
 
@@ -2171,6 +2171,37 @@ def test_grb_physics_mean_mass_evolved_deprecated_attribute():
         f"_MEAN_MASS_EVOLVED_VALUE = {_MEAN_MASS_EVOLVED_VALUE} drifted "
         f"from the legacy regression sentinel 77708655."
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# External long-merger-GRB E_iso anchor (engine discriminator, comparison.ipynb)
+# ─────────────────────────────────────────────────────────────────────
+def test_external_lbgrb_eiso_anchor_matches_literature():
+    """Pin the external lbGRB E_iso anchor to the cited E_iso values.
+
+    The BH-engine null in comparison.ipynb is anchored on five long-duration
+    merger GRBs with kilonovae, with E_iso [erg] from the primary analyses:
+    060614 (Mangano+ 2007), 211227A (Lu+ 2022), 191019A (Stratta+ 2025),
+    211211A (Troja+ 2022), 230307A (Svinkin+ 2023 / Dichiara+ 2025).  Each
+    value must stay inside the long-GRB E_iso band (~1e50 to 1e53 erg), and the
+    log-mean / log-std are derived (not free) so they cannot drift from the set.
+    """
+    import numpy as np
+
+    import grb_physics as gp
+
+    expected = (8.4e50, 1.14e51, 1.70e51, 1.30e52, 6.97e52)
+    assert gp.LBGRB_EISO_EXTERNAL_ERG == expected, (
+        f"LBGRB_EISO_EXTERNAL_ERG = {gp.LBGRB_EISO_EXTERNAL_ERG} drifted from "
+        f"the cited literature values {expected}."
+    )
+    eiso = np.array(gp.LBGRB_EISO_EXTERNAL_ERG)
+    assert np.all((eiso > 1e50) & (eiso < 1e53)), (
+        "external lbGRB E_iso values fall outside the long-GRB band [1e50, 1e53] erg"
+    )
+    assert np.isclose(gp.LBGRB_EISO_EXTERNAL_LOGMEAN, float(np.log10(eiso).mean()))
+    assert np.isclose(gp.LBGRB_EISO_EXTERNAL_LOGSTD, float(np.log10(eiso).std()))
+    assert 51.0 < gp.LBGRB_EISO_EXTERNAL_LOGMEAN < 52.5
 
 
 # ─────────────────────────────────────────────────────────────────────

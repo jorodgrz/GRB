@@ -1,13 +1,13 @@
-"""End-to-end regression test for Section 8c of ``grb_main.ipynb``.
+"""End-to-end regression test for the BHNS rate vs LVK cross-check (Section 7 of ``grb_main.ipynb``).
 
-Section 8c compares the Model A intrinsic BHNS local merger rate density
+This compares the Model A intrinsic BHNS local merger rate density
 ``R_BHNS(z = 0)`` against the LVK GWTC-5.0 90 percent credible interval
 (LVK 2026, *GWTC-5.0: Population Properties of Merging Compact
 Binaries*, arXiv:2605.27226; published NSBH band 6.7 - 32.8 Gpc^-3 yr^-1).
 
 Pins two end-to-end claims:
 
-1. ``test_section_08c_R0_BHNS_above_LVK_GWTC5_band`` -- the calibrated
+1. ``test_section_07c_R0_BHNS_above_LVK_GWTC5_band`` -- the calibrated
    Model A BHNS intrinsic rate sits ABOVE the GWTC-5.0 NSBH 90 percent
    CR.  GWTC-5.0 added no new NSBH candidates, so the NSBH band tightened
    from the GWTC-4 9.1 - 84 Gpc^-3 yr^-1 to 6.7 - 32.8 Gpc^-3 yr^-1.  The
@@ -17,7 +17,7 @@ Pins two end-to-end claims:
    require either a downward shift in the COMPAS BHNS formation rate or
    a re-examination of the Foucart+ 2018 disk-mass calibration at high
    mass ratio.
-2. ``test_section_08c_intrinsic_grb_class_subtotal_at_most_all_bhns``
+2. ``test_section_07c_intrinsic_grb_class_subtotal_at_most_all_bhns``
    -- the two intrinsic GRB-class rates (lbGRB + Faint lbGRB at
    fiducial spin) sum to AT MOST the All-BHNS intrinsic rate (with a
    small numerical slack), since the No-GRB / NS-swallowed class
@@ -47,7 +47,7 @@ if _REPO_ROOT not in sys.path:
 from grb_rates import LVK_GWTC5_LOCAL_RATES, compute_merger_rate  # noqa: E402
 from tests.sections._model_cache import get_model as _get_model  # noqa: E402
 
-# Fiducial BH spin for the Section 8c per-class panel, matching the
+# Fiducial BH spin for the Section 7 per-class panel, matching the
 # Section 0 notebook constant ``A_BH_FID = 0.5``.  Sits at the centre of
 # the Foucart+ 2018 calibration band [-0.5, 0.9].
 A_BH_FID = 0.5
@@ -56,7 +56,7 @@ A_BH_FID = 0.5
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08c_R0_BHNS_above_LVK_GWTC5_band():
+def test_section_07c_R0_BHNS_above_LVK_GWTC5_band():
     """Model A R_BHNS(z = 0) intrinsic sits above the GWTC-5.0 NSBH band.
 
     GWTC-5.0 (LVK 2026, arXiv:2605.27226) reports the NSBH local
@@ -88,10 +88,10 @@ def test_section_08c_R0_BHNS_above_LVK_GWTC5_band():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08c_intrinsic_grb_class_subtotal_at_most_all_bhns():
+def test_section_07c_intrinsic_grb_class_subtotal_at_most_all_bhns():
     """Sum of intrinsic GRB-class rates does not exceed the All-BHNS total.
 
-    The Section 8c right panel shows lbGRB + Faint lbGRB at fiducial
+    The Section 7 right panel shows lbGRB + Faint lbGRB at fiducial
     spin ``A_BH_FID = 0.5``; the All-BHNS bar additionally includes
     the No-GRB / NS-swallowed class.  Per-class and total rates are
     independent ``compute_merger_rate`` calls (each over its own

@@ -1,4 +1,4 @@
-"""Section 8 of grb_main.ipynb: BHNS Merger Rate R(z) with BH Spin Sensitivity.
+"""Section 7 of grb_main.ipynb: BHNS Merger Rate R(z) with BH Spin Sensitivity.
 
 Smoke-level invariants on ``marginalize_bh_spin`` and on the project's
 fiducial BH-spin choice (``A_BH_FID = 0.5``).

@@ -1,8 +1,8 @@
-"""Section 8d of grb_main.ipynb: BHNS R(z) per Gottlieb class split by Broekgaarden channel.
+"""Section 7b of grb_main.ipynb: BHNS R(z) per Gottlieb class split by Broekgaarden channel.
 
 End-to-end checks on the live Model A pipeline at fiducial BH spin
 ``A_BH_FID = 0.5``.  Same skeleton as
-[tests/sections/test_section_07c_bns_class_channel.py](tests/sections/test_section_07c_bns_class_channel.py),
+[tests/sections/test_section_06b_bns_class_channel.py](tests/sections/test_section_06b_bns_class_channel.py),
 with two BHNS-specific additions:
 
 - ``apply_bhns_misalignment`` is applied per cell (matching the cell
@@ -193,7 +193,7 @@ def test_section_08d_channel_sum_equals_misalignment_corrected_per_class_total(
             R_per_class[cl],
             rtol=1e-12,
             atol=0,
-            err_msg=f"Section 8d tripwire A failed for class {cl!r}",
+            err_msg=f"Section 7b tripwire A failed for class {cl!r}",
         )
 
 
@@ -219,7 +219,7 @@ def test_section_08d_class_sum_equals_per_channel_total(bhns_class_channel_rates
             R_per_channel[ch],
             rtol=1e-12,
             atol=0,
-            err_msg=f"Section 8d tripwire B failed for channel {ch!r}",
+            err_msg=f"Section 7b tripwire B failed for channel {ch!r}",
         )
 
 
@@ -232,7 +232,7 @@ def test_section_08d_class_sum_equals_per_channel_total(bhns_class_channel_rates
 def test_section_08d_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
     """Every (class, channel) curve >= 0 at every redshift.
 
-    Same motivation as Section 7c: log-scaled y-axis hides negative
+    Same motivation as Section 6b: log-scaled y-axis hides negative
     values silently.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
@@ -289,7 +289,7 @@ def test_section_08d_channels_III_V_together_negligible(bhns_class_channel_rates
 
     Channels III (single-core CE) and V (catch-all "Other") carry no
     measurable BHNS weight in Model A; CH_PLOT filter in
-    ``grb_main.ipynb`` Section 8d drops both from the legend.
+    ``grb_main.ipynb`` Section 7b drops both from the legend.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
     R_per_class = bhns_class_channel_rates["R_per_class"]

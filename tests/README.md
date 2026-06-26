@@ -44,14 +44,11 @@ Thin smoke tests aligned with the figures in
 | 3 | `test_section_03_delay_times.py` | Delay Time Distributions by GRB Class |
 | 4 | `test_section_04_mssfr.py` | Cosmic Integration / MSSFR Grid Setup |
 | 5 | `test_section_05_metallicity_efficiency.py` | Metallicity Dependence of GRB Formation Efficiency |
-| 6 | `test_section_06_formation_channels.py` | Formation Channel Breakdown per GRB Class |
-| 7 | `test_section_07_bns_rate.py` | BNS Merger Rate R(z) per GRB Class |
-| 8 | `test_section_08_bhns_spin.py` | BHNS Merger Rate R(z) with BH Spin Sensitivity |
-| 9 | `test_section_09_offsets.py` | Physical Host-Galaxy Offset Distributions |
-| 10 | `test_section_10_beaming.py` | Beaming Correction (Intrinsic vs Observable) |
-| 11 | `test_section_11_eos_comparator.py` | EOS, Channels, Offset CDFs, Beaming Comparator |
-| 13 | `test_section_13_sbgrb_bluekn.py` | Appendix sbGRB + blue KN bimodality mechanism |
-| 14 | `test_section_14_model_grid_scan.py` | Full 20-model Broekgaarden+ 2021 grid scan (population-synthesis robustness) |
+| 6 | `test_section_06_bns_rate.py` (+ `06b` channel split, `06c` LVK cross-check, `06d` formation channels) | BNS Merger Rate R(z) per GRB Class |
+| 7 | `test_section_07_bhns_spin.py` (+ `07b` channel split, `07c` LVK cross-check) | BHNS Merger Rate R(z) with BH Spin Sensitivity |
+| 8 | `test_section_08_offsets.py` (+ `08b` kick variations) | Physical Host-Galaxy Offset Distributions |
+| 10 | `test_section_10_beaming.py`, `test_section_10_bns_breakout.py` (+ `10c` EOS comparator) | BNS Jet Breakout and Beaming (Intrinsic vs Observable) |
+| 11 | `test_section_11_model_grid_scan.py` | Full 20-model Broekgaarden+ 2021 grid scan (population-synthesis robustness) |
 
 ### `anchors/` (literature audit)
 
@@ -86,7 +83,7 @@ Defined in [pyproject.toml](../pyproject.toml) under
 | `unit` | folder | Module-level invariant |
 | `anchors` | folder | Literature anchor |
 | `integration` | folder | Heavy / data-bound / notebook |
-| `section_1` ... `section_13` | filename | Notebook-section coupling |
+| `section_1` ... `section_12` | filename | Notebook-section coupling |
 | `slow` | manual | Wall-clock above ~5 s |
 | `requires_data` | manual | Needs `data/COMPASCompactOutput_*.h5` |
 | `requires_compas` | manual | Needs `compas_python_utils` importable |

@@ -1,4 +1,4 @@
-"""Section 7c of grb_main.ipynb: BNS R(z) per Gottlieb class split by Broekgaarden channel.
+"""Section 6b of grb_main.ipynb: BNS R(z) per Gottlieb class split by Broekgaarden channel.
 
 Six end-to-end checks on the live Model A pipeline, all reusing the
 shared ``_model_cache.get_model("A")`` so the expensive load +
@@ -92,7 +92,7 @@ _R0_PINS_BNS = {
 
 
 def _assert_pinned(value: float, pinned: float, name: str) -> None:
-    """Same idiom as ``test_section_06_formation_channels._assert_pinned``.
+    """Same idiom as ``test_section_06d_formation_channels._assert_pinned``.
 
     Above 1e-3 Gpc^-3 yr^-1 the rate density is a population-level
     statistic, so a 5 percent relative tolerance is the right band for
@@ -197,7 +197,7 @@ def test_section_07c_channel_sum_equals_per_class_total(bns_class_channel_rates)
             R_per_class[cl],
             rtol=1e-12,
             atol=0,
-            err_msg=f"Section 7c tripwire A failed for class {cl!r}",
+            err_msg=f"Section 6b tripwire A failed for class {cl!r}",
         )
 
 
@@ -225,7 +225,7 @@ def test_section_07c_class_sum_equals_per_channel_total(bns_class_channel_rates)
             R_per_channel[ch],
             rtol=1e-12,
             atol=0,
-            err_msg=f"Section 7c tripwire B failed for channel {ch!r}",
+            err_msg=f"Section 6b tripwire B failed for channel {ch!r}",
         )
 
 
@@ -238,7 +238,7 @@ def test_section_07c_class_sum_equals_per_channel_total(bns_class_channel_rates)
 def test_section_07c_all_cells_nonnegative_everywhere(bns_class_channel_rates):
     """Every (class, channel) curve is >= 0 at every redshift.
 
-    The Section 7c y-axis is log-scaled (``ax.set_yscale('log')``), so a
+    The Section 6b y-axis is log-scaled (``ax.set_yscale('log')``), so a
     negative value from a future regression would silently disappear
     instead of failing visibly on the figure.
     """
@@ -291,7 +291,7 @@ def test_section_07c_channels_III_V_together_negligible(bns_class_channel_rates)
     Same anchor family as Channel II: Channels III (single-core CE) and
     V (catch-all "Other") carry no measurable BNS weight under the
     fiducial Model A prescription.  The CH_PLOT legend filter in
-    [grb_main.ipynb] Section 7c drops both from the legend; this test
+    [grb_main.ipynb] Section 6b drops both from the legend; this test
     pins the underlying numerical fact, not just the visual choice.
     """
     R_cell = bns_class_channel_rates["R_cell"]

@@ -1,6 +1,6 @@
 """Behaviour and edge-case tests for ``grb_offsets``.
 
-Complements ``tests/sections/test_section_09_offsets.py`` (smoke
+Complements ``tests/sections/test_section_08_offsets.py`` (smoke
 tests on Hernquist closed forms), ``tests/unit/test_phase4_helpers.py``
 (vectorised-vs-legacy KS, mixed-hosts regression, offset_cdf_by_class),
 and the literature-anchor block in

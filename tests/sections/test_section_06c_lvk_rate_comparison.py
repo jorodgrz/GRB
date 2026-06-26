@@ -1,16 +1,16 @@
-"""End-to-end regression test for Section 7b of ``grb_main.ipynb``.
+"""End-to-end regression test for the BNS rate vs LVK cross-check (Section 6 of ``grb_main.ipynb``).
 
-Section 7b compares the Model A intrinsic BNS local merger rate density
-``R_BNS(z = 0)`` from Section 7 against the LVK GWTC-5.0 90 percent
+This compares the Model A intrinsic BNS local merger rate density
+``R_BNS(z = 0)`` from Section 6 against the LVK GWTC-5.0 90 percent
 credible interval (LVK 2026, *GWTC-5.0: Population Properties of
 Merging Compact Binaries*, arXiv:2605.27226; published BNS band 5.1 -
 154.7 Gpc^-3 yr^-1, joint union of the PixelPop and FullPop models).
 
 Pins two end-to-end claims:
 
-1. ``test_section_07b_R0_BNS_inside_LVK_GWTC5_band`` -- the calibrated
+1. ``test_section_06c_R0_BNS_inside_LVK_GWTC5_band`` -- the calibrated
    Model A BNS rate sits inside the GWTC-5.0 BNS 90 percent CR.
-2. ``test_section_07b_per_class_rates_sum_to_total`` -- the four
+2. ``test_section_06c_per_class_rates_sum_to_total`` -- the four
    Gottlieb (2024) per-class intrinsic rates sum to the All-BNS total
    at ``rtol = 1e-12``; mirrors the in-notebook additivity tripwire so
    any future regression in ``classify_bns_2024`` or
@@ -42,13 +42,13 @@ from tests.sections._model_cache import get_model as _get_model  # noqa: E402
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07b_R0_BNS_inside_LVK_GWTC5_band():
+def test_section_06c_R0_BNS_inside_LVK_GWTC5_band():
     """Model A R_BNS(z = 0) sits inside the GWTC-5.0 BNS 90 percent CR.
 
     GWTC-5.0 (LVK 2026, arXiv:2605.27226) reports the BNS local
     intrinsic merger rate density at 5.1 - 154.7 Gpc^-3 yr^-1 (90 percent
     CR, joint union of PixelPop and FullPop; 267 candidates through O4b,
-    no new BNS).  The Section 7 panel reports the calibrated Model A
+    no new BNS).  The Section 6 panel reports the calibrated Model A
     All-BNS rate; this test pins the panel's headline claim that the
     prediction sits inside the published band.
 
@@ -67,10 +67,10 @@ def test_section_07b_R0_BNS_inside_LVK_GWTC5_band():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07b_per_class_rates_sum_to_total():
+def test_section_06c_per_class_rates_sum_to_total():
     """Per-Gottlieb-2024 BNS class rates sum to the All-BNS total at z = 0.
 
-    Mirrors the in-notebook ``assert np.allclose(...)`` from Section 7
+    Mirrors the in-notebook ``assert np.allclose(...)`` from Section 6
     on the live cached data: ``classify_bns_2024`` exhaustively
     partitions the BNS sample into the four Gottlieb (2024) classes,
     and ``compute_merger_rate`` is linear in the sample, so the

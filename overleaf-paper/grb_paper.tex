@@ -58,30 +58,28 @@
 
 \begin{abstract}
 Short and long gamma-ray bursts (GRBs) with kilonovae both trace compact binary
-mergers; in the \citet{gottlieb2023,gottlieb2024} framework the difference is
-set not by duration but by the central engine, a hyper-massive neutron star
-(HMNS) or a black-hole accretion disk. We classify the \compas\
-population-synthesis models of \citet{broekgaarden2021} into these engine
-classes, propagating STROOPWAFEL importance weights through every reduction.
-Intrinsic merger rates follow from cosmic integration over the
-\citet{levina2026} IllustrisTNG TNG100-1 metallicity-dependent star-formation
-history under Planck 2015 cosmology. Four results follow. First,
-long-duration bursts dominate: 76\% of binary neutron star (BNS) mergers
-produce one (27\% from an HMNS, 2\% from a disk, 47\%
-faint), against a 24\% short-duration minority with blue kilonovae. The
-black hole neutron star (BHNS) population is instead dominated by silent
-mergers: 76\% swallow the neutron star and launch no burst at all. Second, the BNS local rate ($55\,\Gpcyr$) falls well inside the LVK
-GWTC-5.0 90\% credible region, while the BHNS rate ($84.5\,\Gpcyr$) sits
-a factor $\sim 2.6$ above the tightened NSBH region; all five
-population-synthesis variations exceed that region, so the \compas\ BHNS
-population generically overpredicts the GW-measured NSBH rate. Third, against the \citet{rastinejad2024} kilonova sample,
-the long-duration bursts match the black-hole-disk prediction to $0.1$ dex
-while the short-duration bursts lie roughly three orders of magnitude above
-it: the engine, not the duration, sets the kilonova. Fourth, across the full
-20-model grid the local rate spans two orders of magnitude while the class
-fractions barely move; the class demographics, not the absolute rates, are the
-robust prediction. All GRB rates are upper bounds, assuming complete jet
-launching above threshold.
+mergers. In the \citet{gottlieb2023,gottlieb2024} framework the two are set
+apart not by burst duration but by the central engine, a hyper-massive neutron
+star (HMNS) or a black-hole accretion disk. We classify the
+\citet{broekgaarden2021} \compas\ binary populations by engine and compute their
+cosmic merger rates under the \citet{levina2026} TNG100-1 star-formation
+history. Four results follow. First, long-duration engines dominate the binary
+neutron star (BNS) population: 76\% in the fiducial model, and 72 to 88\% across
+the full 20-model grid, against a short-duration, blue-kilonova minority of 24\%
+(12 to 28\% across the grid). Black hole neutron star (BHNS) mergers instead
+mostly swallow the neutron star and make no burst (76\%). Second, the BNS local
+rate ($55\,\Gpcyr$; grid range $0.6$ to $232$) agrees with the LVK GWTC-5.0
+measurement, but the BHNS rate ($84.5\,\Gpcyr$; range $4.7$ to $442$) sits a
+factor $\sim 2.6$ above the NSBH rate and exceeds it in 14 of the 20 models:
+\compas\ generically overpredicts the NSBH rate. Third, the engine, not the
+duration, sets the kilonova: against the \citet{rastinejad2024} sample,
+long-duration bursts match the black-hole-disk prediction to $0.1$ dex while
+short-duration bursts lie three orders of magnitude away, near the HMNS
+expectation. Fourth, across the grid the local rate varies by two orders of
+magnitude but the class ordering does not: the long-duration majority is the
+robust prediction, while the exact fractions depend mainly on the dense-matter
+equation of state. All GRB rates are upper limits, since they assume every
+above-threshold system launches a jet.
 \end{abstract}
 
 \keywords{\uat{Gamma-ray bursts}{629}, \uat{Neutron stars}{1108}, \uat{Compact binary stars}{283}, \uat{Gravitational waves}{678}, \uat{R-process}{1324}, \uat{Stellar populations}{1622}}
@@ -115,8 +113,8 @@ classified and its cosmic rate computed.
 In this paper we apply the Gottlieb classification to the \compas\
 \citep{broekgaarden2021} population-synthesis models, taking the fiducial
 Model A as the main-text reference and scanning the full 20-variation grid in
-the appendix to bound the two systematics that most strongly affect the remnant
-mass distribution, the common-envelope efficiency $\alpha_{\rm CE}$ and the
+Section~\ref{sec:grid} to bound the two systematics that most strongly affect the
+remnant mass distribution, the common-envelope efficiency $\alpha_{\rm CE}$ and the
 maximum neutron-star mass $M_{\rm NS,max}$. We propagate the STROOPWAFEL importance
 weights of the underlying simulation through every reduction, integrate the
 intrinsic cosmic merger rate with the IllustrisTNG-calibrated metallicity-specific
@@ -129,16 +127,17 @@ BHNS mass, delay-time, and metallicity distributions
 merger rates resolved by GRB class and by \citet{broekgaarden2021} formation
 channel, tested against the GWTC-5.0 credible regions
 (Sections~\ref{sec:classrates} to \ref{sec:lvk}, with the channel
-decomposition in Appendix~\ref{app:channels}); (iii) a confrontation of the
+decomposition in Section~\ref{sec:ratechannels}); (iii) a confrontation of the
 engine classes with the \citet{rastinejad2024} kilonova-bearing GRB sample,
-through class fractions, through an engine discriminator built on burst
-duration and kilonova ejecta mass, and through host-galaxy offset predictions
-(Sections~\ref{sec:obsclass} to \ref{sec:offsets}); and (iv) a BH-spin
+through an engine discriminator built on burst duration and kilonova ejecta
+mass, and through host-galaxy offset predictions
+(Section~\ref{sec:obs}); and (iv) a BH-spin
 sensitivity analysis (Section~\ref{sec:spin}) plus a population-synthesis
 robustness study spanning the full 20-model
-\citet{broekgaarden2021} grid (Appendix~\ref{app:grid}). Methods are collected in Section~\ref{sec:methods}, results
-in Section~\ref{sec:results}, discussion in Section~\ref{sec:discussion}, and
-conclusions in Section~\ref{sec:conclusions}.
+\citet{broekgaarden2021} grid (Section~\ref{sec:grid}). Methods are collected in
+Section~\ref{sec:methods}, results in
+Sections~\ref{sec:results} to \ref{sec:grid}, discussion in
+Section~\ref{sec:discussion}, and conclusions in Section~\ref{sec:conclusions}.
 
 %% ======================================================================
 \section{Methods} \label{sec:methods}
@@ -158,7 +157,7 @@ the assumption each variation changes relative to the fiducial, together
 with the size of each catalog. The main text works with the fiducial Model A
 ($\alpha_{\rm CE} = 1.0$, maximum neutron-star gravitational mass
 $M_{\rm NS,max} = 2.5\,\Msun$); the full 20-model grid enters the
-population-synthesis robustness scan of Appendix~\ref{app:grid}. Two
+population-synthesis robustness scan of Section~\ref{sec:grid}. Two
 assumptions carry the strongest leverage on the remnant mass distribution and
 are called out repeatedly: the common-envelope efficiency, bracketed by F
 ($\alpha_{\rm CE} = 0.5$) and G ($\alpha_{\rm CE} = 2.0$), and the maximum NS
@@ -203,7 +202,7 @@ T & fWR5\tablenotemark{b}     & Wolf-Rayet wind multiplier $f_{\rm WR} = 5$     
 \enddata
 \tablenotetext{a}{Fiducial Model A and the common-envelope and
 maximum-NS-mass brackets (F, G, J, K) called out most directly in the text;
-all 20 variations enter the Appendix~\ref{app:grid} sweeps.}
+all 20 variations enter the Section~\ref{sec:grid} sweeps.}
 \tablenotetext{b}{Variation introduced in the \citet{broekgaarden2022} paper II
 release with no paper I letter; labeled by its descriptive token.}
 \tablecomments{Rows are grouped by physics family (common envelope, mass
@@ -313,7 +312,12 @@ classification because the fit predicts essentially no remnant mass at these
 mass ratios. By weight, 57 percent of the No-GRB class sits at $Q > 7$,
 against only 0.2 percent of the faint-lbGRB class and none of the lbGRB plus
 red kilonova class; forcing every $Q > 7$ system into the No-GRB class would
-change the class fractions by at most 0.05 percentage points.
+change the class fractions by at most 0.05 percentage points. The compactness
+guard is benign in the same way: the fit is calibrated for $C \in [0.13, 0.182]$
+and neutron stars near $\Mtov$ exceed the upper edge, but a higher compactness
+is a more tightly bound star that resists tidal disruption, so it leaves no disk
+and defaults to the No-GRB class, and the extrapolation cannot manufacture
+spurious GRB-producing systems.
 The dynamical ejecta follow \citet[their Eq.~9]{kruger2020},
 \begin{equation}
 \frac{M_{\rm dyn}}{M_b} = \max\!\left(0,\ a_1 Q^{n_1}\frac{1-2C}{C}
@@ -330,17 +334,7 @@ For a spin misaligned from the orbital angular momentum by a tilt angle
 $\theta_{\rm tilt}$, only the aligned projection enters the fit through the
 effective spin $\chi_{\rm eff} = \max(0,\ \aBH\cos\theta_{\rm tilt})$.
 
-For completeness, the BNS post-merger disk admits a compactness-based fit; we
-adopt a linearized form of the \citet{kruger2020} BNS disk relation (their
-Eq.~4), $\Mdisk^{\rm BNS} = M_b^{\rm tot}\,\max(5\times10^{-4},\ a\,C_1 + c)$ with
-$(a, c) = (-8.1580, 1.2695)$ and $C_1$ the compactness of the lighter component.
-This simplifies the published Eq.~4,
-$M_1\,\max\{5\times10^{-4},\,(a\,C_1 + c)^{d}\}$ with
-$(a, c, d) = (-8.1324, 1.4820, 1.7784)$, by dropping the exponent and refitting
-the linear coefficients (the published fit zeros the disk at $C_1 \approx 0.182$,
-ours at $C_1 \approx 0.156$). The BNS classification below uses total-mass
-and mass-ratio thresholds rather than this disk mass, because the BNS fit is
-knife-edge sensitive to the NS radius near $C_1 \approx 0.156$. Neutron-star radii
+Neutron-star radii
 in the fiducial disk-mass chain use the heuristic of Eq.~\ref{eq:nsradius} at
 $R_{1.4} \approx 12$ km; the APR4, SFHo, LS220, and DD2 tabulations of
 \citet{bauswein2013,bauswein2020} and \citet{read2009} supply the EOS-dependent
@@ -530,7 +524,22 @@ order-unity heuristic factor, $\mathcal{R}_{\rm BHNS} \to 0.5\,\mathcal{R}_{\rm 
 motivated by the misaligned-spin distributions of \citet{fragos2010} together
 with the numerical-relativity result that the remnant disk mass collapses for
 tilt angles beyond $\sim 50$ to $60^\circ$ \citep{kawaguchi2015}; it is applied
-at the rate level only, not by dropping systems. We do not apply beaming or the misalignment factor when comparing against
+at the rate level only, not by dropping systems.
+(iv) Jet breakout: the disk-mass BNS class rates are upper bounds that assume
+every above-threshold system launches a successful jet; we convert them to
+observable rates with the fraction of jets that clear the merger ejecta.
+Following \citet{pais2024}, we test per system whether a disk-fed jet breaks out
+within the engine working time subject to a collimation gate (their Eqs.~3 and
+4) and reduce to a STROOPWAFEL-weighted breakout fraction $f_{\rm break}$ per
+class. Because the disk mass is knife-edge sensitive to the neutron-star radius
+near $R_{1.4}\sim 12$~km, $f_{\rm break}$ is marginalized over the four EOS of
+Section~\ref{sec:remnant} and is remnant-conditioned: the prompt-collapse class
+is obstructed by the dynamical ejecta alone, while the two HMNS classes also see
+a disk wind $f_{\rm wind}\Mdisk$ and a longer launch delay, which lowers their
+breakout. The observable rate is the chain
+$\mathcal{R} \to f_{\rm break}\,\mathcal{R} \to f_{\rm beam}\,f_{\rm break}\,\mathcal{R}$;
+breakout is independent of beaming and of the misalignment factor.
+We do not apply beaming or the misalignment factor when comparing against
 the GWTC-5.0 intrinsic GW rate, which already folds in selection effects.
 
 \subsection{Observed-sample engine comparison} \label{sec:obsmethod}
@@ -578,7 +587,7 @@ the \citet{alsing2018} double Gaussian \citep{mandel2020}; this shifts class
 fractions relative to the raw catalog and is applied before any classification.
 \item \textit{Supernova engine.} All core-suite models use the \citet{fryer2012}
 delayed mechanism; the rapid variation (Model I) enters only the grid scan of
-Appendix~\ref{app:grid}.
+Section~\ref{sec:grid}.
 \item \textit{Black-hole spin.} The \citet{foucart2018} remnant fit is calibrated
 for $\chi_{\rm BH} \in [-0.5, 0.9]$; spins are clipped at $0.9$ to avoid
 extrapolation.
@@ -600,25 +609,25 @@ would otherwise inflate the local rate by $\sim 30$ percent.
 
 %% ======================================================================
 \FloatBarrier
-\section{Results} \label{sec:results}
+\section{Mass plane, delay times, and formation efficiency} \label{sec:results}
 %% ======================================================================
 
 Unless noted, results are for the fiducial Model A. The remapped, weighted BNS
 sample contains $N = 233{,}137$ merging systems and the BHNS sample
 $N = 1{,}525{,}553$ (classified at the fiducial $\aBH = 0.5$; the sample itself
-is spin-independent). The headline class fractions and local
-rates are collected in Table~\ref{tab:classfrac}: roughly three-quarters of BNS
-mergers fall in the lbGRB-producing classes, and the BHNS population is dominated
-by NS-swallowing systems that launch no GRB. The results below build on
-these fractions in order: where the classes sit in the mass plane and what mass,
-delay-time, and metallicity distributions they imply
-(Sections~\ref{sec:massplane} to \ref{sec:delaytime}); the cosmic merger rate
-and its decomposition by class and by black-hole spin
-(Sections~\ref{sec:classrates} and \ref{sec:spin}; the formation-channel
-decomposition is in Appendix~\ref{app:channels}); the comparison with
-the GWTC-5.0 local rate (Section~\ref{sec:lvk}); and the confrontation with the
-observed kilonova-bearing sample, from class fractions to host-galaxy offsets
-(Sections~\ref{sec:obsclass} to \ref{sec:offsets}).
+is spin-independent). The headline class fractions and local rates are collected
+in Table~\ref{tab:classfrac}: roughly three-quarters of BNS mergers fall in the
+lbGRB-producing classes, and the BHNS population is dominated by NS-swallowing
+systems that launch no GRB. The four results sections build on these fractions in
+order. This one fixes the demographics: where the classes sit in the mass plane
+(Figure~\ref{fig:massplane}), what component-mass, delay-time, and metallicity
+distributions they carry (Figures~\ref{fig:massdist} and \ref{fig:delaytime}),
+and how strongly the neutron-star mass remap sets those numbers
+(Figure~\ref{fig:remapsens}). Section~\ref{sec:rates} converts the same systems
+into cosmic merger rates and decomposes them by formation channel;
+Section~\ref{sec:obs} confronts the classes with the observed kilonova-bearing
+sample; and Section~\ref{sec:grid} tests how much of this survives the full
+20-model grid.
 
 \begin{deluxetable*}{lccc}
 \tablecaption{Model A class fractions and local merger rates by GRB class.
@@ -687,7 +696,7 @@ across it. GW190425 ($\Mtot \approx 3.4\,\Msun$;
 and is assigned to the faint lbGRB (prompt-collapse) class, consistent with
 its lack of a detected counterpart. Per-event assignments near the boundaries
 inherit this EOS sensitivity even though the population fractions are
-comparatively stable (Appendix~\ref{app:grid}). The BHNS panel shows the
+comparatively stable (Section~\ref{sec:grid}). The BHNS panel shows the
 disk-mass classes at $\aBH = 0.5$ with \citet{foucart2018} disk-mass contours at
 the $0.01$ and $0.1\,\Msun$ thresholds.
 
@@ -717,7 +726,39 @@ $\Mtot$ and low $q$. Because the classifier operates on the remapped masses
 (Section~\ref{sec:remap}), these abundance fractions
 (Table~\ref{tab:classfrac}) inherit the \citet{alsing2018} double-Gaussian
 target distribution \citep{mandel2020}; a different mass remap would move the
-boundaries between the low-$\Mtot$ and high-$\Mtot$ classes.
+boundaries between the low-$\Mtot$ and high-$\Mtot$ classes. We quantify that
+dependence next.
+
+\subsection{Sensitivity of the class fractions to the mass remap}
+\label{sec:remapsens}
+
+\begin{figure}[tbp]
+\epsscale{1.15}
+\plotone{remap_sensitivity_bns.pdf}
+\caption{Weighted BNS GRB-class fractions for \compas\ Model A under three
+neutron-star mass treatments of the same merging sample at fixed classification
+boundaries: the raw COMPAS gravitational masses, a flat-prior remap on
+$[1.10, \Mtov]\,\Msun$, and the fiducial \citet{alsing2018} double Gaussian.
+The spread across the three columns is the remap dependence of each fraction.
+STROOPWAFEL-weighted. \label{fig:remapsens}}
+\end{figure}
+
+Both class boundaries ($M_{\rm HMNS} = 2.64\,\Msun$ and $\Mthresh = 2.794\,\Msun$)
+sit in the bulk of the imposed mass function, so part of the demographics is set
+by a distribution we choose rather than derived from \compas. To bound that
+contribution we reclassify the same merging BNS sample under three NS-mass
+treatments at fixed boundaries and weights (Figure~\ref{fig:remapsens}): the raw
+COMPAS masses, a flat prior on $[1.10, \Mtov]\,\Msun$, and the fiducial Alsing
+remap. The four fractions move substantially, by tens of percentage points: the
+sbGRB-plus-blue fraction spans 17 to 46 percent (flat, raw) against 24 percent
+fiducial, and the faint-lbGRB fraction spans 15 to 71 percent. The
+lbGRB-producing classes nonetheless remain the majority in all three
+treatments, at 54 (raw), 76 (fiducial), and 83 (flat) percent, so the
+qualitative long-duration-majority ordering survives the choice of mass
+function even though the precise four-way split does not. The remap therefore
+sets the detailed BNS demographics but not the ordering; the per-event placement
+of borderline systems is correspondingly remap-sensitive
+(Section~\ref{sec:systematics}).
 
 \subsection{Delay-time and metallicity distributions} \label{sec:delaytime}
 
@@ -759,6 +800,34 @@ only. Bins are retained when the raw count is at least 50, the Kish effective si
 10, and $Z \leq \Zsun = 0.0142$ \citep{asplund2009}. The disk-mass and faint
 classes rise toward low metallicity, reflecting the metallicity dependence of
 compact-object formation in \citet{broekgaarden2021}.
+
+Taken together, Figures~\ref{fig:massplane} to \ref{fig:delaytime} fix the BNS
+demographics through one chain. The total-mass distribution places each class on
+the mass plane (Figure~\ref{fig:massplane}), which sets the abundance fractions
+(Figure~\ref{fig:massdist}); those fractions are remap-controlled at the
+tens-of-percent level but keep the long-duration majority under any reasonable
+mass function (Figure~\ref{fig:remapsens}); and each class then carries its own
+delay-time and metallicity signature (Figure~\ref{fig:delaytime}), with the
+faint and disk classes forming earliest and at the lowest metallicity. The
+takeaway is that abundance and formation timing run in opposite directions: the
+most abundant class (faint lbGRB) is also the one that forms earliest and at low
+metallicity, so it will be relatively depleted at $z = 0$. The next section
+converts these distributions into cosmic rates and shows that this is exactly
+what happens.
+
+\section{Cosmic merger rates and formation channels} \label{sec:rates}
+
+The component-mass, delay-time, and metallicity distributions of
+Section~\ref{sec:results} become observable rates once convolved with the cosmic
+star-formation history. This section follows that conversion:
+$\Rz$ per GRB class and its dominant star-formation-history systematic
+(Figure~\ref{fig:rateclass}); the fraction of those jets that actually break out
+and the rate that survives beaming (Figure~\ref{fig:breakout}); the black-hole
+spin that sets the BHNS rate (Figure~\ref{fig:spinsweep}); the decomposition of
+every per-class rate onto the \citet{broekgaarden2021} formation channels
+(Figures~\ref{fig:ratechanbns} and \ref{fig:ratechanbhns}); and the comparison
+of the local rates against the LVK GWTC-5.0 measurement
+(Section~\ref{sec:lvk}).
 
 \subsection{Merger rate by GRB class} \label{sec:classrates}
 
@@ -803,7 +872,56 @@ than the compact-object type. The shaded band is the resolution envelope.
 
 The decomposition of these per-class rates onto the \citet{broekgaarden2021}
 formation channels of Section~\ref{sec:channels} is collected in
-Appendix~\ref{app:channels}.
+Section~\ref{sec:ratechannels}.
+
+\subsection{Jet breakout and the observable rate} \label{sec:breakout}
+
+\begin{figure*}[tbp]
+\epsscale{1.15}
+\plotone{fig10_bns_jet_breakout.pdf}
+\caption{BNS jet-breakout efficiency and the observable rate ladder for
+\compas\ Model A. \textit{Left:} EOS-marginalized, remnant-conditioned
+jet-breakout fraction $f_{\rm break}$ per \citet{gottlieb2024} class
+\citep[Eqs.~3 and 4]{pais2024}; the band brackets the four-EOS spread (APR4,
+SFHo, LS220, DD2) and the Monte Carlo over the jet and ejecta parameters
+(16/50/84 percentiles). \textit{Right:} local intrinsic rate $\Rzero$ stepped
+through breakout ($\mathcal{R}\to f_{\rm break}\mathcal{R}$) and beaming
+($\times\,(1-\cos\theta_j)$, with $\theta_j = 13^\circ$ for sbGRB and
+$6.5^\circ$ for the lbGRB classes) against the local sGRB rate of
+\citet{colombo2022}, $3.6^{+2.9}_{-1.8}\,\Gpcyr$ (shaded). The intrinsic rate
+is the upper bound of Section~\ref{sec:classrates}; the breakout-corrected rate
+is not, since it folds in the jet-clearing fraction. STROOPWAFEL-weighted, BNS
+raw $N = 233{,}137$; cosmology Planck 2015 \citep{planck2016}.
+\label{fig:breakout}}
+\end{figure*}
+
+The disk-mass classification counts every above-threshold system as a GRB, so
+the rates of Section~\ref{sec:classrates} assume that every launched jet
+succeeds. Figure~\ref{fig:breakout} relaxes that assumption with the
+\citet{pais2024} breakout test. The breakout fraction splits sharply along the
+remnant axis. The two prompt-collapse classes clear the dynamical ejecta almost
+always, $f_{\rm break} = 0.95$ (lbGRB plus red kilonova disk) and $0.96$ (faint
+lbGRB), because the jet is launched at $t_d \sim 0.01$ to $0.1$ s before any
+secular wind develops. The two HMNS classes, which launch only after the
+remnant collapses into a wind-polluted funnel, are strongly suppressed: the
+lbGRB plus red kilonova (HMNS) class has $f_{\rm break} = 0.32$ and the sbGRB
+plus blue kilonova class has a median consistent with zero. The wide bands on
+the HMNS classes are driven by the knife-edge EOS sensitivity of the disk mass
+near $R_{1.4} \sim 12$~km rather than by sampling noise.
+
+Propagating these fractions through the observable chain
+$\mathcal{R}\to f_{\rm break}\,\mathcal{R}\to f_{\rm beam}\,f_{\rm break}\,\mathcal{R}$
+(right panel) drops every per-class local rate below the \citet{colombo2022}
+sGRB rate. The faint lbGRB class is the largest beamed contributor at
+$0.07\,\Gpcyr$, followed by the HMNS class at $0.04\,\Gpcyr$; the prompt-collapse
+disk class contributes $0.01\,\Gpcyr$ and the breakout-choked sbGRB class is
+negligible. The gap to the observed $3.6\,\Gpcyr$ is dominated by the small
+beaming fractions: even with $f_{\rm break} = 1$ the beamed all-BNS rate would
+reach only $\sim 0.8\,\Gpcyr$, and the breakout suppression of the HMNS classes
+widens the deficit. We read this as the beaming-limited BNS population being a
+subdominant source of the observed local short-GRB rate under these fiducial
+jet angles, with the caveat that the \citet{pais2024} prefactors are calibrated
+to a single GW170817-like configuration and are accurate to a factor of a few.
 
 \subsection{BHNS BH-spin sensitivity} \label{sec:spin}
 
@@ -827,6 +945,44 @@ systems from the no-GRB class into the GRB-launching classes, so both the lbGRB
 and faint lbGRB rates rise monotonically with spin. The spread across the spin
 grid is the dominant within-model systematic on the BHNS class rates.
 
+\subsection{Formation-channel decomposition of the class rates} \label{sec:ratechannels}
+
+\begin{figure*}[tbp]
+\epsscale{1.0}
+\plotone{rate_bns_by_class_per_channel.pdf}
+\caption{BNS intrinsic merger rate $\Rz$ per \citet{gottlieb2024} GRB class (2x2),
+decomposed onto the \citet{broekgaarden2021} formation channels I to V; dotted
+curve is the per-class total. \compas\ Model A; cosmology Planck 2015
+\citep{planck2016}; rates intrinsic upper bounds. Per-curve weighted-Poisson
+error is sub-percent and the common MSSFR-resolution systematic cancels in the
+per-channel decomposition, so no band is drawn. \label{fig:ratechanbns}}
+\end{figure*}
+
+\begin{figure*}[tbp]
+\epsscale{1.15}
+\plotone{rate_bhns_by_class_per_channel.pdf}
+\caption{BHNS intrinsic merger rate $\Rz$ per hybrid GRB class (1x3) at
+$\aBH = 0.5$, decomposed onto the \citet{broekgaarden2021} formation channels;
+dotted curve is the misalignment-corrected per-class total. \compas\ Model A;
+rates intrinsic upper bounds. Curves are at $\aBH = 0.5$; the BH-spin systematic
+(Figure~\ref{fig:spinsweep}) is the dominant per-class uncertainty and is
+not propagated per channel. \label{fig:ratechanbhns}}
+\end{figure*}
+
+Figures~\ref{fig:ratechanbns} and \ref{fig:ratechanbhns} decompose the
+per-class rates of Section~\ref{sec:classrates} onto the
+\citet{broekgaarden2021} formation channels of Section~\ref{sec:channels}. The decomposition
+satisfies two additivity constraints to a relative tolerance of $10^{-12}$: summing
+over channels recovers the per-class rate, and summing over classes within a
+channel recovers the per-channel rate. For BNS the rate is carried by channels~I
+(stable mass transfer plus common envelope) and~IV (double-core common
+envelope) across all classes; channel~IV dominates the faint class because its
+tighter post-common-envelope separations drive the shortest delay times. For
+BHNS the rate is almost entirely channel~I, with the misalignment factor
+applied per cell.
+
+\FloatBarrier
+
 \subsection{Local rate versus LVK GWTC-5.0} \label{sec:lvk}
 
 We compare the Model A local rate densities $\Rzero$ with the
@@ -847,81 +1003,45 @@ $\sim 2.6$ above the NSBH 90 percent upper bound and well above both per-model
 medians; Section~\ref{sec:discussion} discusses what this implies. Across the
 population-synthesis grid every BHNS rate exceeds the tightened
 NSBH region (per-model rates in
-Appendix~\ref{app:grid}; Figure~\ref{fig:frac20}). Independent
+Section~\ref{sec:grid}; Figure~\ref{fig:frac20}). Independent
 multi-messenger analyses point the same way: the GW-inferred NS merger rates
 are low enough to strain the observed sGRB rate at canonical jet angles,
 implying either genuinely low rates \citep{fishbach2026,jin2026} or wider
 short-GRB jets \citep{kunnumkai2026}; Section~\ref{sec:priorwork} returns to
 this tension.
 
-\begin{figure*}[tbp]
-\epsscale{1.15}
-\plottwo{rate_bns_vs_lvk_gwtc4.pdf}{rate_bhns_vs_lvk_gwtc4.pdf}
-\caption{Local intrinsic merger rate $\Rzero$ by GRB class against the GWTC-5.0
-90 percent credible regions \citep[shaded]{abac2026}. \textit{Left:} BNS, with
-the hatched all-BNS bar and the four \citet{gottlieb2024} class subsets that
-sum to it.
-\textit{Right:} BHNS at $\aBH = 0.5$, with the hatched all-BHNS bar and the two
-GRB-class subsets. Both axes are intrinsic source-frame rates, so no beaming or
-misalignment correction is applied; all GRB-class rates are upper bounds
-\citep{gottlieb2023}. \label{fig:lvkbars}}
-\end{figure*}
+Resolving the comparison by GRB class, the dominant model uncertainty on the
+local rate is the MSSFR-resolution systematic (the TNG50-1 to TNG300-1 spread of
+Section~\ref{sec:classrates}) for BNS and the black-hole-spin envelope over
+$\aBH \in [0,0.9]$ (Section~\ref{sec:spin}) for the BHNS GRB classes; the
+all-BHNS rate is spin-independent. Even across the spin envelope the
+GRB-producing BHNS classes remain a small fraction of the all-BHNS total, so the
+BHNS rate that overshoots the NSBH region is carried by the NS-swallowing no-GRB
+systems rather than by the kilonova-bearing population.
 
-Figure~\ref{fig:lvkbars} resolves the same comparison by GRB class.
-The all-population bar is shown against the GWTC-5.0 joint region, and the
-four BNS (three BHNS) class subsets that partition it are stacked below. The
-dominant model uncertainty on the local rate is the MSSFR-resolution systematic
-(the TNG50-1 to TNG300-1 spread of Section~\ref{sec:classrates}) for BNS and
-the black-hole-spin envelope over $\aBH \in [0,0.9]$ (Section~\ref{sec:spin})
-for the BHNS GRB classes; the all-BHNS bar is spin-independent. Even across the
-spin envelope the GRB-producing BHNS classes remain a small fraction of the
-all-BHNS total, so the BHNS rate that overshoots the NSBH region is carried by
-the NS-swallowing no-GRB systems rather than by the kilonova-bearing
-population.
+The figures of this section trace one rate story. The per-class $\Rz$
+(Figure~\ref{fig:rateclass}) inverts the abundance ordering of
+Section~\ref{sec:results} exactly as the delay-time and metallicity
+distributions predicted: the early-forming faint class is demoted at $z = 0$.
+The breakout and beaming corrections (Figure~\ref{fig:breakout}) then push every
+BNS class below the observed sGRB rate, with the HMNS classes suppressed most
+because they launch into a wind-polluted funnel. BH spin sets the size of the
+BHNS rate (Figure~\ref{fig:spinsweep}), and channels~I and~IV carry essentially
+all of it (Figures~\ref{fig:ratechanbns} and \ref{fig:ratechanbhns}). The
+takeaway from the LVK comparison is the sharpest single
+result of the section: the BNS local rate lands inside the GWTC-5.0 BNS region,
+while the BHNS rate overshoots the NSBH region by a factor $\sim 2.6$ through its
+NS-swallowing majority rather than its GRB-producing classes.
 
-\subsection{Observed class fractions} \label{sec:obsclass}
+\section{Confronting the observed sample: durations and offsets} \label{sec:obs}
 
-\begin{figure}[tbp]
-\epsscale{1.15}
-\plotone{obs_class_fractions.pdf}
-\caption{Predicted versus observed \citet{gottlieb2024} class fractions. Filled
-bars: abundance-weighted \compas\ Model A BNS fractions (Section~\ref{sec:massdist};
-Alsing-remapped masses). Hatched bars: the eight kilonova-bearing GRBs of
-\citet{rastinejad2024} (raw $N = 8$), mapped onto the four classes
-through the blue/purple/red ejecta decomposition with the heuristic
-$f_{\rm red}$ and $M_{\rm ej}$ thresholds described in the text. Observed error
-bars are per-class multinomial uncertainties; the model bars carry no
-sampling-error whisker (the weighted-Poisson error is sub-percent, and a
-bootstrap treatment is deferred). The mapping is a consistency
-check, not a fit. \label{fig:obsclass}}
-\end{figure}
-
-Figure~\ref{fig:obsclass} confronts the predicted Model A class fractions with the
-eight kilonova-bearing GRBs of \citet{rastinejad2024} introduced in
-Section~\ref{sec:obsmethod}. We map each
-observed event onto the \citet{gottlieb2024} classes through its ejecta
-decomposition. Writing the red fraction as
-$f_{\rm red} = M_R / (M_B + M_P + M_R)$, a source is faint lbGRB when the total
-ejecta mass is $M_{\rm ej} < 0.01\,\Msun$ (this cut takes precedence);
-otherwise it is sbGRB plus blue kilonova when $f_{\rm red} < 0.30$, lbGRB plus
-red kilonova (disk) when $f_{\rm red} \geq 0.70$, and lbGRB plus red
-kilonova (HMNS) in between. These three thresholds partition the color plane; they
-are code heuristics, not quantities tabulated by \citet{gottlieb2024} or
-\citet{rastinejad2024}, and the comparison is a consistency check, not a fit.
-The model bars are the abundance-weighted Model A fractions of
-Table~\ref{tab:classfrac}, not the cosmic-rate-weighted fractions of
-Section~\ref{sec:classrates}.
-
-With only eight events the observed fractions carry large multinomial uncertainty,
-so the comparison is qualitative. We attach to each observed fraction $f_k$ the
-normal-approximation multinomial error $\sigma_k = \sqrt{f_k(1 - f_k)/N}$ with
-$N = 8$. The observed sample splits into two sbGRB plus blue,
-four mixed (HMNS), two red (disk), and zero faint. The model reproduces the
-sbGRB-minority, long-duration-majority ordering but predicts a large
-faint-lbGRB fraction with no observed counterpart. The absence is expected:
-faint, ejecta-poor events are the least likely to yield a detected kilonova,
-so a kilonova-selected sample excludes them by construction. A larger
-uniformly modeled sample is required before the faint fraction can be tested.
+The rates of Section~\ref{sec:rates} are predictions; this section tests the
+class structure against data along two increasingly independent observables of
+the same events. The burst duration and ejecta mass give an engine
+discriminator (Figure~\ref{fig:enginef1}); and the host-galaxy offset gives a
+kinematic cross-check (Figure~\ref{fig:offsets}). Each uses the eight
+kilonova-bearing GRBs of \citet{rastinejad2024} introduced in
+Section~\ref{sec:obsmethod}.
 
 \subsection{Durations and ejecta of the observed sample} \label{sec:enginediscriminator}
 
@@ -931,44 +1051,58 @@ uniformly modeled sample is required before the faint fraction can be tested.
 \caption{Engine discriminator for the \citet{rastinejad2024} kilonova-bearing
 GRBs. \textit{Left:} duration $T_{50}$ versus total kilonova ejecta mass. The
 gray band is the black-hole-engine prediction over $\alpha \in [1.5, 2]$
-anchored at the in-sample lbGRB mean $E_{\gamma,\rm iso}$, the dashed envelope
-adds the $f_b/\epsilon_\gamma$ range, and the green strip is the HMNS disk-wind
-$M_{\rm ej} = 0.3\,\Mdisk$ prior (\citealt{gottlieb2024}, their Sec.~3.1); error
-bars are 68 percent on $M_{\rm ej,tot}$ and $T_{50}$. \textit{Right:} residual
-$\log_{10}(M_{\rm obs,wind}/M_{\rm pred,BH})$ versus $T_{50}$, with the
-BH-engine null at zero (gray) and the pooled HMNS-engine expectation bands at 68
-percent. Per-event residuals span the Monte Carlo 16th to 84th percentiles,
-marginalized over the disk-mass and wind-fraction priors. Asterisked events (open markers in the
+anchored on an external long-merger-GRB $E_{\gamma,\rm iso}$ sample
+($\langle\log_{10}E_{\gamma,\rm iso}/{\rm erg}\rangle = 51.6 \pm 0.7$, $N = 5$;
+060614, 211227A, 191019A, 211211A, 230307A, sourced in the text), the dashed
+envelope adds the $f_b/\epsilon_\gamma$ range, and the green strip is the HMNS
+disk-wind $M_{\rm ej} = 0.3\,\Mdisk$ prior (\citealt{gottlieb2024}, their
+Sec.~3.1); error bars are 68 percent on $M_{\rm ej,tot}$ and $T_{50}$.
+\textit{Right:} residual $\log_{10}(M_{\rm obs,wind}/M_{\rm pred,BH})$ versus
+$T_{50}$, with the BH-engine null at zero (gray) and the pooled HMNS-engine
+expectation bands at 68 percent. The BH null is anchored on the same external
+sample, not on the in-sample lbGRBs, so the lbGRB residual is not measured
+against itself; GW170817 keeps its per-event on/off-axis energetics. Per-event
+residuals span the Monte Carlo 16th to 84th percentiles, marginalized over the
+disk-mass and wind-fraction priors. Asterisked events (open markers in the
 right panel) use a synthetic
 $T_{50}$ prior, lacking a published duration. \label{fig:enginef1}}
 \end{figure*}
 
-The class fractions of Section~\ref{sec:obsclass} use only the kilonova color;
-the duration and ejecta mass of each burst carry independent engine information.
+Burst duration and ejecta mass carry engine information independent of the
+kilonova color.
 Figure~\ref{fig:enginef1} places the \citet{rastinejad2024} events in the
 plane of burst duration and ejecta mass against the two engine predictions of
 Section~\ref{sec:obsmethod} (left) and collapses the comparison onto the
 residual $\log_{10}(M_{\rm obs,wind}/M_{\rm pred,BH})$ versus $T_{50}$ (right).
-The result inverts the naive duration-to-engine mapping. The
-long-duration bursts with kilonovae (060614, 211211A, 230307A) land on the
-black-hole accretion-disk prediction, with a pooled offset of $+0.10$ dex
-($+0.3\sigma$) from the BH-engine null, while exceeding the HMNS disk-wind
-expectation by $+1.0$ dex ($+4.2\sigma$). The short-duration bursts (050709,
-130603B, 160821B, 200522A) show the opposite preference: they sit $+3.4$ dex
-($+12\sigma$) above the BH-disk prediction and come within $+1.0$ dex
-($+4.7\sigma$) of the HMNS band, so their ejecta demand the HMNS-wind
-enrichment even though the pooled offset does not close entirely. GW170817
-follows the short-burst pattern when treated as on-axis, sitting at the upper
-edge of the HMNS band; its face-value off-axis energetics place it above every
-prediction. This is precisely the \citet{gottlieb2024} picture in which the central
+The result inverts the naive duration-to-engine mapping. To keep the test from
+being self-referential we anchor the BH-engine null on an external sample of
+long-duration merger GRBs with kilonovae (060614, 211227A, 191019A, 211211A,
+230307A; $E_{\gamma,\rm iso}$ from the discovery and analysis papers
+\citealt{mangano2007,lu2022,stratta2025,troja2022,svinkin2023}),
+rather than on the in-sample lbGRBs the null is then compared against. Under
+this external anchor the long-duration bursts with kilonovae (060614, 211211A,
+230307A) sit $+0.7$ dex ($+1.2\sigma$) above the BH-engine null, consistent with
+the black-hole accretion-disk picture (the Laplace-approximate odds favour the
+BH engine, $\log_{10}B_{10}^{\rm HMNS/BH} \approx -2.6$). The short-duration
+bursts (050709, 130603B, 160821B, 200522A) sit $+2.4$ dex ($+5.2\sigma$) above
+the same null and within $+1.0$ dex ($+4.7\sigma$) of the HMNS band, favouring
+HMNS-wind enrichment ($\log_{10}B_{10}^{\rm HMNS/BH} \approx +2$). The
+anchor-independent content is the short-versus-long separation, $+1.65$ dex
+($+2.2\sigma$): a common shift of the $E_{\gamma,\rm iso}$ anchor cancels in the
+difference. That separation is carried by the $T_{50}^{\,\alpha-1}$ duration
+scaling of the Gottlieb engine relation (Section~\ref{sec:obsmethod}); with
+$\alpha = 1$ (no duration dependence) it collapses to zero, so the
+discriminating power rests on the assumed scaling.
+GW170817 follows the short-burst pattern when treated as on-axis, sitting at the
+upper edge of the HMNS band; its face-value off-axis energetics place it above
+every prediction. This is the \citet{gottlieb2024} picture in which the central
 engine, not the observed duration class, sets the kilonova: the bursts whose
-ejecta are consistent with a black-hole disk are the long-duration ones, and the
-short bursts require the magnetar or HMNS-wind enrichment. With seven events the
-trend is suggestive rather than decisive, and the residual folds in the wide
-log-uniform priors on the disk mass and wind fraction
-(Section~\ref{sec:obsmethod}); it is nonetheless the first quantitative
-confrontation of the Gottlieb two-engine taxonomy with a uniformly modeled
-kilonova sample.
+ejecta match a black-hole disk are the long-duration ones, and the short bursts
+require the magnetar or HMNS-wind enrichment. The per-subclass significances are
+conditional on the wide log-uniform disk-mass and wind-fraction priors
+(Section~\ref{sec:obsmethod}) and the $N = 3$ to $4$ samples, so we read the
+result as a suggestive, de-circularized confrontation of the Gottlieb two-engine
+taxonomy with a uniformly modeled kilonova sample rather than a decisive one.
 
 \subsection{Host-galaxy offsets} \label{sec:offsets}
 
@@ -997,14 +1131,158 @@ distribution per GRB class (Figure~\ref{fig:offsets}). Weighted two-sample
 Kolmogorov-Smirnov tests against the \citet{fong2013} sGRB offsets give no
 significant difference for the BNS classes ($p = 0.17$ for the annotated lbGRB
 plus red kilonova HMNS class), and the model BNS offsets reproduce the
-observed sub-10-kpc median. The BHNS offsets extend slightly further; the
+observed sub-10-kpc median. A morphological study of nine such GRB-kilonova
+hosts \citep{skobe2026} finds no clear distinction between the short- and
+long-duration host populations, consistent with the shared kinematics here, and
+cautions that host-normalized offsets from single-S\'ersic fits can be
+overestimated when the transient sits on a subcomponent of a complex host, a
+systematic that affects the observed comparators used here; the same study finds
+tidal features in five of the nine hosts, hinting at a dynamical contribution
+that our isolated-binary grid does not capture. The BHNS offsets extend slightly
+further; the
 driver is the delay-time distribution rather than the kicks, since the
 weighted-median BHNS systemic velocity ($82\,{\rm km\,s^{-1}}$) is below the
 BNS value ($113\,{\rm km\,s^{-1}}$) while the BHNS delay times are an order of
-magnitude longer (weighted medians $1.3$ Gyr versus $0.13$ Gyr). The
-prediction is also insensitive to the natal-kick prescription itself
-(Figure~\ref{fig:offsetkicks}, Appendix~\ref{app:grid}).
+magnitude longer (weighted medians $1.3$ Gyr versus $0.13$ Gyr).
 
+The two observables of this section point one way. The engine discriminator
+(Figure~\ref{fig:enginef1}) inverts the naive duration-to-engine mapping: the
+long-duration bursts match the black-hole-disk prediction while the short bursts
+sit near the HMNS-wind expectation, the central result that the engine, not the
+duration, sets the kilonova. The offsets (Figure~\ref{fig:offsets}) add no engine discrimination,
+as expected for shared compact-binary kinematics, but confirm the model
+reproduces the observed sub-10-kpc sGRB offset distribution. The takeaway is that
+the engine classification is consistent with the data on duration and ejecta
+mass and is not contradicted by the spatial distribution.
+
+\section{Robustness across the 20-model grid and parameter exploration} \label{sec:grid}
+
+Sections~\ref{sec:results} to \ref{sec:obs} are built on the fiducial Model~A.
+This section tests how much of that picture survives the binary-physics
+assumptions by streaming the full 20-model grid through the same pipeline. It
+moves from the grid-wide overview (Figure~\ref{fig:frac20}) to the individual
+assumptions that move the fractions (Figures~\ref{fig:alphace5} and
+\ref{fig:betasweep}) and the dense-matter equation of state
+(Figure~\ref{fig:eosmatrix}).
+
+\subsection{Grid overview: rate spread versus class ordering} \label{sec:gridoverview}
+
+To test how strongly the class predictions depend on the binary-evolution
+assumptions, we stream the complete
+\citet{broekgaarden2021,broekgaarden2022} release, 20 binary-physics
+variations collected with their assumptions in Table~\ref{tab:models}, through
+the same classification and cosmic-integration pipeline, recalibrating
+$M_{\rm evolved}$ per model and population. Each variation perturbs the
+fiducial Model~A by one assumption: common-envelope efficiency, mass-transfer
+efficiency, case~BB stability, common-envelope survival, supernova remnant
+engine, maximum neutron-star mass, pair-instability supernovae, natal kicks,
+and Wolf-Rayet winds.
+
+Figure~\ref{fig:frac20} gives the per-model class fractions and local rates
+against the GWTC-5.0 regions. Two patterns separate cleanly: the local rate
+spans two orders of magnitude across the grid, while the class ordering is
+preserved in every variation. The BNS rate ranges from $0.6$ (Model~E,
+unstable case~BB) to $232\,\Gpcyr$ (Model~N), and stays within the GWTC-5.0
+BNS region $[5.1, 154.7]\,\Gpcyr$ for the fiducial and its neighbours: $55.0$
+(A), $29.3$ (F, $\alpha_{\rm CE} = 0.5$), $106.0$ (G, $\alpha_{\rm CE} = 2.0$),
+$53.7$ (J), and $56.9\,\Gpcyr$ (K). Over the grid the lbGRB-producing classes
+hold 72 to 88 percent of the BNS population and the sbGRB-plus-blue class stays
+a 12 to 28 percent minority, so the long-duration-majority ordering is
+grid-wide rather than fiducial-specific (Section~\ref{sec:systematics}). The BHNS rate ranges from $4.7$ (Model~$\alpha_{\rm CE} = 0.1$) to
+$442\,\Gpcyr$ (Model~N); 14 of the 20 variations exceed the tightened NSBH
+region $[6.7, 32.8]\,\Gpcyr$, deepening with increasing maximum NS mass, while
+six fall within or below it (the $\beta = 0.5$ and $0.75$ mass-transfer models,
+unstable case~BB, $\alpha_{\rm CE} = 10$, enhanced Wolf-Rayet winds, and
+$\alpha_{\rm CE} = 0.1$, which falls below). The overprediction noted in
+Section~\ref{sec:lvk} is therefore generic but not universal. Model~J has $M_{\rm NS,max} = 2.0\,\Msun < \Mtov = 2.2\,\Msun$, so
+its $[2.0, 2.2]\,\Msun$ window is \compas-BH but EOS-NS; we retain the \compas\
+labels throughout for consistency.
+
+\begin{figure*}[tbp]
+\epsscale{0.9}
+\plotone{class_fractions_20models.pdf}
+\caption{Weighted \citet{gottlieb2024} class fractions and local rates for
+all 20 \citet{broekgaarden2021} variations, BNS four-class (left block) and
+BHNS three-class (right block), following the presentation of
+\citet{broekgaarden2026}. Within each block the stacked bars give the
+weighted class fractions, with models sorted by the first-stacked class
+fraction (sbGRB plus blue kilonova for BNS, lbGRB plus red kilonova for
+BHNS), largest on top, rather than in registry order; the narrow companion
+panel gives the same models' local intrinsic rate $\Rzero$ (diamonds, log
+axis) against the GWTC-5.0 90 percent credible region
+\citep[shaded]{abac2026}. The weighted-Poisson sampling error is sub-percent
+and the MSSFR-resolution systematic ($\sim \pm 30$ percent) is common to all
+models; the composition is far more stable across the grid than the rate. All
+GRB rates are intrinsic upper bounds; models use the \citet{broekgaarden2021}
+paper I letters and descriptive tokens of Table~\ref{tab:models}.
+\label{fig:frac20}}
+\end{figure*}
+
+\subsection{Parameter sweeps: common envelope and mass transfer} \label{sec:gridsweeps}
+
+Figures~\ref{fig:alphace5} and \ref{fig:betasweep} isolate the individual
+assumptions that do move the fractions: the five-point common-envelope
+sequence and the mass-transfer-efficiency sweep.
+
+\begin{figure*}[tbp]
+\epsscale{1.15}
+\plotone{class_fractions_alpha_ce_5pt.pdf}
+\caption{Five-point common-envelope sequence $\alpha_{\rm CE} \in \{0.1, 0.5,
+1.0, 2.0, 10\}$. \textit{Left:} stacked BNS class fractions.
+\textit{Right:} BNS and BHNS local rate versus $\alpha_{\rm CE}$; the
+rate points share the MSSFR-resolution systematic of Figure~\ref{fig:frac20}
+($\sim \pm 30$ percent, common to all points and smaller than the trends shown,
+so no whisker is drawn).
+\label{fig:alphace5}}
+\end{figure*}
+
+\begin{figure}[tbp]
+\epsscale{1.15}
+\plotone{class_fractions_beta_sweep.pdf}
+\caption{Stacked BNS class fractions for the fiducial adaptive mass-transfer
+efficiency (Model A) and fixed $\beta \in \{0.25, 0.5, 0.75\}$ (Models B, C, D).
+The lbGRB-plus-red-kilonova (disk) class grows to roughly a quarter of the
+population at $\beta = 0.5$. \label{fig:betasweep}}
+\end{figure}
+
+\subsection{The dense-matter equation of state} \label{sec:grideos}
+
+Figure~\ref{fig:eosmatrix} crosses every model with the four EOS, reporting the
+weighted lbGRB plus red kilonova (HMNS) fraction. Each EOS sets $\Mtov$ and the
+linked $\Mthresh = k\,\Mtov$, while the population synthesis sets the BNS mass
+distribution. The HMNS class is present for every (model, EOS) pair, confirming
+that the engine ordering survives the joint variation of binary-evolution and
+dense-matter assumptions.
+
+\begin{figure}[tbp]
+\epsscale{1.15}
+\plotone{eos_x_model_matrix_20models.pdf}
+\caption{Weighted lbGRB plus red kilonova (HMNS) class fraction on the
+$20 \times 4$ grid of \citet{broekgaarden2021} models (rows: the 20 variations,
+ordered family-major) and EOS (columns APR4, SFHo, LS220, DD2; constants from
+\citealt{bauswein2013, bauswein2020} and \citealt{read2009}). Each EOS fixes
+$\Mtov$ and the linked $\Mthresh = k\,\Mtov$. Color follows the perceptually
+uniform cividis map; colormap choice follows \citet{crameri2020}.
+\label{fig:eosmatrix}}
+\end{figure}
+
+The grid splits the fiducial predictions of Sections~\ref{sec:results} to
+\ref{sec:obs} into two cleanly separated behaviors. The local rate spans two
+orders of magnitude across the 20 variations (Figure~\ref{fig:frac20}), driven
+by the natal-kick, common-envelope, and case-BB assumptions
+(Figures~\ref{fig:alphace5} and \ref{fig:betasweep}), so the absolute rate is
+a binary-physics measurement, not a robust prediction. The class ordering, by
+contrast, holds in every variation: the lbGRB-producing classes keep at least 72
+percent of the BNS population. The one fraction that does move under the binary
+physics, the disk class, tracks the mass-ratio distribution that the $\beta$ and
+$\alpha_{\rm CE}$ sweeps reshape. The dense-matter equation of state
+(Figure~\ref{fig:eosmatrix}) is the larger lever on the fractions and is the only
+input that can reverse the sbGRB-minority ordering. The takeaway across
+all four sections is therefore a single statement: the engine-class ordering is
+the robust prediction, the absolute rate is set by binary physics, and the
+detailed fractions are set by the equation of state.
+
+\FloatBarrier
 %% ======================================================================
 \FloatBarrier
 \section{Discussion} \label{sec:discussion}
@@ -1045,9 +1323,9 @@ mass transfer only), never reaches half a percent of the merging BNS
 population across the grid, and the BNS
 local rate responds directly to the efficiency, moving from $29.3$ (Model F,
 $\alpha_{\rm CE} = 0.5$) to $106.0\,\Gpcyr$ (Model G, $\alpha_{\rm CE} = 2.0$)
-while the class fractions barely move (Appendix~\ref{app:grid}). In this
-framework the absolute BNS rate is a common-envelope anchor, and the class
-demographics are the robust observable layered on top of it.
+while the long-duration-majority ordering is preserved (Section~\ref{sec:grid}).
+In this framework the absolute BNS rate is a common-envelope anchor, and the
+class ordering is the robust observable layered on top of it.
 
 The same reading sharpens what is at stake in the evolving GW constraint.
 \citet{broekgaarden2026} note that recent population analyses suggest an
@@ -1063,7 +1341,7 @@ of the CE and stable mass-transfer channels remains highly uncertain, so the
 BHNS overprediction of Section~\ref{sec:lvk} constrains the overall \compas\
 BHNS production rather than the envelope physics.
 
-The robustness study (Appendix~\ref{app:grid}) shows the qualitative class
+The robustness study (Section~\ref{sec:grid}) shows the qualitative class
 ordering is stable against the common-envelope efficiency and the maximum NS mass,
 while the detailed fractions shift at the tens-of-percent level. The BH-spin
 sweep (Figure~\ref{fig:spinsweep}) is the largest single source of BHNS rate
@@ -1082,6 +1360,22 @@ rate, $55\,\Gpcyr$, is consistent both with the GWTC-5.0 BNS region and with the
 COMPAS local-rate anchor to which the per-population $\langle M_{\rm evolved}\rangle$
 is calibrated (Section~\ref{sec:cosmicrate}).
 
+Because $\langle M_{\rm evolved}\rangle$ is fixed so that $\mathcal{R}(z=0)$
+reproduces the \citet{broekgaarden2021} anchor by construction, the local rate
+cannot itself test the absolute normalization. An independent check is the
+predicted LVK detection count, which integrates the detectable subset of
+$\mathcal{R}(z)$ over $z \in [0, 1]$ rather than at $z = 0$. Folding the \fci\
+O3 sensitivity into the same cosmic integration (`detected_rate`), the model
+predicts $0.6$ BNS and $5.1$ NSBH detections per detector-frame year, i.e. about
+$0.9$ BNS and $7.6$ NSBH over the $\sim 1.5$ yr O3 coincident livetime. The BNS
+prediction matches the single confident O3 BNS (GW190425), corroborating the
+BNS normalization away from the calibration fixed point, whereas the NSBH
+prediction exceeds the two confident O3 NSBH detections (GW200105, GW200115) by
+a factor of a few, the same $\mathcal{O}(2$ to $4)$ BHNS overprediction seen at
+$z = 0$ (Section~\ref{sec:lvk}). The overprediction is therefore a property of
+the model rate at all redshifts probed by LVK, not an artifact of the $z = 0$
+calibration.
+
 The engine-class assignments line up with the qualitative expectations of the
 \citet{gottlieb2024} framework. That work argues that BHNS mergers should
 contribute essentially only to the lbGRB plus red-kilonova population, while
@@ -1090,7 +1384,7 @@ BHNS population reproduces the first point: the GRB-capable BHNS systems land
 exclusively in the long-burst classes (faint lbGRB or lbGRB plus red
 kilonova), never the sbGRB class. The BNS sbGRB plus blue kilonova class (24
 percent) reproduces the second. Against the \citet{rastinejad2024} uniform
-sample (Section~\ref{sec:obsclass}) the model recovers the observed
+sample (Section~\ref{sec:obs}) the model recovers the observed
 sbGRB-minority, long-duration-majority ordering.
 
 Because the disk-mass classification assumes complete jet launching above
@@ -1114,7 +1408,7 @@ percent of the \citet{wandermanpiran2015} lower bound.
 \subsection{Systematics across the population-synthesis grid} \label{sec:systematics}
 
 To bound the prescription systematics we scan the full 20-model
-\citet{broekgaarden2021} grid of Appendix~\ref{app:grid}
+\citet{broekgaarden2021} grid of Section~\ref{sec:grid}
 (Figure~\ref{fig:frac20}).
 Two facts stand out. First, the local rate spans roughly two orders of magnitude
 across the grid, from $\sim 0.6\,\Gpcyr$ for the unstable case-BB model to
@@ -1127,10 +1421,10 @@ tightened NSBH region has real discriminating power: 14 of the 20 variations
 exceed it, including the fiducial Model A, while the $\beta = 0.5$ and
 $0.75$ mass-transfer models, unstable case BB, $\alpha_{\rm CE} = 10$, and
 the enhanced Wolf-Rayet-wind model ($f_{\rm WR} = 5$) land inside and the
-extreme $\alpha_{\rm CE} = 0.1$ model falls below. Second, and in contrast, the GRB-class fractions are nearly
-invariant across the same grid: the lbGRB-producing classes carry at least 72
+extreme $\alpha_{\rm CE} = 0.1$ model falls below. Second, and in contrast, the GRB-class ordering is
+preserved across the same grid: the lbGRB-producing classes carry at least 72
 percent of the BNS population in every variation, and the sbGRB-plus-blue class
-stays a minority at the 11 to 28 percent level. The class demographics are therefore a robust
+stays a minority at the 12 to 28 percent level. The class demographics are therefore a robust
 prediction of the framework even where the absolute rate is not, because the
 classification boundaries depend on the component-mass distribution (set by the
 remnant engine and the NS-mass cap) rather than on the formation rate. The
@@ -1142,8 +1436,8 @@ efficiency ($\alpha_{\rm CE} \leq 0.5$;
 Figures~\ref{fig:alphace5} and \ref{fig:betasweep}), because both reshape the
 mass-ratio distribution to which the $q > 1.2$ prompt-collapse boundary is
 sensitive. The supernova remnant engine (delayed versus rapid) shifts the
-component masses but leaves the class ordering intact
-(Figure~\ref{fig:snengine}), and the formation-channel-to-class mapping is itself
+component masses but leaves the class ordering intact, and the
+formation-channel-to-class mapping is itself
 fragile under the case-BB stability assumption: in
 the fiducial model the classic isolated-binary channel maps cleanly onto the
 sbGRB-plus-blue class, but unstable case-BB mass transfer redistributes that
@@ -1151,12 +1445,22 @@ mapping across classes.
 
 The equation of state is the largest single systematic on the class fractions.
 The EOS$\times$model matrix (Figure~\ref{fig:eosmatrix}) shows that reading along
-a row (fixed EOS, varying binary physics) barely moves the HMNS-class fraction,
+a row (fixed EOS, varying binary physics) moves the HMNS-class fraction only
+modestly,
 whereas reading down a column (fixed binary physics, varying EOS) changes it by
 factors of several through the linked $(\Mtov, \Mthresh, M_{\rm HMNS})$ boundaries.
 Dense-matter uncertainty therefore dominates population-synthesis uncertainty for
 the class demographics, which is the opposite of the situation for the absolute
-rate.
+rate. The four-class breakdown under each EOS shows this can reach the ordering
+itself: under the fiducial and the two softer-to-intermediate tabulations (APR4,
+SFHo, LS220) the sbGRB-plus-blue class stays a minority (1 to 28 percent across
+the five core models), but under the stiff DD2 EOS the elevated split
+$M_{\rm HMNS} = 1.2\,\Mtov^{\rm DD2} = 2.90\,\Msun$ pulls the majority of BNS
+below it and the sbGRB-plus-blue class becomes the largest, 54 to 65 percent.
+The sbGRB-minority ordering is thus robust to binary physics but not to the EOS:
+a sufficiently stiff EOS reverses it. This is consistent with the overall
+picture in which the ordering is robust to the formation modeling while the
+fractions remain EOS-limited.
 
 \subsection{Sensitivity to the classification thresholds} \label{sec:thresholds}
 
@@ -1192,15 +1496,19 @@ main findings are:
 Model A, the BNS population divides into 24.0 percent sbGRB plus blue kilonova,
 26.8 percent lbGRB plus red kilonova (HMNS), 2.2 percent lbGRB plus red kilonova
 (disk), and 47.0 percent faint lbGRB; the BHNS population is 75.6 percent
-NS-swallowing with no GRB.
+NS-swallowing with no GRB. Across the 20-model grid the lbGRB-producing classes
+hold 72 to 88 percent of the BNS population and the sbGRB-plus-blue class stays
+a 12 to 28 percent minority.
 \item The intrinsic BNS local rate ($55\,\Gpcyr$) is consistent with the
 GWTC-5.0 BNS 90 percent credible region, while the BHNS rate ($84.5\,\Gpcyr$)
-exceeds the tightened NSBH 90 percent region by a factor $\sim 2.6$, as does
-every other grid variation: the \compas\ BHNS population
-generically overpredicts the GW-measured NSBH rate, most sharply at the
-highest $M_{\rm NS,max}$. Within the full grid, only fixed mass-transfer
-efficiency, unstable case-BB mass transfer, $\alpha_{\rm CE} = 10$, or
-enhanced Wolf-Rayet winds bring the BHNS rate back inside the region.
+exceeds the tightened NSBH 90 percent region by a factor $\sim 2.6$. The
+overprediction is generic rather than fiducial-specific: 14 of the 20 grid
+variations exceed the NSBH region, deepening with increasing maximum NS mass,
+while six fall within or below it (the $\beta = 0.5$ and $0.75$ mass-transfer
+models, unstable case-BB, $\alpha_{\rm CE} = 10$, enhanced Wolf-Rayet winds, and
+$\alpha_{\rm CE} = 0.1$, which falls below). The \compas\ BHNS population
+therefore generically overpredicts the GW-measured NSBH rate, most sharply at
+the highest $M_{\rm NS,max}$.
 \item Confronted with the kilonova ejecta of the \citet{rastinejad2024} uniform
 sample, the long-duration bursts with kilonovae are consistent with a
 black-hole accretion-disk engine ($+0.10$ dex from the null), while the
@@ -1208,13 +1516,18 @@ short-duration bursts lie $+3.4$ dex above it and far closer to the HMNS
 disk-wind expectation; this inverts the naive duration-to-engine mapping in
 the direction predicted by \citet{gottlieb2024}.
 \item Across the full 20-model \citet{broekgaarden2021} grid the local rate
-spans two orders of magnitude while the GRB-class fractions stay nearly
-invariant, so the class demographics are a robust prediction of the framework
-even where the absolute rate is not. The class ordering is in particular robust
-to the common-envelope efficiency and the maximum NS mass
-(Appendix~\ref{app:grid}); the equation of state, not the binary-evolution
-prescription, is the dominant systematic on the class fractions, and BH spin is
-the dominant within-model source of BHNS rate uncertainty.
+spans two orders of magnitude (BNS $0.6$ to $232$, BHNS $4.7$ to
+$442\,\Gpcyr$) while the class ordering is preserved: the lbGRB-producing
+classes hold at least 72 percent of the BNS population in every binary-physics
+variation and the sbGRB-plus-blue class stays a minority. This ordering, not
+the precise fractions, is the robust prediction. The detailed fractions depend
+on the dense-matter equation of state, which moves the HMNS-class fraction from
+27 to 5 percent at fixed binary physics through the linked
+$(\Mtov, \Mthresh, M_{\rm HMNS})$ boundaries (Figure~\ref{fig:eosmatrix}), and
+on the neutron-star mass remap that sets the BNS component-mass distribution
+(Section~\ref{sec:remap}). The equation of state, not the binary-evolution
+prescription, dominates the class-fraction uncertainty, and BH spin is the
+dominant within-model source of BHNS rate uncertainty.
 \end{enumerate}
 
 %% ======================================================================
@@ -1235,8 +1548,12 @@ This work uses the \compas\ rapid binary population-synthesis catalogs of
 and the IllustrisTNG-calibrated metallicity-specific star-formation history of
 \citet{levina2026}. We thank the \compas\ and IllustrisTNG collaborations for
 making their data products public. The cosmic-integration machinery builds on
-the \compas\ \fci\ module. [Funding, computing-allocation, and individual
-acknowledgments to be completed by the authors before submission.]
+the \compas\ \fci\ module.
+%% AUTHOR ACTION: replace the bracketed text below with the project's grant
+%% numbers, computing allocation, and personal acknowledgments before submission.
+This research was supported by [grant/agency numbers]. Computations were carried
+out on [computing facility / allocation]. We thank [colleagues] for helpful
+discussions.
 \end{acknowledgments}
 
 \software{\compas\ \citep{broekgaarden2021,broekgaarden2022},
@@ -1244,195 +1561,6 @@ Astropy \citep{2022ApJ...935..167A, 2018AJ....156..123A},
 NumPy, SciPy, Matplotlib, pandas, h5py.}
 
 %% ======================================================================
-\appendix
-
-\section{Formation-channel decomposition of the class rates} \label{app:channels}
-%% ======================================================================
-
-\begin{figure*}[tbp]
-\epsscale{1.0}
-\plotone{rate_bns_by_class_per_channel.pdf}
-\caption{BNS intrinsic merger rate $\Rz$ per \citet{gottlieb2024} GRB class (2x2),
-decomposed onto the \citet{broekgaarden2021} formation channels I to V; dotted
-curve is the per-class total. \compas\ Model A; cosmology Planck 2015
-\citep{planck2016}; rates intrinsic upper bounds. Per-curve weighted-Poisson
-error is sub-percent and the common MSSFR-resolution systematic cancels in the
-per-channel decomposition, so no band is drawn. \label{fig:ratechanbns}}
-\end{figure*}
-
-\begin{figure*}[tbp]
-\epsscale{1.15}
-\plotone{rate_bhns_by_class_per_channel.pdf}
-\caption{BHNS intrinsic merger rate $\Rz$ per hybrid GRB class (1x3) at
-$\aBH = 0.5$, decomposed onto the \citet{broekgaarden2021} formation channels;
-dotted curve is the misalignment-corrected per-class total. \compas\ Model A;
-rates intrinsic upper bounds. Curves are at $\aBH = 0.5$; the BH-spin systematic
-(Figure~\ref{fig:spinsweep}) is the dominant per-class uncertainty and is
-not propagated per channel. \label{fig:ratechanbhns}}
-\end{figure*}
-
-Figures~\ref{fig:ratechanbns} and \ref{fig:ratechanbhns} decompose the
-per-class rates of Section~\ref{sec:classrates} onto the
-\citet{broekgaarden2021} formation channels of Section~\ref{sec:channels}. The decomposition
-satisfies two additivity constraints to a relative tolerance of $10^{-12}$: summing
-over channels recovers the per-class rate, and summing over classes within a
-channel recovers the per-channel rate. For BNS the rate is carried by channels~I
-(stable mass transfer plus common envelope) and~IV (double-core common
-envelope) across all classes; channel~IV dominates the faint class because its
-tighter post-common-envelope separations drive the shortest delay times. For
-BHNS the rate is almost entirely channel~I, with the misalignment factor
-applied per cell.
-
-\FloatBarrier
-%% ======================================================================
-\section{The population-synthesis grid} \label{app:grid}
-%% ======================================================================
-
-To test how strongly the class predictions depend on the binary-evolution
-assumptions, we stream the complete
-\citet{broekgaarden2021,broekgaarden2022} release, 20 binary-physics
-variations collected with their assumptions in Table~\ref{tab:models}, through
-the same classification and cosmic-integration pipeline, recalibrating
-$M_{\rm evolved}$ per model and population. Each variation perturbs the
-fiducial Model~A by one assumption: common-envelope efficiency, mass-transfer
-efficiency, case~BB stability, common-envelope survival, supernova remnant
-engine, maximum neutron-star mass, pair-instability supernovae, natal kicks,
-and Wolf-Rayet winds.
-
-Figure~\ref{fig:frac20} gives the per-model class fractions and local rates
-against the GWTC-5.0 regions, showing the two-orders-of-magnitude rate spread
-against the near-invariant class composition discussed in
-Section~\ref{sec:systematics}.
-The BNS rate
-stays within the GWTC-5.0 BNS region $[5.1, 154.7]\,\Gpcyr$ for the fiducial
-and its neighbours: $55.0$ (A), $29.3$ (F, $\alpha_{\rm CE} = 0.5$), $106.0$
-(G, $\alpha_{\rm CE} = 2.0$), $53.7$ (J), and $56.9\,\Gpcyr$ (K). Every BHNS
-variation, in contrast, exceeds the tightened NSBH region
-$[6.7, 32.8]\,\Gpcyr$, deepening with increasing maximum NS mass; the
-overprediction noted in Section~\ref{sec:lvk} therefore applies across the
-whole grid. Model~J has $M_{\rm NS,max} = 2.0\,\Msun < \Mtov = 2.2\,\Msun$, so
-its $[2.0, 2.2]\,\Msun$ window is \compas-BH but EOS-NS; we retain the \compas\
-labels throughout for consistency.
-
-\begin{figure*}[tbp]
-\epsscale{0.9}
-\plotone{class_fractions_20models.pdf}
-\caption{Weighted \citet{gottlieb2024} class fractions and local rates for
-all 20 \citet{broekgaarden2021} variations, BNS four-class (left block) and
-BHNS three-class (right block), following the presentation of
-\citet{broekgaarden2026}. Within each block the stacked bars give the
-weighted class fractions, with models sorted by the first-stacked class
-fraction (sbGRB plus blue kilonova for BNS, lbGRB plus red kilonova for
-BHNS), largest on top, rather than in registry order; the narrow companion
-panel gives the same models' local intrinsic rate $\Rzero$ (diamonds, log
-axis) against the GWTC-5.0 90 percent credible region
-\citep[shaded]{abac2026}. The weighted-Poisson sampling error is sub-percent
-and the MSSFR-resolution systematic ($\sim \pm 30$ percent) is common to all
-models; the composition is far more stable across the grid than the rate. All
-GRB rates are intrinsic upper bounds; models use the \citet{broekgaarden2021}
-paper I letters and descriptive tokens of Table~\ref{tab:models}.
-\label{fig:frac20}}
-\end{figure*}
-
-Figures~\ref{fig:alphace5} to \ref{fig:snengine} isolate the individual
-assumptions that do move the fractions: the five-point common-envelope
-sequence, the mass-transfer-efficiency sweep, and the delayed-versus-rapid
-supernova engine.
-
-\begin{figure*}[tbp]
-\epsscale{1.15}
-\plotone{class_fractions_alpha_ce_5pt.pdf}
-\caption{Five-point common-envelope sequence $\alpha_{\rm CE} \in \{0.1, 0.5,
-1.0, 2.0, 10\}$. \textit{Left:} stacked BNS class fractions.
-\textit{Right:} BNS and BHNS local rate versus $\alpha_{\rm CE}$; the
-rate points share the MSSFR-resolution systematic of Figure~\ref{fig:frac20}
-($\sim \pm 30$ percent, common to all points and smaller than the trends shown,
-so no whisker is drawn).
-\label{fig:alphace5}}
-\end{figure*}
-
-\begin{figure}[tbp]
-\epsscale{1.15}
-\plotone{class_fractions_beta_sweep.pdf}
-\caption{Stacked BNS class fractions for the fiducial adaptive mass-transfer
-efficiency (Model A) and fixed $\beta \in \{0.25, 0.5, 0.75\}$ (Models B, C, D).
-The lbGRB-plus-red-kilonova (disk) class grows to roughly a quarter of the
-population at $\beta = 0.5$. \label{fig:betasweep}}
-\end{figure}
-
-\begin{figure*}[tbp]
-\epsscale{1.15}
-\plotone{class_fractions_sn_engine.pdf}
-\caption{Delayed (Model A) versus rapid (Model L, paper I Model~I) supernova
-remnant engine.
-\textit{Left:} BNS class fractions. \textit{Center:}
-weighted BNS total-mass distribution. \textit{Right:} weighted BHNS BH-mass
-distribution. The rapid engine enforces the lower mass gap but leaves the class
-ordering intact. \label{fig:snengine}}
-\end{figure*}
-
-The remaining panels carry the per-model diagnostics across the full grid.
-Figure~\ref{fig:delaycdfmodel} shows the weighted BNS delay-time CDFs, faceted
-by physics family with the fiducial Model~A overlaid in every panel. The
-common-envelope efficiency shifts the distribution, with low-efficiency
-Model~F at much longer delays \citep{vanson2022,broekgaarden2022}, whereas the
-maximum-NS-mass and remnant-engine variations leave it nearly unchanged, as
-expected for knobs that do not alter orbital separations.
-
-\begin{figure*}[tbp]
-\epsscale{1.15}
-\plotone{delay_time_cdf_by_model_20models.pdf}
-\caption{Weighted BNS delay-time CDFs ($t_{\rm delay} = t_{\rm form} + t_c$, in
-Myr) for all 20 \citet{broekgaarden2021} variations, faceted by binary-physics
-family with the fiducial Model~A (black) overlaid in every panel. The
-common-envelope-efficiency family spreads the distribution most strongly; the
-maximum-NS-mass and remnant-engine families leave the curve nearly unchanged.
-A single 20-line overlay would be unreadable, so the per-family faceting keeps
-the comparison legible. \compas, STROOPWAFEL-weighted.
-\label{fig:delaycdfmodel}}
-\end{figure*}
-
-Figure~\ref{fig:eosmatrix} crosses every model with the four EOS, reporting the
-weighted lbGRB plus red kilonova (HMNS) fraction. Each EOS sets $\Mtov$ and the
-linked $\Mthresh = k\,\Mtov$, while the population synthesis sets the BNS mass
-distribution. The HMNS class is present for every (model, EOS) pair, confirming
-that the engine ordering survives the joint variation of binary-evolution and
-dense-matter assumptions.
-
-\begin{figure}[tbp]
-\epsscale{1.15}
-\plotone{eos_x_model_matrix_20models.pdf}
-\caption{Weighted lbGRB plus red kilonova (HMNS) class fraction on the
-$20 \times 4$ grid of \citet{broekgaarden2021} models (rows: the 20 variations,
-ordered family-major) and EOS (columns APR4, SFHo, LS220, DD2; constants from
-\citealt{bauswein2013, bauswein2020} and \citealt{read2009}). Each EOS fixes
-$\Mtov$ and the linked $\Mthresh = k\,\Mtov$. Color follows the perceptually
-uniform cividis map; colormap choice follows \citet{crameri2020}.
-\label{fig:eosmatrix}}
-\end{figure}
-
-The natal-kick variations test the one main-text prediction that does not
-reduce to the component-mass distribution, the host-galaxy offsets.
-Figure~\ref{fig:offsetkicks} repeats the offset prediction of
-Section~\ref{sec:offsets} for the reduced core-collapse kick dispersions
-($\sigma_{\rm kick} = 100$ and $30\,{\rm km\,s^{-1}}$, Models M and N) and,
-for BHNS, the no-BH-natal-kick Model O. The offset CDFs are nearly insensitive
-to the prescription: changing the kick dispersion reshapes which binaries stay
-bound and merge rather than simply rescaling the survivors' systemic
-velocities, so the offsets remain a tracer of the host potential and the
-delay-time distribution rather than of the kick model.
-
-\begin{figure*}[tbp]
-\epsscale{1.15}
-\plotone{projected_offsets_kick_models.pdf}
-\caption{Weighted projected galactocentric offset CDFs (BNS left, BHNS right)
-across the natal-kick variations of Table~\ref{tab:models}: the fiducial
-\citet{hobbs2005} $\sigma_{\rm kick} = 265\,{\rm km\,s^{-1}}$ Maxwellian
-(Model A), reduced dispersions of $100$ (Model M) and $30\,{\rm km\,s^{-1}}$
-(Model N), and no BH natal kick (Model O, BHNS only). Orbit integration, host
-mix, and observed comparators as in Figure~\ref{fig:offsets}. \compas,
-STROOPWAFEL-weighted. \label{fig:offsetkicks}}
-\end{figure*}
 
 \clearpage
 

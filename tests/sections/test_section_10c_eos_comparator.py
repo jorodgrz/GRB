@@ -1,4 +1,4 @@
-"""Section 11 of grb_main.ipynb: EOS, Channels, Offset CDFs, Beaming Comparator.
+"""EOS sensitivity of the BNS classification, feeding the Section 10 jet-breakout EOS band (grb_main.ipynb).
 
 Smoke-level invariants on ``compute_eos_sensitivity``: returned class
 fractions sum to 1 per EOS row, ``M_thresh`` tracks ``M_TOV`` linearly,

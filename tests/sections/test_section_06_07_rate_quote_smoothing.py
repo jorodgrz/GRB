@@ -8,7 +8,7 @@ BHNS 84 -> 115 Gpc^-3 yr^-1).  The calibration anchor was already
 guarded (``calibrate_mean_mass_evolved`` passes ``smooth_sigma=0``);
 this module pins the same contract for every notebook cell that prints
 or tabulates an R(z=0) value, so the quoted local rates and the
-Appendix per-model bars (Section 10.3, already ``smooth_sigma=0``)
+Appendix per-model bars (Section 9, already ``smooth_sigma=0``)
 cannot drift apart again.
 
 Source-level checks on ``grb_main.ipynb``; no data files needed.

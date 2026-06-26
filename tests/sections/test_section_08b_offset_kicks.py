@@ -1,6 +1,6 @@
-"""Smoke test for Section 9b of ``grb_main.ipynb`` (offset kick variations).
+"""Smoke test for Section 8b of ``grb_main.ipynb`` (offset kick variations).
 
-Section 9b compares projected host-galaxy offset CDFs across the
+Section 8b compares projected host-galaxy offset CDFs across the
 supernova-kick variations (fiducial Hobbs+ 2005, reduced ccSN dispersions
 M / N, and the no-BH-kick run O).  The physical content is that a smaller
 systemic velocity keeps binaries closer to their birth site, so the offset
@@ -32,7 +32,7 @@ def test_lower_kick_velocity_gives_smaller_offsets():
     Two synthetic populations with identical delay times and weights but a
     factor-of-several difference in systemic-velocity scale: the low-velocity
     population must produce the smaller weighted-median offset through the
-    Hernquist orbit integration, the trend Section 9b reads off the M / N
+    Hernquist orbit integration, the trend Section 8b reads off the M / N
     kick variations.
     """
     from grb_offsets import compute_offsets_mixed_hosts
@@ -64,13 +64,13 @@ def test_lower_kick_velocity_gives_smaller_offsets():
     med_high = _weighted_median(res_high["mixed_offsets"], res_high["mixed_weights"])
     assert med_low < med_high, (
         f"low-kick median offset {med_low:.3f} kpc is not below the "
-        f"high-kick median {med_high:.3f} kpc; the Section 9b kick trend "
+        f"high-kick median {med_high:.3f} kpc; the Section 8b kick trend "
         f"is inverted."
     )
 
 
 def test_observed_offset_overlays_are_available_and_positive():
-    """Section 9b overlays the published SGRB and lGRB+KN offset samples."""
+    """Section 8b overlays the published SGRB and lGRB+KN offset samples."""
     from grb_offsets import OBSERVED_LGRB_KN_OFFSETS_KPC, OBSERVED_SGRB_OFFSETS_KPC
 
     assert OBSERVED_SGRB_OFFSETS_KPC.size > 0

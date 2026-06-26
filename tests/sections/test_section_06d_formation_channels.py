@@ -1,4 +1,4 @@
-"""Section 6 of grb_main.ipynb: Formation Channel Breakdown per GRB Class.
+"""Formation-channel classification underpinning the per-channel splits (Sections 3b, 5b, 6b, 7b) of grb_main.ipynb.
 
 NEW data path.  ``load_bns_with_channels`` plus
 ``classify_formation_channels`` plus ``channel_class_crosstab`` on real

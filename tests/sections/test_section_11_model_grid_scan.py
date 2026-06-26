@@ -1,6 +1,6 @@
-"""Smoke tests for Section 14 of ``grb_main.ipynb`` (full 20-model grid scan).
+"""Smoke tests for Section 11 of ``grb_main.ipynb`` (full 20-model grid scan).
 
-Section 14 loops the complete Broekgaarden et al. (2021) variation grid,
+Section 11 loops the complete Broekgaarden et al. (2021) variation grid,
 classifies each model under the Gottlieb (2024) hybrid, calibrates the local
 intrinsic rate, and caches per-model summaries to
 ``plots/grid_scan_results.npz``.  The heavy data-bound loop lives in the
@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-# Class / channel keys, mirrored from the Section 14 scan cell.  Kept here so
+# Class / channel keys, mirrored from the Section 11 scan cell.  Kept here so
 # a rename in the notebook that breaks the figure cells trips a test.
 BNS_CLASS_KEYS = [
     "sbGRB + blue KN",
@@ -72,7 +72,7 @@ def test_bhns_class_fractions_sum_to_one():
 def test_channel_class_crosstab_rows_are_conditional_distributions():
     """``normalise='channel'`` rows sum to 1 for every non-empty channel.
 
-    Section 14.6 plots P(class | channel); each populated row must be a
+    Section 11.5 plots P(class | channel); each populated row must be a
     proper conditional distribution.
     """
     from grb_classify import channel_class_crosstab
@@ -98,7 +98,7 @@ def test_channel_class_crosstab_rows_are_conditional_distributions():
 def test_grid_scan_npz_schema_roundtrip(tmp_path):
     """The cached results carry every array the 14.1-14.9 figure cells read.
 
-    Builds a minimal NPZ with the Section 14 schema and asserts the keys and
+    Builds a minimal NPZ with the Section 11 schema and asserts the keys and
     shapes are internally consistent (20 models, 4 BNS classes, 3 BHNS
     classes, 5 channels, 4 EOS).  This is the contract between the scan cell
     and the figure cells; a dropped or renamed array fails here rather than in

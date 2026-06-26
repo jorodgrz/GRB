@@ -300,7 +300,22 @@ def _truncated_double_gauss_cdf(x, m_min, m_max):
     return (raw - raw_lo) / (raw_hi - raw_lo)
 
 
-def remap_ns_marginal(m_ns, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None):
+def uniform_mass_cdf(x, m_min, m_max):
+    """Flat-prior CDF on [m_min, m_max], for the remap-dependence test.
+
+    A deliberately uninformative alternative to the Alsing+ 2018 target:
+    passing this to ``remap_ns_marginal(..., target_cdf=uniform_mass_cdf)``
+    spreads the NS-mass marginal uniformly over the allowed range, which
+    isolates how much of the BNS class demographics is set by the choice
+    of target mass function versus by COMPAS.
+    """
+    x = np.asarray(x, dtype=float)
+    return np.clip((x - m_min) / (m_max - m_min), 0.0, 1.0)
+
+
+def remap_ns_marginal(
+    m_ns, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None, target_cdf=None
+):
     """Weighted quantile remap of a 1D NS-mass array to the Alsing+ 2018 PDF.
 
     Operates on a single NS-mass stream (e.g. the NS component of a BHNS
@@ -312,6 +327,12 @@ def remap_ns_marginal(m_ns, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_gr
     quantile of the truncated double-Gaussian target with the same
     weighted CDF position.  Sub-microsolar deterministic jitter from
     ``rng`` breaks rank ties at the discrete COMPAS mass-bin level.
+
+    ``target_cdf`` overrides the default Alsing+ 2018 target with an
+    arbitrary ``cdf(x, m_min, m_max)`` callable (e.g. a uniform prior),
+    used by the Section 2b remap-dependence test to quantify how much of
+    the BNS demographics is set by the imposed mass function rather than
+    by COMPAS.  When ``None`` the Alsing double Gaussian is used.
     """
     if rng is None:
         rng = np.random.default_rng(0)
@@ -335,7 +356,10 @@ def remap_ns_marginal(m_ns, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_gr
     u_ranked = (cum_w - 0.5 * w[order]) / cum_w_total
 
     grid = np.linspace(m_min, m_tov, n_grid)
-    cdf_grid = _truncated_double_gauss_cdf(grid, m_min, m_tov)
+    if target_cdf is None:
+        cdf_grid = _truncated_double_gauss_cdf(grid, m_min, m_tov)
+    else:
+        cdf_grid = np.asarray(target_cdf(grid, m_min, m_tov), dtype=float)
     m_target_ranked = np.interp(u_ranked, cdf_grid, grid)
 
     m_remap = np.empty_like(m_ns)
@@ -344,7 +368,7 @@ def remap_ns_marginal(m_ns, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_gr
 
 
 def remap_ns_masses_double_gaussian(
-    m1, m2, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None
+    m1, m2, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None, target_cdf=None
 ):
     """Quantile-remap paired BNS NS gravitational masses to an empirical Galactic-NS PDF.
 
@@ -408,6 +432,11 @@ def remap_ns_masses_double_gaussian(
         Used to spawn two independent jitter streams, one per
         component, to break rank ties at the discrete COMPAS
         mass-bin level.  Default ``np.random.default_rng(0)``.
+    target_cdf : callable, optional
+        Override the Alsing+ 2018 target with an arbitrary
+        ``cdf(x, m_min, m_max)`` (e.g. ``uniform_mass_cdf``).  Passed
+        through to both per-component :func:`remap_ns_marginal` calls.
+        Used by the Section 2b remap-dependence test.
     """
     if rng is None:
         rng = np.random.default_rng(0)
@@ -433,10 +462,10 @@ def remap_ns_masses_double_gaussian(
     rng2 = np.random.default_rng(seed2)
 
     m1_remap = remap_ns_marginal(
-        m1, weights=w_sys, m_tov=m_tov, m_min=m_min, n_grid=n_grid, rng=rng1
+        m1, weights=w_sys, m_tov=m_tov, m_min=m_min, n_grid=n_grid, rng=rng1, target_cdf=target_cdf
     )
     m2_remap = remap_ns_marginal(
-        m2, weights=w_sys, m_tov=m_tov, m_min=m_min, n_grid=n_grid, rng=rng2
+        m2, weights=w_sys, m_tov=m_tov, m_min=m_min, n_grid=n_grid, rng=rng2, target_cdf=target_cdf
     )
 
     m1_new = np.maximum(m1_remap, m2_remap)
@@ -815,6 +844,18 @@ GOTTLIEB25_T_HMNS_RANGE = (0.1, 10.0)
 viscous timescales (Lippuner+17, Fujibayashi+18, Metzger 2019).  Used
 as a *guide for the eye* in Fig. 1 of ``comparison.ipynb``; Gottlieb+25
 §3.1 does not claim the HMNS engine predicts T_50 directly."""
+
+# External long-duration merger-GRB E_iso anchor [erg].  Literature isotropic
+# gamma-ray energies of long-duration GRBs with kilonova / compact-merger
+# evidence (the Gottlieb 2024 "lbGRB" engine class).  Used to de-circularize
+# the BH-engine null in comparison.ipynb: the BH track was previously anchored
+# on the in-sample Rastinejad+ 2024 lbGRBs it is then compared against, so the
+# lbGRB residual was partly internal to its own anchor.  Anchoring on this
+# external set makes the short-vs-long separation anchor-independent.  Sources
+# are tabulated in data/external_lgrb_eiso.csv (one primary analysis per event).
+LBGRB_EISO_EXTERNAL_ERG = (8.4e50, 1.14e51, 1.70e51, 1.30e52, 6.97e52)
+LBGRB_EISO_EXTERNAL_LOGMEAN = float(np.mean(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
+LBGRB_EISO_EXTERNAL_LOGSTD = float(np.std(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
 
 
 def gottlieb25_eq11(T50, E_iso, alpha=2.0, f_inv=1.0):

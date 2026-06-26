@@ -1,4 +1,4 @@
-"""Section 9 of grb_main.ipynb: Physical Host-Galaxy Offset Distributions.
+"""Section 8 of grb_main.ipynb: Physical Host-Galaxy Offset Distributions.
 
 Smoke-level invariants on the Hernquist (1990) potential helpers and
 the per-class weighted offset CDF that the figure plots.
