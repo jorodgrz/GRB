@@ -914,6 +914,75 @@ def test_weighted_frac_err_explicit_total_and_empty_population():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Bootstrap class-fraction intervals
+# ─────────────────────────────────────────────────────────────────────
+def test_bootstrap_class_fractions_shape_and_ordering():
+    from grb_rates import bootstrap_class_fractions
+
+    rng = np.random.default_rng(0)
+    n = 2000
+    masks = np.zeros((3, n), dtype=bool)
+    masks[0, :400] = True
+    masks[1, 400:1200] = True
+    masks[2, 1200:] = True
+    w = rng.uniform(0.1, 5.0, n)
+    out = bootstrap_class_fractions(masks, w, n_boot=300, rng=rng)
+    assert out.shape == (3, 3)
+    # lo <= med <= hi per class.
+    assert np.all(out[:, 0] <= out[:, 1] + 1e-12)
+    assert np.all(out[:, 1] <= out[:, 2] + 1e-12)
+    # Median is close to the point-estimate fraction.
+    f_point = (masks.astype(float) * w).sum(axis=1) / w.sum()
+    assert np.allclose(out[:, 1], f_point, atol=0.02)
+
+
+def test_bootstrap_class_fractions_reproducible_under_seed():
+    from grb_rates import bootstrap_class_fractions
+
+    n = 1000
+    masks = np.zeros((2, n), dtype=bool)
+    masks[0, :300] = True
+    masks[1, 300:] = True
+    w = np.random.default_rng(1).uniform(0.5, 2.0, n)
+    a = bootstrap_class_fractions(masks, w, n_boot=200, rng=np.random.default_rng(42))
+    b = bootstrap_class_fractions(masks, w, n_boot=200, rng=np.random.default_rng(42))
+    assert np.array_equal(a, b)
+
+
+def test_bootstrap_class_fractions_empty_population_returns_nan():
+    from grb_rates import bootstrap_class_fractions
+
+    out = bootstrap_class_fractions(np.zeros((2, 0), dtype=bool), np.zeros(0), n_boot=10)
+    assert out.shape == (2, 3)
+    assert np.all(np.isnan(out))
+
+
+def test_bootstrap_class_fractions_se_matches_weighted_poisson():
+    """Bootstrap SE agrees with the analytic ratio-estimator SE.
+
+    The closed-form weighted-Poisson sigma_f = sqrt(sum w^2)/sum w holds
+    the denominator fixed; the ratio-estimator (bootstrap) SE carries the
+    (1 - f) factor, so the two agree most tightly for small fractions and
+    the bootstrap is modestly smaller for large ones.  We check the small-
+    fraction class to a few-percent relative tolerance.
+    """
+    from grb_rates import bootstrap_class_fractions, weighted_frac_err
+
+    rng = np.random.default_rng(11)
+    n = 20000
+    masks = np.zeros((2, n), dtype=bool)
+    masks[0, :1000] = True  # f ~ 0.05
+    masks[1, 1000:] = True
+    w = rng.uniform(0.2, 3.0, n)
+    lo, med, hi = bootstrap_class_fractions(
+        masks, w, n_boot=600, rng=rng, percentiles=(16.0, 50.0, 84.0)
+    )[0]
+    boot_se = 0.5 * (hi - lo)
+    _, analytic_se = weighted_frac_err(w, masks[0])
+    assert boot_se == pytest.approx(analytic_se, rel=0.15)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # BNS jet breakout efficiency (Pais et al. 2025)
 # ─────────────────────────────────────────────────────────────────────
 def test_apply_bns_jet_breakout_multiplier():

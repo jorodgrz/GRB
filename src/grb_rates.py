@@ -1148,6 +1148,72 @@ def weighted_frac_err(w, mask, w_total=None):
     return f, sigma
 
 
+def bootstrap_class_fractions(
+    class_masks, weights, n_boot=1000, rng=None, percentiles=(16.0, 50.0, 84.0)
+):
+    """Resampling-bootstrap credible interval on weighted class fractions.
+
+    The class fraction ``f_c = sum_{i in c} w_i / sum_i w_i`` is a ratio of
+    weighted sums; its sampling uncertainty under the finite STROOPWAFEL
+    draw is obtained here by a nonparametric bootstrap rather than the
+    closed-form weighted-Poisson 1-sigma of ``weighted_frac_err``.  Each of
+    ``n_boot`` replicates resamples the ``N`` systems with replacement and
+    recomputes every class fraction on the resampled weights; the requested
+    percentiles of the replicate distribution give the interval.  To leading
+    order the bootstrap SE matches ``weighted_frac_err`` (verified in
+    ``tests/unit/test_rates.py``); the bootstrap is the version a referee
+    asks for because it does not assume the Poisson/large-N limit and
+    captures the (1 - f) ratio structure exactly.
+
+    Replicates are looped (not stacked into one ``(n_boot, N)`` array) so
+    peak memory stays at ``O(N)`` even for the BHNS sample (``N ~ 1.5e6``).
+
+    Parameters
+    ----------
+    class_masks : 2-D bool array, shape (n_class, N)
+        Row ``c`` is the membership of class ``c`` over the ``N`` systems.
+        Rows need not be mutually exclusive, but for disjoint classes the
+        per-replicate fractions sum to one.
+    weights : 1-D array, shape (N,)
+        STROOPWAFEL weights of the full population.
+    n_boot : int, optional
+        Number of bootstrap replicates (default 1000).
+    rng : numpy.random.Generator, optional
+        Defaults to ``np.random.default_rng(0)`` for reproducibility.
+    percentiles : sequence of float, optional
+        Percentiles returned per class (default the 16/50/84 central
+        68 percent interval).
+
+    Returns
+    -------
+    ndarray, shape (n_class, len(percentiles))
+        Per-class percentiles of the bootstrap fraction distribution.
+        All-NaN when the population is empty or its weight sum is
+        non-positive.
+    """
+    masks = np.atleast_2d(np.asarray(class_masks, dtype=bool))
+    w = np.asarray(weights, dtype=float)
+    n_class, n_sys = masks.shape
+    pct = np.asarray(percentiles, dtype=float)
+    if masks.shape[1] != w.shape[0]:
+        raise ValueError("class_masks and weights disagree on the system count")
+    if n_sys == 0 or not np.isfinite(w.sum()) or w.sum() <= 0.0:
+        return np.full((n_class, pct.size), np.nan)
+
+    if rng is None:
+        rng = np.random.default_rng(0)
+
+    reps = np.empty((n_boot, n_class), dtype=float)
+    masks_f = masks.astype(float)
+    for b in range(n_boot):
+        idx = rng.integers(0, n_sys, size=n_sys)
+        wb = w[idx]
+        denom = wb.sum()
+        # masks_f[:, idx] @ wb is the per-class resampled weight sum.
+        reps[b] = (masks_f[:, idx] * wb).sum(axis=1) / denom
+    return np.percentile(reps, pct, axis=0).T
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Kroupa IMF verification
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1596,6 +1662,30 @@ LVK_GWTC5_LOCAL_RATES = {
         "reference": "LVK 2026, GWTC-5.0 (arXiv:2605.27226)",
         "note": "90% CR at z=0.2; joint union of PixelPop and FullPop model "
         "CRs (Table 2); reference only, this project does not load BBH samples",
+    },
+}
+
+
+# Previous-catalog (GWTC-4.0) intrinsic local merger-rate bands, kept as a
+# conservative fallback so the LVK comparison degrades gracefully if the
+# GWTC-5.0 population analysis (a 2026 preprint) shifts.  GWTC-4.0 added the NS
+# detections that GWTC-5.0 did not extend, so its NS-side 90 percent CRs are
+# looser than GWTC-5.0's; BNS and NSBH at z = 0 in Gpc^-3 yr^-1 (Abac+ 2025,
+# GWTC-4.0 Population Properties, arXiv:2508.18083).  Compare against
+# ``compute_merger_rate(...)[iz0]`` directly, as for the GWTC-5.0 bands.
+LVK_GWTC4_LOCAL_RATES = {
+    "BNS": {
+        "R_lo": 7.6,
+        "R_hi": 250.0,
+        "reference": "LVK 2025, GWTC-4.0 (arXiv:2508.18083)",
+        "note": "90% CR at z=0; looser than GWTC-5.0 on the NS side",
+    },
+    "NSBH": {
+        "R_lo": 9.1,
+        "R_hi": 84.0,
+        "reference": "LVK 2025, GWTC-4.0 (arXiv:2508.18083)",
+        "note": "90% CR at z=0; called NSBH (= BHNS in this project); looser "
+        "than the tightened GWTC-5.0 band",
     },
 }
 

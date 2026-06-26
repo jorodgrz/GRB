@@ -1564,6 +1564,33 @@ def test_lvk_gwtc5_local_rates_match_lvk_2026():
         )
 
 
+def test_lvk_gwtc4_local_rates_match_lvk_2025():
+    """LVK_GWTC4_LOCAL_RATES pin the GWTC-4.0 90 percent CRs.
+
+    Abac+ 2025, "GWTC-4.0: Population properties of merging compact
+    binaries", arXiv:2508.18083.  Kept as the conservative fallback band
+    behind the tightened GWTC-5.0 numbers: BNS 7.6-250, NSBH 9.1-84
+    (Gpc^-3 yr^-1, z = 0).
+    """
+    from grb_rates import LVK_GWTC4_LOCAL_RATES
+
+    expected = {"BNS": (7.6, 250.0), "NSBH": (9.1, 84.0)}
+    for pop, (lo, hi) in expected.items():
+        assert pop in LVK_GWTC4_LOCAL_RATES, f"LVK_GWTC4_LOCAL_RATES missing {pop!r}"
+        assert LVK_GWTC4_LOCAL_RATES[pop]["R_lo"] == pytest.approx(lo, rel=1e-9), (
+            f"LVK_GWTC4_LOCAL_RATES[{pop!r}]['R_lo'] = "
+            f"{LVK_GWTC4_LOCAL_RATES[pop]['R_lo']}, expected {lo} (GWTC-4.0)."
+        )
+        assert LVK_GWTC4_LOCAL_RATES[pop]["R_hi"] == pytest.approx(hi, rel=1e-9), (
+            f"LVK_GWTC4_LOCAL_RATES[{pop!r}]['R_hi'] = "
+            f"{LVK_GWTC4_LOCAL_RATES[pop]['R_hi']}, expected {hi} (GWTC-4.0)."
+        )
+        assert "arXiv:2508.18083" in LVK_GWTC4_LOCAL_RATES[pop]["reference"], (
+            f"LVK_GWTC4_LOCAL_RATES[{pop!r}] missing arXiv:2508.18083 reference; "
+            f"got {LVK_GWTC4_LOCAL_RATES[pop]['reference']!r}."
+        )
+
+
 def test_lvk_gwtc5_per_model_rates_match_lvk_2026_table2():
     """LVK_GWTC5_PER_MODEL_RATES pins Table 2 rows 1-2 (PixelPop / FullPop).
 

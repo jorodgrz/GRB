@@ -250,8 +250,9 @@ def ns_radius_from_eos(M_NS, eos_name):
 def mcrit_to_r14(mc):
     """Linear interpolation from M_crit [Msun] to R_{1.4} [km].
 
-    Anchored at APR4 (M_crit=2.46, R_{1.4}=11.1 km) and
-    DD2 (M_crit=3.35, R_{1.4}=13.2 km) from Read et al. (2008).
+    Anchored at APR4 (M_crit=2.88, R_{1.4}=11.1 km) and
+    DD2 (M_crit=3.35, R_{1.4}=13.2 km), matching ``EOS_MODELS``
+    (M_crit from Bauswein et al. 2013; R_{1.4} from Read et al. 2009).
     """
     apr4 = EOS_MODELS["APR4"]
     dd2 = EOS_MODELS["DD2"]
