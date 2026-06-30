@@ -29,6 +29,7 @@ The downloader chains `tools/embed_model_metadata.py`, which writes `model` and 
 |---|---|
 | [grb_main.ipynb](grb_main.ipynb) | Main figures, Sections 1 to 14 with sub-sections 4b TNG-resolution sweep, 7b / 8c LVK GWTC-5.0 local-rate comparison, 7c / 8d channel x class decomposition, 14 full 20-model grid scan |
 | [comparison.ipynb](comparison.ipynb) | BH-engine vs HMNS-engine prediction against the Rastinejad et al. (2024) sample, using Gottlieb et al. (2025) Eq. 11 |
+| [pipeline_walkthrough.ipynb](pipeline_walkthrough.ipynb) | Runnable COMPAS-to-classification walkthrough: load, NS-mass remap, classify, then a section-by-section figure tour |
 | [grb_physics.py](src/grb_physics.py) | Remnant mass, ejecta, EOS, Gottlieb thresholds, ISCO |
 | [grb_classify.py](src/grb_classify.py) | BNS, BHNS, unified grid, formation channels, observed-merger classifier |
 | [grb_rates.py](src/grb_rates.py) | Levina+ 2026 MSSFR, cosmic integration, BH-spin marginalization, beaming, detected rates |

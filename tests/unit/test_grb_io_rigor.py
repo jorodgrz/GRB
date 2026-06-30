@@ -68,6 +68,7 @@ def _write_dco_group(
         "tc": tc,
         "tform": tform,
         "stellarType1": st1_values,
+        "seed": np.arange(n_total, dtype=np.int64),
     }
     if extra_cols:
         cols.update(extra_cols)
@@ -86,6 +87,7 @@ def _write_formation_channels_group(f, n_total, *, fc_mt_p1=None, fc_CEE=None):
     """Add a ``formationChannels`` group sized to ``n_total``."""
     fc = f.create_group("formationChannels")
     arrays = {
+        "m_randomSeed": np.arange(n_total, dtype=np.int64),
         "mt_primary_ep1": fc_mt_p1 if fc_mt_p1 is not None else np.full(n_total, 3.0),
         "mt_primary_ep1_K1": np.zeros(n_total, dtype=int),
         "mt_secondary_ep1": np.zeros(n_total),

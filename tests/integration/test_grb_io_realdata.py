@@ -233,3 +233,66 @@ def test_mass_ordering_invariant(compas_file):
             f"stellarType1 == 14 routing is suspect on this variation."
         )
         assert out["population"] == "BHNS"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 6. formationChannels seed-join (recovers the no-PISN Model O)
+# ─────────────────────────────────────────────────────────────────────
+_CH_KEYS = [
+    "I  Stable MT + CE",
+    "II  Stable MT only",
+    "III Single-core CE",
+    "IV  Double-core CE",
+    "V   Other",
+]
+
+
+@pytest.mark.requires_data
+@pytest.mark.parametrize("compas_file", ["COMPASCompactOutput_BNS_A.h5"], indirect=True)
+def test_channel_seed_join_is_noop_on_aligned_file(compas_file):
+    """On an aligned file the seed-join reproduces the positional read.
+
+    Model A's doubleCompactObjects/formationChannels seeds are elementwise
+    equal, so joining on seed must return exactly the rows the old positional
+    ``fc[col][mask]`` returned. Guards against the seed-join silently
+    reshuffling channel columns for the bulk of the grid.
+    """
+    from grb_io import load_bns_with_channels
+
+    with h5.File(compas_file, "r") as f:
+        mh = f["doubleCompactObjects"]["mergesInHubbleTimeFlag"][...].squeeze()
+        positional = f["formationChannels"]["mt_primary_ep1"][...].squeeze()[mh == 1]
+
+    out = load_bns_with_channels(path=compas_file, expected_model="A")
+    assert np.array_equal(out["fc_mt_p1"], positional)
+
+
+@pytest.mark.requires_data
+@pytest.mark.parametrize("compas_file", ["COMPASCompactOutput_BNS_L.h5"], indirect=True)
+def test_channel_seed_join_recovers_misaligned_model(compas_file):
+    """Model O (paper-I suffix L) has extra/duplicate channel rows.
+
+    A positional join raises IndexError; the seed-join must load channel
+    columns aligned to the merging DCO subset, finite, with the five
+    Broekgaarden channels forming a weight-complete partition.
+    """
+    from grb_classify import classify_formation_channels
+    from grb_io import load_bns_with_channels
+
+    out = load_bns_with_channels(path=compas_file, expected_model="L")
+    n = out["n_merging"]
+    for key in ("fc_mt_p1", "fc_mt_s1", "fc_CEE"):
+        assert out[key].size == n, f"{key} not aligned to the {n} merging rows"
+        assert np.isfinite(out[key]).all()
+
+    chan = classify_formation_channels(
+        dblCE=out["dblCE"],
+        fc_CEE=out["fc_CEE"],
+        fc_mt_p1=out["fc_mt_p1"],
+        fc_mt_s1=out["fc_mt_s1"],
+        fc_mt_p1_K1=out["fc_mt_p1_K1"],
+        fc_mt_s1_K2=out["fc_mt_s1_K2"],
+    )
+    w = out["weights"]
+    frac = np.array([w[chan[k]].sum() / w.sum() for k in _CH_KEYS])
+    assert frac.sum() == pytest.approx(1.0, abs=1e-12)

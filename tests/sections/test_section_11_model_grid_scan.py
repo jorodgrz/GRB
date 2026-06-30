@@ -157,3 +157,43 @@ def test_scan_suffix_order_matches_registry():
     assert ALL_MODEL_SUFFIXES == list(BROEKGAARDEN21_MODELS)
     assert ALL_MODEL_SUFFIXES[0] == "A"
     assert len(ALL_MODEL_SUFFIXES) == 20
+
+
+def test_bns_channel_fractions_sum_to_one():
+    """The five Broekgaarden I-V channels partition the population.
+
+    Section 11.1b stacks the weighted channel fractions over exactly these
+    five masks; the bars only reach 1.0 if the partition stays closed.
+    """
+    from grb_classify import classify_formation_channels
+
+    rng = np.random.default_rng(11)
+    n = 5000
+    chan = classify_formation_channels(
+        dblCE=rng.integers(0, 2, size=n),
+        fc_CEE=rng.integers(0, 4, size=n).astype(float),
+        fc_mt_p1=rng.integers(0, 4, size=n).astype(float),
+        fc_mt_s1=rng.integers(0, 4, size=n).astype(float),
+        fc_mt_p1_K1=rng.integers(0, 14, size=n),
+        fc_mt_s1_K2=rng.integers(0, 14, size=n),
+    )
+    w = rng.uniform(0.1, 5.0, size=n)
+    masks = np.stack([chan[k] for k in CH_KEYS])
+    frac = (masks * w).sum(-1) / w.sum()
+    assert frac.sum() == pytest.approx(1.0, abs=1e-12)
+    assert np.all(frac >= 0.0)
+
+
+def test_drop_nan_channel_rows_filters_and_stays_aligned():
+    """Models with an unaligned channel group (NaN fractions) drop out.
+
+    Section 11.1b omits those rows so no empty bar is drawn; the kept rows,
+    rates, and suffix labels must stay row-aligned after the filter.
+    """
+    frac = np.array([[0.2, 0.8], [np.nan, np.nan], [0.5, 0.5]])
+    R = np.array([10.0, 20.0, 30.0])
+    suf = np.array(["A", "L", "K"])
+    good = ~np.isnan(frac).any(axis=1)
+    assert list(suf[good]) == ["A", "K"]
+    assert R[good].tolist() == [10.0, 30.0]
+    assert frac[good].shape == (2, 2)

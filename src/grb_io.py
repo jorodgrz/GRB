@@ -292,13 +292,24 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
         dblCE = dco["doubleCommonEnvelopeFlag"][...].squeeze()
         sep_pre = dco["SemiMajorAxisPreCEE"][...].squeeze()
         sep_post = dco["SemiMajorAxisPostCEE"][...].squeeze()
+        dco_seed = dco["seed"][...].squeeze()
 
         fc = f["formationChannels"]
+        fc_seed = fc["m_randomSeed"][...].squeeze()
         fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
         fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
         fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
         fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
         fc_CEE = fc["CEE"][...].squeeze()
+
+    # Align channel columns to DCO rows by seed (positional join fails when the
+    # channel group carries extra/duplicate rows, e.g. the no-PISN Model O).
+    _fc_row = _fc_to_dco_index(fc_seed, dco_seed, path)
+    fc_mt_p1 = fc_mt_p1[_fc_row]
+    fc_mt_p1_K1 = fc_mt_p1_K1[_fc_row]
+    fc_mt_s1 = fc_mt_s1[_fc_row]
+    fc_mt_s1_K2 = fc_mt_s1_K2[_fc_row]
+    fc_CEE = fc_CEE[_fc_row]
 
     mask = mh == 1
     delay = (tform + tc)[mask]
@@ -447,13 +458,25 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
         st1 = dco["stellarType1"][...].squeeze()
         dblCE = dco["doubleCommonEnvelopeFlag"][...].squeeze()
         sep_pre = dco["SemiMajorAxisPreCEE"][...].squeeze()
+        _seed_key = "seed" if "seed" in dco else "m_randomSeed"
+        dco_seed = dco[_seed_key][...].squeeze()
 
         fc = f["formationChannels"]
+        fc_seed = fc["m_randomSeed"][...].squeeze()
         fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
         fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
         fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
         fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
         fc_CEE = fc["CEE"][...].squeeze()
+
+    # Align channel columns to DCO rows by seed (positional join fails when the
+    # channel group carries extra/duplicate rows, e.g. the no-PISN Model O).
+    _fc_row = _fc_to_dco_index(fc_seed, dco_seed, path)
+    fc_mt_p1 = fc_mt_p1[_fc_row]
+    fc_mt_p1_K1 = fc_mt_p1_K1[_fc_row]
+    fc_mt_s1 = fc_mt_s1[_fc_row]
+    fc_mt_s1_K2 = fc_mt_s1_K2[_fc_row]
+    fc_CEE = fc_CEE[_fc_row]
 
     is_BH1 = st1 == 14
     M_BH = np.where(is_BH1, m1, m2)
@@ -876,6 +899,24 @@ def log_jitter(Z, scale=0.04, rng=None):
     if rng is None:
         rng = np.random.default_rng(42)
     return Z * 10 ** rng.uniform(-scale, scale, size=len(Z))
+
+
+def _fc_to_dco_index(fc_seed, dco_seed, path):
+    """Row index into formationChannels for each doubleCompactObjects row,
+    matched by random seed.  The groups are positionally aligned in most
+    files, but some variations (e.g. the no-PISN Model O) write extra or
+    duplicate channel rows, so a positional join misaligns or raises.  Join on
+    seed, first occurrence per seed (duplicate channel rows in those files are
+    identical in the classification columns)."""
+    u_seed, first = np.unique(fc_seed, return_index=True)
+    pos = np.clip(np.searchsorted(u_seed, dco_seed), 0, u_seed.size - 1)
+    missing = u_seed[pos] != dco_seed
+    if np.any(missing):
+        raise KeyError(
+            f"{os.path.basename(path)}: {int(missing.sum())} DCO seeds absent "
+            f"from formationChannels; cannot seed-join."
+        )
+    return first[pos]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
