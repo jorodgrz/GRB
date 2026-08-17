@@ -54,6 +54,16 @@ C_MODEL_K: str = "#DC2626"
 C_WP15: str = "#6366F1"
 """Wanderman and Piran 2015 R(z) overlay (indigo, dashed)."""
 
+C_PS26: str = "#6366F1"
+"""Pracchia and Salafia 2026 R(z) overlay (indigo, dashed).  Reuses the
+former WP15 hex slot because the two are the same dashed-empirical role
+on the plot; both are never rendered simultaneously."""
+
+C_DU25: str = "#14B8A6"
+"""Du et al. 2025 Swift/BAT local-rate marker (teal square).  Chosen to
+be perceptually orthogonal to C_SB_BLUE (Model A cyan), C_PS26 (indigo),
+and C_OBSERVED (purple)."""
+
 C_OBSERVED: str = "#6B21A8"
 """Observed sample overlay (purple)."""
 
@@ -64,6 +74,37 @@ CLASS_PALETTE: dict[str, str] = {
     "lbGRB + red KN (disk)": C_LB_DISK,
     "Faint lbGRB": C_FAINT,
     "No GRB": C_NO_GRB,
+}
+
+
+# Canonical display labels, keyed by the classify_bns_2024 / classify_bhns
+# output strings so a figure looks up its legend text by the same key it uses
+# to index the mask dict.  Values match grb_classify.GRID_CLASS_LABELS so every
+# panel names the seven classes identically; kept as literals here (not imported
+# from grb_classify) so the plotting layer stays free of the classifier module,
+# following MODEL_GRID_FAMILY_ORDER.  Drift is caught by
+# tests/unit/test_palette_and_rcparams.py.
+CLASS_LABELS: dict[str, str] = {
+    "sbGRB + blue KN": "sbGRB + blue KN",
+    "lbGRB + red KN (HMNS)": "lbGRB + red KN (HMNS)",
+    "lbGRB + red KN (disk)": "lbGRB + red KN (BNS disk)",
+    "Faint lbGRB": "Faint lbGRB (BNS)",
+    "lbGRB + red KN (BHNS disk)": "lbGRB + red KN (BHNS disk)",
+    "Faint lbGRB (BHNS)": "Faint lbGRB (BHNS)",
+    "No GRB": "No GRB",
+}
+
+# Two-line forms for the crowded axes (Section 10 tick labels, Section 11.4
+# tick labels, Section 12 decision-tree boxes) where the full label overruns
+# the width budget.
+CLASS_LABELS_SHORT: dict[str, str] = {
+    "sbGRB + blue KN": "sbGRB\n+ blue KN",
+    "lbGRB + red KN (HMNS)": "lbGRB\n(HMNS)",
+    "lbGRB + red KN (disk)": "lbGRB\n(BNS disk)",
+    "Faint lbGRB": "Faint lbGRB\n(BNS)",
+    "lbGRB + red KN (BHNS disk)": "lbGRB\n(BHNS disk)",
+    "Faint lbGRB (BHNS)": "Faint lbGRB\n(BHNS)",
+    "No GRB": "No GRB",
 }
 
 MODEL_PALETTE: dict[str, str] = {
@@ -254,3 +295,81 @@ def weighted_hist_pdf(
     binw = np.diff(bins_arr)
     centers = 0.5 * (bins_arr[:-1] + bins_arr[1:])
     return centers, mu / (w_total * binw)
+
+
+def weighted_hist_pdf_per_dex(
+    data: ArrayLike,
+    mask: ArrayLike,
+    w: ArrayLike,
+    bins: ArrayLike,
+    w_total: float,
+    zero_fill: float | None = None,
+) -> NDArray[np.float64] | None:
+    """``weighted_hist_pdf`` converted to a density per decade of ``data``.
+
+    Returns ``dp/dlog10(x)`` on ``bins``, so that visual area under a curve
+    drawn on a log-x axis reads as probability. This follows the t_inspiral
+    panel of Broekgaarden+ 2021 Fig. 7, which plots R_form(log10 t_inspiral)
+    for R_form(x) = dN/(dM_SFR dx), a density per dex of log10 t. Their Fig. 8
+    is a different object and not the reference: a detection-weighted
+    R_det(t_inspiral) in yr^-1 Gyr^-1 against linear t.
+
+    The conversion evaluates the Jacobian at the geometric bin centre, the bin
+    midpoint in the log coordinate being plotted:
+
+        dp/dlog10(x) = x * ln(10) * dp/dx.
+
+    Requires log-spaced ``bins``; on a linear grid the geometric centre is not
+    the midpoint of the bin in log space and the conversion is biased.
+
+    Area is conserved only to second order in the bin width: on a grid of ratio
+    r the recovered probability is short by a factor sqrt(r) ln(r) / (r - 1),
+    which is 0.35 percent on the 30-bin Section 3 grid. The factor depends on r
+    alone, so it is a uniform rescaling of every bin and leaves the shape and
+    the relative height of any two curves untouched. Use the logarithmic mean
+    (x_hi - x_lo) / ln(x_hi / x_lo) in place of the geometric centre if an
+    exactly normalised curve is ever needed.
+
+    A power law dp/dx ~ x^alpha is drawn on this ordinate with slope alpha + 1,
+    so the canonical delay-time index (alpha = -1 for gravitational-wave
+    inspiral of a log-uniform separation distribution) appears flat rather than
+    sloping at -1. Quote alpha from the underlying dp/dx if a caption states it.
+
+    Zero-weight bins come back as ``nan`` by default, so a caller drawing on a
+    log-y axis gets a gap. Pass ``zero_fill`` (typically an order of magnitude
+    below the axis floor) to send an empty bin down instead: the curve drops
+    off the bottom of the panel and returns, which reads as "no systems here"
+    rather than leaving a disconnected segment floating in mid-panel.
+
+    Filled are the bins interior to the support and the single empty bin
+    flanking each end of it, so the curve closes downward where the
+    distribution stops, the way a stepped histogram closes to its baseline.
+    Bins further out stay ``nan``: the curve is never laid flat along the axis
+    floor across a range it does not reach. A log axis cannot render zero,
+    which is why the caller supplies a finite sentinel and lets the axis clip
+    it, leaving a bare vertical drop.
+
+    Closing an end asserts that the density really is zero just past the last
+    populated bin. That is only true when ``bins`` spans the full support of
+    ``data[mask]``; if the range clips the distribution the drop is an artifact
+    of the binning, so verify coverage before reading an edge as an endpoint.
+
+    Returns ``None`` for an empty mask, matching ``weighted_hist_pdf``.
+    """
+    h = weighted_hist_pdf(data, mask, w, bins, w_total)
+    if h is None:
+        return None
+    _, mu = h
+    bins_arr = np.asarray(bins)
+    t_geom = np.sqrt(bins_arr[:-1] * bins_arr[1:])
+    out = np.where(mu > 0, mu * t_geom * np.log(10.0), np.nan)
+
+    populated = mu > 0
+    if zero_fill is not None and populated.any():
+        first = int(np.argmax(populated))
+        last = populated.size - 1 - int(np.argmax(populated[::-1]))
+        fill = ~populated
+        fill[: max(first - 1, 0)] = False
+        fill[last + 2 :] = False
+        out[fill] = zero_fill
+    return out

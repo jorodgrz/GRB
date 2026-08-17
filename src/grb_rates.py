@@ -21,7 +21,10 @@ from grb_physics import (
     EPS_JET,
     GOTTLIEB25_T_HMNS_RANGE,
     GOTTLIEB25_WIND_FRAC,
+    H0_PLANCK15,
     MISALIGNMENT_SYSTEMATIC_FACTOR,
+    OMEGA_L_PLANCK15,
+    OMEGA_M_PLANCK15,
     T_D_PROMPT_RANGE,
     T_E_RANGE,
     V_EJ_BNS,
@@ -1277,7 +1280,14 @@ def verify_mean_mass_evolved(
 # EOS sensitivity sweep
 # ═══════════════════════════════════════════════════════════════════════════
 def compute_eos_sensitivity(
-    m1, m2, weights, eos_models=None, k_thresh=None, q_thresh=None, hmns_factor=None
+    m1,
+    m2,
+    weights,
+    eos_models=None,
+    k_thresh=None,
+    q_thresh=None,
+    hmns_factor=None,
+    require_cold_stable=True,
 ):
     """Per-EOS Gottlieb (2024) class fractions for a single BNS sample.
 
@@ -1305,14 +1315,25 @@ def compute_eos_sensitivity(
     hmns_factor : float, optional
         Long-/short-lived HMNS split multiplier; defaults to
         ``grb_physics.HMNS_FACTOR_DEFAULT``.
+    require_cold_stable : bool, optional
+        When True (default), each EOS row first drops systems with a
+        component above that EOS's ``M_TOV`` via
+        ``grb_physics.cold_stable_ns_mask`` (COMPAS types NSs up to its
+        own ``M_NS_max``, which exceeds ``M_TOV``), then normalises the
+        class fractions over the retained weight.  The cut is
+        EOS-specific, so it lives inside the sweep rather than before the
+        call.  Set False to classify every system regardless of
+        cold-stability (the legacy behaviour).
 
     Returns
     -------
     pandas.DataFrame
         Indexed by EOS name with columns
-        ``[M_TOV, R_1p4, M_thresh, hmns_split, total_weight]`` plus
-        one column per Gottlieb class carrying the weighted fraction
-        (in [0, 1]).  The class fractions in each row sum to 1.
+        ``[M_TOV, R_1p4, M_thresh, hmns_split, total_weight,
+        dropped_weight_frac]`` plus one column per Gottlieb class
+        carrying the weighted fraction (in [0, 1]).  The class fractions
+        in each row sum to 1 (normalised over the cold-stable systems
+        when ``require_cold_stable``).
     """
     import pandas as pd
 
@@ -1324,6 +1345,7 @@ def compute_eos_sensitivity(
         HMNS_FACTOR_DEFAULT,
         K_THRESH_DEFAULT,
         Q_THRESH_BNS,
+        cold_stable_ns_mask,
     )
 
     if eos_models is None:
@@ -1345,6 +1367,16 @@ def compute_eos_sensitivity(
     rows = []
     for name, eos in eos_models.items():
         m_tov = float(eos["M_TOV"])
+        if require_cold_stable:
+            keep = cold_stable_ns_mask(m1, m2, m_tov=m_tov)
+        else:
+            keep = np.ones(m1.shape, dtype=bool)
+        w_keep = float(w[keep].sum())
+        if w_keep <= 0:
+            raise ValueError(
+                f"EOS {name}: no cold-stable weight retained at M_TOV={m_tov}; "
+                f"cannot normalise class fractions."
+            )
         cls = classify_bns_2024(
             m1,
             m2,
@@ -1361,9 +1393,10 @@ def compute_eos_sensitivity(
             "M_thresh": k_thresh * m_tov,
             "hmns_split": hmns_factor * m_tov,
             "total_weight": w_total,
+            "dropped_weight_frac": 1.0 - w_keep / w_total,
         }
         for label, mask in cls.items():
-            row[label] = float(w[mask].sum() / w_total)
+            row[label] = float(w[mask & keep].sum() / w_keep)
         rows.append(row)
     return pd.DataFrame(rows).set_index("EOS")
 
@@ -1418,6 +1451,25 @@ analysis of GW170817 and the population reanalysis they recommend
 (typical core opening angles closer to 10 deg with structured wings).
 lbGRB: Gottlieb (2023) argues MAD-powered BH jets from lbGRB sources
 have narrower collimation than HMNS-powered sbGRB jets.
+"""
+
+
+T_SWIFT_BRIGHT_YR = 17.1
+"""Swift-BAT observing envelope for the Fong et al. (2022) BRIGHT short-GRB
+sample, ApJ 940, 56 (arXiv:2206.01763) Sec. 3: BAT operated from Swift's
+launch in 2004-11 through the BRIGHT cutoff at 2021-12 ("107 events
+discovered over 2004-2021", p. 4 of the paper), roughly 17.1 detector-frame
+years.  Used to convert observed BRIGHT burst counts to an all-sky rate
+density (see the Section 6c comparison in ``grb_main.ipynb``).
+"""
+
+
+F_SKY_BAT = 1.0 / 6.0
+"""Effective Swift-BAT sky fraction Omega_BAT / 4pi.  Ghirlanda et al.
+(2016, A&A 594, A84) Sec. 3.2 adopt this value for the observed-sGRB rate
+integral; consistent with the Lien et al. (2016, ApJ 829, 7) Swift-BAT
+triggered-GRB catalog effective coverage.  Combined with T_SWIFT_BRIGHT_YR
+in the Section 6c counts-to-rate-density conversion.
 """
 
 
@@ -1735,35 +1787,416 @@ LVK_GWTC5_NSBH_MIN_BH_MASS = {
 # Observed sGRB rate vs redshift: Wanderman & Piran (2015)
 # ═══════════════════════════════════════════════════════════════════════════
 def wanderman_piran_2015_Rz(
-    z, R0=4.1, z_peak=0.9, sigma_lo=0.39, sigma_hi=0.26, R0_lo=2.2, R0_hi=6.4
+    z,
+    R0=45.0,
+    z_peak=0.9,
+    sigma_lo=0.39,
+    sigma_hi=0.26,
+    rho_0=4.1,
+    rho_0_minus=1.4,
+    rho_0_plus=1.8,
+    sfr2_sigma_broadening=1.5,
 ):
     """Observed sGRB comoving rate density vs redshift from
     Wanderman & Piran (2015), MNRAS 448, 3026.
 
-    Implements the piecewise-exponential form from WP15 Eq. (9):
+    Implements Eq. (9), the piecewise-exponential fit to the SFR1
+    log-normal-delay maximum-likelihood R(z):
 
         R(z) = R0 * exp(+(z - z_peak) / sigma_lo)   for z <= z_peak
         R(z) = R0 * exp(-(z - z_peak) / sigma_hi)   for z >  z_peak
 
-    with z_peak = 0.9, sigma_lo = 0.39 (rising), sigma_hi = 0.26
-    (falling).  R0 = 4.1 +2.3/-1.9 Gpc^-3 yr^-1 is the observed,
-    beaming-limited normalization at the peak.  This is the comoving
-    rate density of *detectable* sGRBs (luminosity-function- and
-    beaming-folded), not the intrinsic merger rate, so it is the
-    appropriate target for ``beamed_rate(...)`` model curves.
+    with the paper's coefficients R0 = 45 Gpc^-3 yr^-1, z_peak = 0.9,
+    sigma_lo = 0.39, sigma_hi = 0.26.  Evaluated at z = 0 this returns
+    R(0) = 45 * exp(-0.9/0.39) ~ 4.47 Gpc^-3 yr^-1, which sits inside
+    the paper's Eq. (10) canonical local rate
 
-    The uncertainty band ``R_lo`` / ``R_hi`` varies only the
-    normalization R0; the shape parameters' uncertainties are
-    correlated with the luminosity function in the original fit and
-    are not propagated here.
+        rho_0 = 4.1 (+1.8 / -1.4) +/- 0.5 Gpc^-3 yr^-1
 
-    Returns dict with 'R_best', 'R_lo', 'R_hi' arrays (same shape as z).
+    (internal 1sigma +/- SFR1<->SFR2 systematic; at L_min = 5e49 erg/s).
+
+    Output is the comoving rate density of *detectable* (beaming- and
+    luminosity-function-folded) sGRBs, not the intrinsic merger rate,
+    so it is the direct target for ``beamed_rate(...)`` model curves.
+
+    Returns two paper-anchored uncertainty bands separately, so a plot
+    can render them distinctly and the reader can tell rate-anchor
+    from shape systematics apart:
+
+      R_rate_lo, R_rate_hi:
+        Rate normalization 1sigma from WP15 Eq. (10) *internal* only
+        (rho_0 = 4.1 +1.8/-1.4).  Same shape as R_best, scaled by
+        (rho_0 +/- delta_rho_0) / rho_0.  Does NOT fold in SFR1<->SFR2:
+        the paper's abstract quote rho_0 = 4.1 +2.3/-1.9 adds the
+        SFR-model spread linearly, which would double-count with the
+        SFR-shape band below.  L_min is fixed at 5e49 erg/s (Eq. 10);
+        allowing L_min to vary would move the anchor by ~1 dex
+        (Table 4), which is a separate systematic no plotted band
+        should cover.
+
+      R_shape_sfr2:
+        SFR-shape systematic.  The fiducial shape (sigma_lo, sigma_hi)
+        is the SFR1 log-normal-delay peak (FWHM Delta_z ~ 0.4, WP15
+        Sec. 5).  SFR2 (Planck 2013 halo model) broadens the peak to
+        FWHM ~ 0.6; the ratio 0.6/0.4 = 1.5 sets the default
+        ``sfr2_sigma_broadening``.  Both slopes are broadened by the
+        same factor.  R0 is held at 45 so the SFR2 systematic isolates
+        the shape change, not the normalization change.  This is a
+        one-sided band: WP15 report no fit narrower than SFR1.
+
+    R_best keeps the exact WP15 Eq. (9) form (R0 = 45, fiducial shape).
+
+    Not folded into any plotted band, but relevant to citations:
+      - t_d = 2.9 +/- 0.4 Gyr (SFR1) and 3.9 +0.4/-0.5 Gyr (SFR2) from
+        WP15 Table 2 shift z_peak by ~+/-0.1 to 0.15; z_peak is left
+        fixed here because Eq. 9 does not resolve t_d separately.
+      - The z > 1.2 sample truncation (WP15 Sec. 4) can only broaden
+        the peak, not sharpen it; captured qualitatively by the
+        SFR2-broadened band.
+
+    Returns dict with 'R_best', 'R_rate_lo', 'R_rate_hi',
+    'R_shape_sfr2' arrays (same shape as z).
     """
     z = np.asarray(z, dtype=float)
     dz = z - z_peak
-    shape = np.where(dz <= 0.0, np.exp(+dz / sigma_lo), np.exp(-dz / sigma_hi))
+
+    def _shape(sl, sh):
+        return np.where(dz <= 0.0, np.exp(+dz / sl), np.exp(-dz / sh))
+
+    shape_fid = _shape(sigma_lo, sigma_hi)
+    shape_sfr2 = _shape(sigma_lo * sfr2_sigma_broadening, sigma_hi * sfr2_sigma_broadening)
+
+    R_best = R0 * shape_fid
+    R_rate_lo = R_best * (rho_0 - rho_0_minus) / rho_0
+    R_rate_hi = R_best * (rho_0 + rho_0_plus) / rho_0
+
     return {
-        "R_best": R0 * shape,
-        "R_lo": R0_lo * shape,
-        "R_hi": R0_hi * shape,
+        "R_best": R_best,
+        "R_rate_lo": R_rate_lo,
+        "R_rate_hi": R_rate_hi,
+        "R_shape_sfr2": R0 * shape_sfr2,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Modern short-GRB rate literature (replaces WP15 as the Section 6c overlay).
+#
+# Three papers, three roles:
+#   - Pracchia and Salafia (2026), A&A, arXiv:2601.03861: intrinsic rho_dot(z)
+#     as a numerical convolution of Madau and Fragos (2017) SFR with a DTD
+#     kernel; four Table 2 posteriors (ELF/QUSJ x power-law/log-normal DTD).
+#     Their preferred short delays (⟨tau_d⟩ = 77-116 Myr) invert the WP15
+#     ~Gyr scale.  Provided here as a computable curve.
+#   - Du et al. (2025), ApJL 987, L13: observer-frame Swift/BAT R_SGRB(z)
+#     fit (their Eq. 16 power-law + Gaussian in 1+z), but the numerical
+#     coefficients A1, A2, B, C, D are only rendered as curves in Figure 4
+#     and are not published in Table 5 or the article text.  Table 5 gives
+#     local rates across five SFR + DTD combinations per detector; only
+#     those tabulated values are exposed here.
+#   - Chong-Yu Gao (2025), MNRAS 542, 1841: Fermi/GBM Bayesian fit; R(z=0)
+#     with three DTD family posteriors, but no published R(z > 0).  Local
+#     rate is exposed as a Fermi/GBM anchor.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Madau and Fragos (2017), ApJ 840, 39; Pracchia & Salafia (2026) Eq. 10.
+# Cosmic star-formation-rate density
+#   psi(z) prop to (1+z)^a_psi / (1 + ((1+z)/(1+z_psi))^b_psi)
+# with (a_psi, b_psi, z_psi) = (2.6, 6.2, 2.2).
+MADAU_FRAGOS_2017_SFR = {
+    "a_psi": 2.6,
+    "b_psi": 6.2,
+    "z_psi": 2.2,
+}
+
+# Pracchia and Salafia (2026) Table 2 posteriors on log10(R_0 / Gpc^-3 yr^-1)
+# with 90 percent credible intervals.  R_0 is the SGRB local rate density
+# defined by their Eq. 4 (intrinsic source-frame; Eq. 6 is the posterior
+# PDF that infers it).  ELF = empirical luminosity function (broken
+# power-law, their Eq. 12); QUSJ = quasi-universal structured jet
+# (Salafia et al. 2023).  DTD parameters follow Eq. 7 (power-law) and
+# Eq. 8 (log-normal).  Mean delay time is Table 2 col. "⟨tau_d⟩" in Myr.
+PRACCHIA_SALAFIA_2026_ELF_POWERLAW = {
+    "log10_R0": 1.92,
+    "log10_R0_plus90": 1.50,
+    "log10_R0_minus90": 0.92,
+    "alpha_tau": 3.20,
+    "tau_min_Gyr": 0.03,
+    "mean_tau_d_Myr": 77,
+}
+PRACCHIA_SALAFIA_2026_ELF_LOGNORMAL = {
+    "log10_R0": 2.60,
+    "log10_R0_plus90": 1.23,
+    "log10_R0_minus90": 1.49,
+    "mu_tau_Gyr": 0.08,
+    "sigma_tau": 0.11,
+    "mean_tau_d_Myr": 92,
+}
+PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW = {
+    "log10_R0": 2.57,
+    "log10_R0_plus90": 0.67,
+    "log10_R0_minus90": 0.63,
+    "alpha_tau": 3.33,
+    "tau_min_Gyr": 0.04,
+    "mean_tau_d_Myr": 105,
+}
+PRACCHIA_SALAFIA_2026_QUSJ_LOGNORMAL = {
+    "log10_R0": 2.25,
+    "log10_R0_plus90": 0.53,
+    "log10_R0_minus90": 0.50,
+    "mu_tau_Gyr": 0.09,
+    "sigma_tau": 0.14,
+    "mean_tau_d_Myr": 116,
+}
+PRACCHIA_SALAFIA_2026_ROWS = {
+    "ELF_powerlaw": PRACCHIA_SALAFIA_2026_ELF_POWERLAW,
+    "ELF_lognormal": PRACCHIA_SALAFIA_2026_ELF_LOGNORMAL,
+    "QUSJ_powerlaw": PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW,
+    "QUSJ_lognormal": PRACCHIA_SALAFIA_2026_QUSJ_LOGNORMAL,
+}
+
+# Du et al. (2025), ApJL 987, L13, Table 5.  Observer-frame local rates
+# rho_0 (Gpc^-3 yr^-1) per detector across five SFR + delay-time
+# combinations (columns Yuksel+2008 / Gauss-Yuksel / Lognormal-Yuksel /
+# Power-law-Yuksel / Madau+2014).  L_min per detector is the last column.
+# Beaming: theta_j = 9.8 +/- 1.3 deg (Sec. 4.4, citing Soderberg et al.
+# 2006 and Z. B. Zhang et al. 2018, PASP 130, 054202; not the more widely
+# cited B. Zhang 2018 textbook) with f_B = 1 - cos(theta_j) applied only
+# to local rates, not to R(z).
+DU25_LOCAL_RATES_SWIFT_BAT = {
+    "Yuksel2008_undelayed": (0.60, 0.18),
+    "Gauss_Yuksel": (0.56, 0.16),
+    "Lognormal_Yuksel": (0.57, 0.15),
+    "PowerLaw_Yuksel": (0.97, 0.26),
+    "Madau2014_undelayed": (0.73, 0.18),
+}
+DU25_LOCAL_RATES_FERMI_GBM = {
+    "Yuksel2008_undelayed": (4.35e-3, 0.74e-3),
+    "Gauss_Yuksel": (7.56e-3, 0.90e-3),
+    "Lognormal_Yuksel": (1.31e-2, 0.14e-2),
+    "PowerLaw_Yuksel": (1.43e-2, 0.19e-2),
+    "Madau2014_undelayed": (6.18e-3, 0.98e-3),
+}
+DU25_LOCAL_RATES_KONUS_WIND = {
+    "Yuksel2008_undelayed": (2.41e-2, 1.04e-2),
+    "Gauss_Yuksel": (2.30e-2, 0.94e-2),
+    "Lognormal_Yuksel": (2.45e-2, 0.88e-2),
+    "PowerLaw_Yuksel": (4.02e-2, 1.51e-2),
+    "Madau2014_undelayed": (2.92e-2, 0.78e-2),
+}
+DU25_L_MIN_SWIFT_BAT_ERG_S = 2.57e48
+DU25_L_MIN_FERMI_GBM_ERG_S = 1.97e50
+DU25_L_MIN_KONUS_WIND_ERG_S = 2.91e50
+DU25_THETA_J_DEG = 9.8
+
+# Chong-Yu Gao (2025), MNRAS 542, 1841, Table 2 Gaussian-DTD row (their
+# preferred DIC-lowest model).  R(z=0) is beamed / detector-selected via
+# their fitted eta = f_b * C.  Fermi/GBM-only sample (N = 478); not
+# plotted in Section 6c because the axis there is Swift/BAT-normalised.
+GAO25_LOCAL_RATE_FERMI_GBM = {
+    "R0": 1.37,
+    "R0_plus": 0.30,
+    "R0_minus": 0.27,
+    "tau_G_Gyr": 1.14,
+    "sigma_G_Gyr": 0.26,  # upper bound (Table 2 caption)
+    "detector": "Fermi/GBM",
+    "note": "Not overlaid on the Swift/BAT-normalised axis; text-only anchor.",
+}
+
+
+def _madau_fragos_2017_sfr(z, params=MADAU_FRAGOS_2017_SFR):
+    """Madau and Fragos (2017) cosmic SFR density, arbitrary normalisation."""
+    a = params["a_psi"]
+    b = params["b_psi"]
+    zp = params["z_psi"]
+    x = 1.0 + np.asarray(z, dtype=float)
+    return x**a / (1.0 + (x / (1.0 + zp)) ** b)
+
+
+def _hubble_time_Gyr(H0):
+    """Hubble time 1/H0 in Gyr for arbitrary H0 in km/s/Mpc.
+
+    1 km/s/Mpc = 1.0227e-3 / Gyr, so tH_Gyr = 1 / (H0 * 1.0227e-3).
+    """
+    return 1.0 / (H0 * 1.0227121650e-3)
+
+
+# Cosmology presets available to callers who want to reproduce a paper's
+# convention exactly.  Planck 2015 is the project pin and the default for
+# every cosmology-integration path.
+COSMO_PLANCK15 = {"H0": H0_PLANCK15, "Omega_m": OMEGA_M_PLANCK15, "Omega_L": OMEGA_L_PLANCK15}
+COSMO_PLANCK14 = {"H0": 67.30, "Omega_m": 0.315, "Omega_L": 0.685}  # Planck 2014, A&A 571, A16
+COSMO_MADAU14 = {
+    "H0": 70.00,
+    "Omega_m": 0.3,
+    "Omega_L": 0.7,
+}  # Madau & Dickinson (2014) "cosmic concordance"
+
+
+def _lookback_time_Gyr(z, cosmology=None, n_sub=2000):
+    """Look-back time in Gyr for flat LCDM, arbitrary cosmology.
+
+    t_LB(z) = (1/H0) integral_0^z dz' / [(1+z') E(z')]
+    with E(z) = sqrt(Omega_m (1+z)^3 + Omega_L).  Default cosmology is
+    the module Planck 2015 pin (matches COMPAS FastCosmicIntegration).
+    Pass a dict with keys 'H0' (km/s/Mpc), 'Omega_m', 'Omega_L' to
+    override, or one of the COSMO_PLANCK14 / COSMO_MADAU14 presets.
+    """
+    if cosmology is None:
+        cosmology = COSMO_PLANCK15
+    H0 = cosmology["H0"]
+    Om = cosmology["Omega_m"]
+    OL = cosmology["Omega_L"]
+    z = np.atleast_1d(np.asarray(z, dtype=float))
+    zmax = float(z.max())
+    if zmax <= 0.0:
+        return np.zeros_like(z)
+    z_fine = np.linspace(0.0, zmax, n_sub)
+    E = np.sqrt(Om * (1.0 + z_fine) ** 3 + OL)
+    integrand = 1.0 / ((1.0 + z_fine) * E)
+    t_of_z_fine = _hubble_time_Gyr(H0) * np.concatenate(
+        [[0.0], np.cumsum(0.5 * (integrand[1:] + integrand[:-1]) * np.diff(z_fine))]
+    )
+    return np.interp(z, z_fine, t_of_z_fine)
+
+
+# Backwards-compatible aliases (Planck 2015 defaults).
+def _hubble_time_Gyr_planck15():
+    """Hubble time in Gyr on the module Planck 2015 pin."""
+    return _hubble_time_Gyr(H0_PLANCK15)
+
+
+_lookback_time_Gyr_planck15 = _lookback_time_Gyr
+
+
+def _dtd_pracchia_salafia_2026(tau_Gyr, row_params):
+    """Pracchia & Salafia (2026) DTD kernel P(tau) in Gyr^-1.
+
+    Eq. 7 (power-law) if row_params carries ``alpha_tau``; Eq. 8
+    (log-normal) if it carries ``mu_tau_Gyr``.  Return is unnormalised
+    (the outer convolution rescales to R_0), so the log-normal 1/sqrt(2pi)
+    factor is skipped for numerical stability at small tau.
+    """
+    tau = np.asarray(tau_Gyr, dtype=float)
+    if "alpha_tau" in row_params:
+        alpha = row_params["alpha_tau"]
+        tau_min = row_params["tau_min_Gyr"]
+        out = np.zeros_like(tau)
+        mask = tau >= tau_min
+        out[mask] = tau[mask] ** (-alpha)
+        return out
+    # log-normal DTD (Eq. 8)
+    mu = row_params["mu_tau_Gyr"]
+    sig = row_params["sigma_tau"]
+    tau_safe = np.clip(tau, 1e-6, None)
+    valid = tau > 0.0
+    out = np.zeros_like(tau)
+    out[valid] = (
+        np.exp(-0.5 * ((np.log(tau_safe[valid]) - np.log(mu)) / sig) ** 2) / tau_safe[valid]
+    )
+    return out
+
+
+def pracchia_salafia_2026_Rz(
+    z,
+    row="ELF_powerlaw",
+    cosmology=None,
+    integration_z_max=15.0,
+    n_zprime=4000,
+    n_tau=400,
+    tau_min_floor_Gyr=1e-3,
+    tau_max_Gyr=14.0,
+):
+    """Intrinsic short-GRB rate density, Pracchia & Salafia (2026) Eq. 9.
+
+    Numerical convolution of the Madau and Fragos (2017) SFR (their Eq. 10)
+    with the delay-time distribution family selected by ``row``, normalised
+    so that R(z=0) equals 10**log10_R0 from Table 2.  R(z) is intrinsic
+    (per merger, all orientations); the caller applies the beaming factor
+    ``(1 - cos theta_j)`` before comparing against a Swift-like observed
+    rate density.
+
+    Integration is done as a change of variables from z' to tau (delay
+    time), because the DTDs in Table 2 are extremely short-tailed
+    (⟨tau_d⟩ = 77 to 116 Myr) and a uniform z' grid under-resolves the
+    kernel at low z_out.  The tau grid is log-spaced from
+    ``max(tau_min_floor_Gyr, DTD tau_min)`` to ``tau_max_Gyr``; tau values
+    that map to z' > ``integration_z_max`` are dropped from the integral.
+
+    ``row`` is one of ``ELF_powerlaw``, ``ELF_lognormal``, ``QUSJ_powerlaw``,
+    ``QUSJ_lognormal`` (keys of ``PRACCHIA_SALAFIA_2026_ROWS``).  ELF uses
+    an empirical broken-power-law luminosity function (their Eq. 12); QUSJ
+    imposes a quasi-universal structured jet (Salafia et al. 2023); the
+    top-hat beaming multiplier is strictly consistent with ELF but not with
+    QUSJ (structured-jet inclination is folded into the luminosity function
+    rather than a single opening angle).
+
+    ``cosmology`` is optional; default is the module Planck 2015 pin
+    (``COSMO_PLANCK15``), matching the rest of the project.  Pracchia and
+    Salafia do not explicitly quote a cosmology and inherit it from Madau
+    and Fragos (2017), who use the Madau and Dickinson (2014) "concordance"
+    (``COSMO_MADAU14``: H0=70, Om=0.3).  The R(z=0) normalisation cancels
+    the H0 dependence, and the short DTDs (< 120 Myr mean) make the drift
+    from Planck 2015 to Madau 2014 numerically < 0.15 percent across
+    z <= 3 with the peak invariant at z = 2.007 (verified by direct
+    computation; see the anchor tests).
+
+    Returns a dict with:
+      - ``R_best``: central curve at log10_R0 (intrinsic Gpc^-3 yr^-1).
+      - ``R_rate_lo`` / ``R_rate_hi``: 90 percent CR on log10_R0, shape
+        held fixed.  Shape is much better constrained than normalisation,
+        so this is the dominant plotted band.
+    """
+    if row not in PRACCHIA_SALAFIA_2026_ROWS:
+        raise ValueError(f"unknown row {row!r}; choose from {list(PRACCHIA_SALAFIA_2026_ROWS)}")
+    params = PRACCHIA_SALAFIA_2026_ROWS[row]
+
+    # Precompute look-back time on a dense z' grid; interpolate for the
+    # tau -> z' inversion inside the convolution.
+    z_p_grid = np.linspace(0.0, integration_z_max, n_zprime)
+    t_LB_grid = _lookback_time_Gyr(z_p_grid, cosmology=cosmology)
+
+    # DTD support: log-spaced tau grid from the DTD's characteristic
+    # short-time cutoff to ~ age of universe.
+    tau_min = max(tau_min_floor_Gyr, params.get("tau_min_Gyr", 0.0))
+    tau_grid = np.logspace(np.log10(tau_min), np.log10(tau_max_Gyr), n_tau)
+    P_tau = _dtd_pracchia_salafia_2026(tau_grid, params)
+
+    def _rate_at(z_out):
+        # rho_dot(z_out) prop to int P(tau) SFR(z'(tau)) dtau, with
+        # z'(tau) the redshift whose look-back time is t_LB(z_out) + tau.
+        t_zout = float(np.interp(z_out, z_p_grid, t_LB_grid))
+        t_zprime = t_zout + tau_grid
+        # tau values that push t_zprime past the grid edge (~ age of
+        # universe) fall outside the integration range and get zero SFR.
+        valid = t_zprime <= t_LB_grid[-1]
+        if valid.sum() < 2:
+            return 0.0
+        z_prime = np.interp(t_zprime[valid], t_LB_grid, z_p_grid)
+        sfr = _madau_fragos_2017_sfr(z_prime)
+        integrand = P_tau[valid] * sfr
+        return float(np.trapezoid(integrand, tau_grid[valid]))
+
+    # Compute R at z = 0 for normalisation, then at every input z.
+    z_in = np.atleast_1d(np.asarray(z, dtype=float))
+    rate_z0 = _rate_at(0.0)
+    if rate_z0 <= 0.0:
+        raise RuntimeError(
+            f"P&S 2026 convolution at z=0 returned {rate_z0}; check DTD parameters for row {row!r}."
+        )
+    R_0 = 10.0 ** params["log10_R0"]
+
+    R_unnorm = np.array([_rate_at(zi) for zi in z_in])
+    R_best = R_unnorm * (R_0 / rate_z0)
+
+    # Scale to the 90 percent CR bounds on log10(R_0) (shape held fixed).
+    R_0_hi = 10.0 ** (params["log10_R0"] + params["log10_R0_plus90"])
+    R_0_lo = 10.0 ** (params["log10_R0"] - params["log10_R0_minus90"])
+    R_rate_hi = R_unnorm * (R_0_hi / rate_z0)
+    R_rate_lo = R_unnorm * (R_0_lo / rate_z0)
+
+    out_shape = np.asarray(z).shape
+    return {
+        "R_best": R_best.reshape(out_shape) if out_shape else R_best[0],
+        "R_rate_lo": R_rate_lo.reshape(out_shape) if out_shape else R_rate_lo[0],
+        "R_rate_hi": R_rate_hi.reshape(out_shape) if out_shape else R_rate_hi[0],
     }

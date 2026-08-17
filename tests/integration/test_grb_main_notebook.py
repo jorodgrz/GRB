@@ -224,16 +224,15 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
     """BNS Model A class fractions must lie in Gottlieb (2024) Fig. 3 bands.
 
     Gottlieb (2024) Fig. 3 (the 2024 hybrid four-class scheme) gives
-    BNS class fractions that depend strongly on the assumed Galactic
-    NS-mass distribution.  After the Alsing-Silva-Berti (2018) remap
-    pulls Model A NS masses toward [1.34, 1.80] Msun, the four
-    classes are roughly comparable in weight, with sbGRB + blue KN
-    (long-lived HMNS, M_tot < 1.2 * M_TOV) typically the smallest
-    bin (10 to 35 percent) and the lbGRB classes plus Faint lbGRB
-    splitting the rest.  The bands below are deliberately loose:
-    they catch catastrophic drift (classifier inversion, NS-mass
-    remap silently disabled, four-class partition broken) but do
-    not regression-pin specific percentages.
+    BNS class fractions that depend strongly on the assumed NS-mass
+    distribution.  On the fiducial raw COMPAS Model A masses (after the
+    cold-stability cut, m_i <= M_TOV), the total-mass distribution peaks
+    near 2.5 to 2.6 Msun, below hmns_split = 1.2 * M_TOV = 2.64 Msun, so
+    sbGRB + blue KN (long-lived HMNS) becomes a leading class rather than
+    the smallest bin it was under the Alsing remap.  The bands below are
+    deliberately loose: they catch catastrophic drift (classifier
+    inversion, cold-stability cut silently disabled, four-class partition
+    broken) but do not regression-pin specific percentages.
     """
     nb = executed_notebook
     stdout = _collect_stdout(nb)
@@ -266,15 +265,17 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
         assert 1.0 <= value <= 75.0, (
             f"BNS {label} fraction = {value:.1f}% outside non-trivial sanity band [1, 75]%."
         )
-    # sbGRB + blue KN must NOT dominate the population for Model A
-    # after the Alsing remap: hmns_split = 1.2 * 2.2 = 2.64 Msun is
-    # below the typical M_tot ~ 2.7-3.0 Msun; if it suddenly does
-    # dominate, the remap or hmns_split is broken.
-    assert sb <= 50.0, (
-        f"sbGRB + blue KN fraction = {sb:.1f}% > 50%; for Model A "
-        f"with Alsing remap, the long-lived HMNS class should be "
-        f"sub-dominant (hmns_split = 1.2 * M_TOV = 2.64 Msun is "
-        f"below typical post-remap M_tot ~ 2.7 to 3.0 Msun)."
+    # sbGRB + blue KN should now be a leading class for raw Model A:
+    # hmns_split = 1.2 * 2.2 = 2.64 Msun sits above the raw M_tot peak
+    # (~2.5 to 2.6 Msun), so the long-lived HMNS class rises well above
+    # its former ~24%.  A drop back to sub-dominance would mean the raw
+    # fiducial or the cut was silently reverted to the remap.
+    assert sb >= 30.0, (
+        f"sbGRB + blue KN fraction = {sb:.1f}% < 30%; for raw Model A "
+        f"the long-lived HMNS class should lead (hmns_split = 1.2 * "
+        f"M_TOV = 2.64 Msun is above the raw M_tot peak ~ 2.5 to 2.6 "
+        f"Msun).  A low value suggests the Alsing remap crept back onto "
+        f"the science path."
     )
 
 

@@ -37,7 +37,15 @@ def test_eos_sensitivity_class_fractions_sum_to_one(synthetic_bns_sample):
     class_cols = [
         c
         for c in df.columns
-        if c not in ("M_TOV", "R_1p4", "M_thresh", "hmns_split", "total_weight")
+        if c
+        not in (
+            "M_TOV",
+            "R_1p4",
+            "M_thresh",
+            "hmns_split",
+            "total_weight",
+            "dropped_weight_frac",
+        )
     ]
     sums = df[class_cols].sum(axis=1).values
     np.testing.assert_allclose(sums, 1.0, rtol=1e-9, atol=1e-12)

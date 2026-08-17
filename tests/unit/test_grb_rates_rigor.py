@@ -456,17 +456,74 @@ def test_compute_eos_sensitivity_single_eos_subset_returns_one_row():
     assert list(table.index) == ["APR4"]
 
 
+def test_compute_eos_sensitivity_dropped_weight_frac_matches_cold_stable_cut():
+    """``dropped_weight_frac`` equals the weight above each EOS's M_TOV."""
+    from grb_rates import compute_eos_sensitivity
+
+    # One system has a 2.3 Msun component: dropped by APR4/SFHo/LS220
+    # (M_TOV <= 2.2) but retained by DD2 (M_TOV = 2.42).
+    m1 = np.array([1.4, 2.3, 1.5])
+    m2 = np.array([1.3, 1.3, 1.4])
+    w = np.array([1.0, 3.0, 1.0])
+    table = compute_eos_sensitivity(m1, m2, w, require_cold_stable=True)
+    assert table.loc["APR4", "dropped_weight_frac"] == pytest.approx(3.0 / 5.0)
+    assert table.loc["DD2", "dropped_weight_frac"] == pytest.approx(0.0)
+    # Class fractions still normalise to 1 over the retained weight.
+    class_cols = [c for c in table.columns if "KN" in c or "GRB" in c]
+    np.testing.assert_allclose(table[class_cols].sum(axis=1), 1.0, rtol=1e-12)
+
+
+def test_compute_eos_sensitivity_require_cold_stable_false_drops_nothing():
+    """With the cut off, no weight is discarded and fractions still sum to 1."""
+    from grb_rates import compute_eos_sensitivity
+
+    m1 = np.array([1.4, 2.6, 1.5])
+    m2 = np.array([1.3, 1.3, 1.4])
+    w = np.array([1.0, 1.0, 1.0])
+    table = compute_eos_sensitivity(m1, m2, w, require_cold_stable=False)
+    np.testing.assert_allclose(table["dropped_weight_frac"], 0.0)
+    class_cols = [c for c in table.columns if "KN" in c or "GRB" in c]
+    np.testing.assert_allclose(table[class_cols].sum(axis=1), 1.0, rtol=1e-12)
+
+
+def test_compute_eos_sensitivity_all_dropped_raises():
+    """If every system exceeds M_TOV the row cannot normalise; raise."""
+    from grb_rates import compute_eos_sensitivity
+
+    m1 = np.array([3.0, 3.0])
+    m2 = np.array([3.0, 3.0])
+    w = np.array([1.0, 1.0])
+    single = {"APR4": {"M_TOV": 2.2, "M_crit": 2.8, "R_1p4": 11.3}}
+    with pytest.raises(ValueError, match="cold-stable weight"):
+        compute_eos_sensitivity(m1, m2, w, eos_models=single, require_cold_stable=True)
+
+
 # ---------------------------------------------------------------------------
 # wanderman_piran_2015_Rz and observed_frame_rate shape preservation
 # ---------------------------------------------------------------------------
 def test_wanderman_piran_2015_Rz_shape_preserved_for_array_input():
-    """A length-N array input returns length-N ``'R_best'`` / ``'R_lo'`` / ``'R_hi'``."""
+    """A length-N array input returns length-N arrays for all four bands."""
     from grb_rates import wanderman_piran_2015_Rz
 
     z = np.linspace(0.0, 3.0, 10)
     out = wanderman_piran_2015_Rz(z)
-    for key in ("R_best", "R_lo", "R_hi"):
+    for key in ("R_best", "R_rate_lo", "R_rate_hi", "R_shape_sfr2"):
         assert out[key].shape == z.shape
+
+
+def test_pracchia_salafia_2026_Rz_shape_preserved_for_array_input():
+    """Length-N array input returns length-N arrays for the three bands."""
+    from grb_rates import pracchia_salafia_2026_Rz
+
+    z = np.linspace(0.0, 3.0, 10)
+    out = pracchia_salafia_2026_Rz(z, row="ELF_powerlaw")
+    for key in ("R_best", "R_rate_lo", "R_rate_hi"):
+        assert out[key].shape == z.shape
+        assert np.all(np.isfinite(out[key]))
+        assert np.all(out[key] >= 0.0)
+    # 90 percent CR ordering: rate_lo <= R_best <= rate_hi at every z.
+    assert np.all(out["R_rate_lo"] <= out["R_best"])
+    assert np.all(out["R_best"] <= out["R_rate_hi"])
 
 
 def test_observed_frame_rate_shape_preserved_for_array_input():

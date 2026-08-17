@@ -596,7 +596,7 @@ def test_load_bns_with_kicks_v_sys_matches_match_sn_to_dco(tmp_path):
     last_vsys, n_merging = _write_kicks_file(path, kind="BNS")
     out = load_bns_with_kicks(path=str(path))
     with h5.File(path, "r") as f:
-        vsys_full = _match_sn_to_dco(f)
+        vsys_full = _match_sn_to_dco(f)["v_sys_2"]
     np.testing.assert_array_equal(out["v_sys"], vsys_full[:n_merging])
 
 
@@ -639,7 +639,7 @@ def test_load_bhns_with_kicks_v_sys_matches_match_sn_to_dco(tmp_path):
     last_vsys, n_merging = _write_kicks_file(path, kind="BHNS", st1=st1, masses=(m1, m2))
     out = load_bhns_with_kicks(path=str(path))
     with h5.File(path, "r") as f:
-        vsys_full = _match_sn_to_dco(f)
+        vsys_full = _match_sn_to_dco(f)["v_sys_2"]
     np.testing.assert_array_equal(out["v_sys"], vsys_full[:n_merging])
 
 

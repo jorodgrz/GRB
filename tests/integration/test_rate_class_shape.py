@@ -50,8 +50,9 @@ import pytest
 
 def _build_setup(bns_a_path):
     """Mirror Section 7 of grb_main.ipynb up to the ``compute_merger_rate``
-    call: load BNS A, apply the Alsing+ 2018 NS-mass remap, build the
-    sbGRB + blue KN mask, and prep the cosmic-integration plumbing
+    call: load BNS A, apply the cold-stability cut on the raw COMPAS
+    masses (the fiducial NS-mass treatment), build the sbGRB + blue KN
+    mask, and prep the cosmic-integration plumbing
     (``compas_python_utils.FastCosmicIntegration`` is required here)."""
     fci = pytest.importorskip(
         "compas_python_utils.cosmic_integration.FastCosmicIntegration",
@@ -65,17 +66,17 @@ def _build_setup(bns_a_path):
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
     from grb_classify import classify_bns_2024
-    from grb_io import load_bns, read_expected_local_rate
-    from grb_physics import remap_ns_masses_double_gaussian
+    from grb_io import filter_systems, load_bns, read_expected_local_rate
+    from grb_physics import M_TOV, cold_stable_ns_mask
     from grb_rates import calibrate_mean_mass_evolved
 
     bns = load_bns(path=bns_a_path)
-    # Alsing, Silva and Berti (2018) double-Gaussian remap; rng seed 42
-    # matches grb_main.ipynb so the sbGRB mask reproduces the cyan curve
-    # the production plot actually shows.
-    m1, m2 = remap_ns_masses_double_gaussian(
-        bns["m1"].copy(), bns["m2"].copy(), weights=bns["weights"], rng=np.random.default_rng(42)
-    )
+    # Fiducial raw COMPAS masses after the cold-stability cut (m_i <= M_TOV);
+    # matches grb_main.ipynb Section 0 so the sbGRB mask reproduces the cyan
+    # curve the production plot shows.  filter_systems keeps Z / delays /
+    # weights aligned with the masses.
+    bns = filter_systems(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
+    m1, m2 = bns["m1"], bns["m2"]
 
     Z = bns["metallicity"]
     delays = bns["delay_time"]

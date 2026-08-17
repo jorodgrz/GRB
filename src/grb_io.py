@@ -135,6 +135,38 @@ def _validate_loader_dict(out, n_merging, path):
     )
 
 
+def filter_systems(d, mask):
+    """Apply a per-system boolean ``mask`` to every column of a loader dict.
+
+    Returns a shallow copy in which each length-``n_merging`` array
+    (``m1``, ``m2``, ``weights``, ``metallicity``, ``delay_time``, and
+    every optional channel / kick column) is subset by ``mask``.  Scalar
+    and metadata fields are carried through untouched except
+    ``n_merging``, which is reset to ``int(mask.sum())``, and
+    ``mask_merging``, which spans the full pre-merger-cut catalogue and is
+    left as-is so the merger selection stays reconstructable.
+
+    This exists so a downstream cut (the cold-stability ``m_i <= M_TOV``
+    filter) is applied to the whole dict at one call site.  Masking
+    ``m1`` / ``m2`` by hand and forgetting ``fc_mt_p1``, ``v_sys``, or
+    ``metallicity`` would silently misalign the per-channel and offset
+    arrays against the masses; routing every column through here makes
+    that class of bug impossible.
+    """
+    mask = np.asarray(mask, dtype=bool)
+    n = d.get("n_merging")
+    out = {}
+    for k, v in d.items():
+        if k == "mask_merging":
+            out[k] = v
+        elif isinstance(v, np.ndarray) and n is not None and v.shape[:1] == (n,):
+            out[k] = v[mask]
+        else:
+            out[k] = v
+    out["n_merging"] = int(mask.sum())
+    return out
+
+
 def verify_shared_metallicity_prior(path_a, path_b):
     """Assert two COMPAS files use the same birth-metallicity prior.
 
@@ -583,22 +615,112 @@ METALLICITY_GRID = np.array(
 # ═══════════════════════════════════════════════════════════════════════════
 # Observed BNS gravitational-wave events
 # ═══════════════════════════════════════════════════════════════════════════
-# Component-mass medians under the *low-spin* prior from the LIGO/Virgo
-# discovery papers.  These are the published medians, intended for figure
-# annotations and quick sanity checks against classification thresholds;
-# use the full posteriors (GWOSC) for any quantitative population work.
-# Each entry pairs the mass values with a single citation so plotting
-# code never needs to inline a hard-coded mass without a source.
+# Component-mass anchors under the *low-spin* (|chi| < 0.05) prior from
+# the LIGO/Virgo discovery papers, for figure annotations and quick sanity
+# checks against classification thresholds; use the full posteriors
+# (GWOSC) for any quantitative population work.  The published tables
+# report 90% credible intervals rather than tabulated single-value
+# medians for the individual component masses (the marginal posteriors
+# are broad chirp-mass bananas, so a single "median M1" is not a well
+# defined column), so each entry carries both the 90% CR (``M[12]_lo``
+# and ``M[12]_hi``) and a representative central (M1, M2) point inside
+# the ranges; annotations that draw the point without error bars will
+# overstate how sharply the individual masses are measured.
 OBSERVED_GW_EVENTS = {
     "GW170817": {
+        # Representative central values inside the low-spin 90% CR,
+        # consistent with the GWTC-1 catalogue (Abbott et al. 2019,
+        # PRX 9, 031040); not directly tabulated in the discovery paper.
         "M1": 1.46,
         "M2": 1.27,
-        "reference": "Abbott+ 2019, PRX 9, 011001 (Table I, low-spin prior)",
+        # Low-spin (|chi| < 0.05) 90% credible ranges on the individual
+        # component masses (Abbott et al. 2019, PRX 9, 011001, Table I).
+        "M1_lo": 1.36,
+        "M1_hi": 1.60,
+        "M2_lo": 1.17,
+        "M2_hi": 1.36,
+        # Source-frame chirp mass and its 90% CR half-width, which is
+        # the actually well-measured combination that defines the shape
+        # of the joint 2D posterior (a thin banana along Mc = const in
+        # the (M2, M1) plane).
+        "Mc": 1.186,
+        "Mc_err_90": 0.001,
+        "reference": (
+            "Low-spin (|chi| < 0.05) 90% CR from the discovery paper "
+            "(Abbott et al. 2019, PRX 9, 011001, Table I); the plotted "
+            "(M1, M2) are representative central values inside those "
+            "ranges, consistent with the GWTC-1 catalogue."
+        ),
     },
     "GW190425": {
+        # Low-spin 90% CR midpoint on each component; Table 1 reports
+        # intervals rather than tabulated single-value component-mass
+        # estimates, so this is not a "median" in any strict sense.  Sits
+        # ~0.02 Msun from the GWOSC low-spin 1D posterior medians.
         "M1": 1.73,
         "M2": 1.58,
-        "reference": "Abbott+ 2020, ApJL 892, L3 (Table 1, low-spin prior)",
+        # Low-spin (|chi| < 0.05) 90% credible ranges on the individual
+        # component masses (Abbott et al. 2020, ApJL 892, L3, Table 1).
+        "M1_lo": 1.60,
+        "M1_hi": 1.87,
+        "M2_lo": 1.46,
+        "M2_hi": 1.69,
+        # Source-frame chirp mass and its 90% CR half-width; the joint
+        # 2D posterior is a thin banana along Mc = const in (M2, M1).
+        "Mc": 1.44,
+        "Mc_err_90": 0.02,
+        "reference": (
+            "Low-spin (|chi| < 0.05) 90% CR from Abbott et al. 2020, "
+            "ApJL 892, L3, Table 1; the plotted (M1, M2) is the CR "
+            "midpoint since Table 1 reports intervals rather than "
+            "tabulated component-mass medians (~0.02 Msun from the "
+            "GWOSC low-spin 1D posterior medians)."
+        ),
+    },
+}
+
+
+# Observed NSBH GW events for annotation on the Section 1 BHNS mass
+# plane.  Values are the published medians with 90% CRs on the individual
+# component masses (Abbott et al. 2021, ApJL 915, L5, arXiv:2106.15163,
+# Table I).  The paper defaults to a "high-spin" prior on the primary BH
+# (a1 up to 0.99) and a "low-spin" prior on the secondary NS (a2 < 0.05);
+# the medians pinned here are from that default column, which is what
+# tables and figures throughout the discovery paper reference.  The two
+# events are used only as figure annotations on the BHNS panel; anything
+# quantitative should use the full posteriors from GWOSC.
+OBSERVED_NSBH_EVENTS = {
+    "GW200105": {
+        # Published median from the discovery-paper Table I (high-spin
+        # primary / low-spin secondary prior).
+        "M_BH": 8.9,
+        "M_NS": 1.9,
+        # 90% credible ranges on the individual component masses
+        # (Abbott et al. 2021, ApJL 915, L5, Table I).
+        "M_BH_lo": 7.4,
+        "M_BH_hi": 10.1,
+        "M_NS_lo": 1.7,
+        "M_NS_hi": 2.2,
+        "reference": (
+            "High-spin primary / low-spin secondary prior median with "
+            "90% CR from Abbott et al. 2021, ApJL 915, L5, Table I "
+            "(GW200105_162426)."
+        ),
+    },
+    "GW200115": {
+        # Published median from the discovery-paper Table I.
+        "M_BH": 5.7,
+        "M_NS": 1.5,
+        # 90% credible ranges on the individual component masses.
+        "M_BH_lo": 3.6,
+        "M_BH_hi": 7.5,
+        "M_NS_lo": 1.2,
+        "M_NS_hi": 2.2,
+        "reference": (
+            "High-spin primary / low-spin secondary prior median with "
+            "90% CR from Abbott et al. 2021, ApJL 915, L5, Table I "
+            "(GW200115_042309)."
+        ),
     },
 }
 
@@ -923,10 +1045,24 @@ def _fc_to_dco_index(fc_seed, dco_seed, path):
 # Kick / velocity loading (for kinematic offset analysis)
 # ═══════════════════════════════════════════════════════════════════════════
 def _match_sn_to_dco(f):
-    """Extract the post-2nd-SN systemic velocity matched to DCO rows.
+    """Join the per-supernova systemic velocities and times to DCO rows.
 
-    The supernovae group has two rows per system (one per SN).
-    We take the LAST SN event per seed (the 2nd SN that forms the DCO).
+    The supernovae group holds two rows per system, one per SN.  Ordered by
+    event time within each seed, the first row is the post-SN1 state and the
+    second is the post-SN2 state that forms the DCO.  ``systemicVelocity`` is
+    the cumulative center-of-mass speed after each kick, so ``v_sys_2`` is the
+    post-second-SN value the older code returned as ``v_sys``.
+
+    Returns a dict of full-length (pre-merger-mask) arrays aligned to the DCO
+    table:
+
+        ``v_sys_1`` / ``v_sys_2`` : COM speed [km/s] after SN1 / SN2.
+        ``t_sn1`` / ``t_sn2``     : time of SN1 / SN2 [Myr].
+
+    A DCO seed with no matching SN pair gets NaN in all four (dropped
+    downstream via ``np.isfinite``).  A matched DCO seed whose SN group does
+    not hold exactly two rows raises, because the two-leg kinematic treatment
+    in ``grb_offsets`` depends on the SN1/SN2 pairing.
 
     Vectorized with numpy for performance on large populations.
     """
@@ -942,32 +1078,58 @@ def _match_sn_to_dco(f):
     order = np.lexsort((sn_time, sn_seed))
     sn_seed_s = sn_seed[order]
     sn_vsys_s = sn_vsys[order]
+    sn_time_s = sn_time[order]
 
-    u_seeds, first_rev = np.unique(sn_seed_s[::-1], return_index=True)
-    last_idx = len(sn_seed_s) - 1 - first_rev
-    last_vsys = sn_vsys_s[last_idx]
+    u_seeds, first_idx, counts = np.unique(sn_seed_s, return_index=True, return_counts=True)
+    n_seeds = len(u_seeds)
 
-    vsys_out = np.full(len(dco_seed), np.nan)
+    # Per-seed SN1/SN2 arrays.  Only seeds with exactly two SN rows are filled;
+    # a positional (idx, idx+1) read for any other count would straddle the
+    # next seed's rows, so those stay NaN and are caught at match time below.
+    v1 = np.full(n_seeds, np.nan)
+    v2 = np.full(n_seeds, np.nan)
+    t1 = np.full(n_seeds, np.nan)
+    t2 = np.full(n_seeds, np.nan)
+    two = counts == 2
+    idx2 = first_idx[two]
+    v1[two], t1[two] = sn_vsys_s[idx2], sn_time_s[idx2]
+    v2[two], t2[two] = sn_vsys_s[idx2 + 1], sn_time_s[idx2 + 1]
+
+    # A matched seed contributes SN1/SN2 states only if it carries exactly two
+    # supernova rows.  Seeds with any other count (a few per model in the full
+    # grid, from bookkeeping gaps in the supernovae group) are left NaN and
+    # dropped downstream via np.isfinite, exactly like an unmatched seed; the
+    # two-leg treatment needs a clean SN1/SN2 pair.
     match = np.searchsorted(u_seeds, dco_seed)
-    match_clipped = np.clip(match, 0, len(u_seeds) - 1)
-    found = (match < len(u_seeds)) & (u_seeds[match_clipped] == dco_seed)
-    vsys_out[found] = last_vsys[match_clipped[found]]
+    match_clipped = np.clip(match, 0, n_seeds - 1)
+    paired = (match < n_seeds) & (u_seeds[match_clipped] == dco_seed) & (counts[match_clipped] == 2)
+    src = match_clipped[paired]
 
-    n_unmatched = int((~found).sum())
-    if n_unmatched > 0:
+    def _gather(per_seed):
+        out = np.full(len(dco_seed), np.nan)
+        out[paired] = per_seed[src]
+        return out
+
+    n_missing = int((~paired).sum())
+    if n_missing > 0:
         # NaN in v_sys silently disappears via np.isfinite(v_sys_km) in
         # compute_offsets_population (grb_offsets.py); surface it at
         # load time so the count is auditable in the notebook log.
         warnings.warn(
             f"_match_sn_to_dco ({os.path.basename(f.filename)}): "
-            f"{n_unmatched} of {len(dco_seed)} DCO seeds had no matching "
-            f"SN entry; v_sys is NaN for those rows.  Downstream offset "
+            f"{n_missing} of {len(dco_seed)} DCO seeds had no matching "
+            f"supernova pair; v_sys is NaN for those rows.  Downstream offset "
             f"analysis will silently drop them via np.isfinite() in "
             f"compute_offsets_population.",
             stacklevel=2,
         )
 
-    return vsys_out
+    return {
+        "v_sys_1": _gather(v1),
+        "v_sys_2": _gather(v2),
+        "t_sn1": _gather(t1),
+        "t_sn2": _gather(t2),
+    }
 
 
 def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
@@ -975,6 +1137,15 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
 
     Returns the standard load_bns dict plus:
         'drawnKick1', 'drawnKick2', 'v_sys', 'sep_DCO', 'ecc_DCO'
+
+    For the two-leg kinematic treatment (drift at the post-SN1 velocity until
+    the second supernova, then at the post-SN2 velocity through the inspiral)
+    it also returns:
+        'v_sys_1', 'v_sys_2' : COM speed [km/s] after SN1 / SN2
+        't_sn1', 't_sn2'     : time of SN1 / SN2 [Myr]
+        't_inspiral'         : ``tc`` [Myr], the post-DCO gravitational-wave
+                               inspiral time
+    ``v_sys`` is kept as an alias of ``v_sys_2`` for backward compatibility.
 
     ``expected_model`` / ``expected_ns_max`` behave as in ``load_bns``.
     """
@@ -999,7 +1170,7 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
         sep = dco["separationDCOFormation"][...].squeeze()
         ecc = dco["eccentricityDCOFormation"][...].squeeze()
 
-        vsys_all = _match_sn_to_dco(f)
+        sn = _match_sn_to_dco(f)
 
     mask = mh == 1
     delay = (tform + tc)[mask]
@@ -1025,7 +1196,12 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
         "mask_merging": mask,
         "drawnKick1": dk1[mask],
         "drawnKick2": dk2[mask],
-        "v_sys": vsys_all[mask],
+        "v_sys": sn["v_sys_2"][mask],
+        "v_sys_1": sn["v_sys_1"][mask],
+        "v_sys_2": sn["v_sys_2"][mask],
+        "t_sn1": sn["t_sn1"][mask],
+        "t_sn2": sn["t_sn2"][mask],
+        "t_inspiral": tc[mask],
         "sep_DCO": sep[mask],
         "ecc_DCO": ecc[mask],
         "population": "BNS",
@@ -1038,6 +1214,10 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
 
 def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
     """Load merging BHNS with kick/velocity columns for offset analysis.
+
+    Returns the same two-leg kinematic columns as ``load_bns_with_kicks``
+    (``v_sys_1``, ``v_sys_2``, ``t_sn1``, ``t_sn2``, ``t_inspiral``, with
+    ``v_sys`` aliased to ``v_sys_2``).
 
     ``expected_model`` / ``expected_ns_max`` behave as in ``load_bhns``.
     """
@@ -1063,7 +1243,7 @@ def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
         sep = dco["separationDCOFormation"][...].squeeze()
         ecc = dco["eccentricityDCOFormation"][...].squeeze()
 
-        vsys_all = _match_sn_to_dco(f)
+        sn = _match_sn_to_dco(f)
 
     is_BH1 = st1 == 14
     M_BH = np.where(is_BH1, m1, m2)
@@ -1085,7 +1265,12 @@ def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
         "mask_merging": mask,
         "drawnKick1": dk1[mask],
         "drawnKick2": dk2[mask],
-        "v_sys": vsys_all[mask],
+        "v_sys": sn["v_sys_2"][mask],
+        "v_sys_1": sn["v_sys_1"][mask],
+        "v_sys_2": sn["v_sys_2"][mask],
+        "t_sn1": sn["t_sn1"][mask],
+        "t_sn2": sn["t_sn2"][mask],
+        "t_inspiral": tc[mask],
         "sep_DCO": sep[mask],
         "ecc_DCO": ecc[mask],
         "population": "BHNS",

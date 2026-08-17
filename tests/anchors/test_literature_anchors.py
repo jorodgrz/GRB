@@ -317,69 +317,6 @@ def test_alsing_2018_double_gaussian_constants_match_table3():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Mandel and Muller (2020) MNRAS 499, 3214 [papers/Mandel_Muller_2020.pdf]
-# Patton and Sukhbold (2020) MNRAS 499, 2803
-# Fryer (2012) Eq. 12-13 baryonic-to-gravitational mass conversion
-# produces a ~1.65-1.80 Msun NS mass deficit in both delayed and rapid
-# engines (Broekgaarden+ 2021 footnote 3); the Alsing remap closes it.
-# ─────────────────────────────────────────────────────────────────────
-def test_remap_closes_fryer_gap_in_1p65_to_1p80_msun():
-    """`remap_ns_masses_double_gaussian` must populate the [1.65, 1.80] Msun gap.
-
-    Mandel and Muller (2020) MNRAS 499, 3214 and Patton and Sukhbold
-    (2020) MNRAS 499, 2803 show that the Fryer et al. (2012) prescription
-    produces a near-zero NS density in the 1.65 to 1.80 Msun interval,
-    an artifact of the baryonic-to-gravitational mass conversion in
-    Fryer 2012 Eq. 12-13 (Broekgaarden+ 2021 footnote 3; present in
-    both delayed and rapid engines).  The Alsing-Silva-Berti (2018)
-    double-Gaussian fits the Galactic distribution which is non-zero in
-    that interval.
-
-    This test constructs a synthetic population that mimics the Fryer
-    gap (zero density in [1.65, 1.80]) and asserts that after
-    `remap_ns_masses_double_gaussian` the post-remap density in the
-    gap is at least 5x higher than the raw density.
-    """
-    from grb_physics import remap_ns_masses_double_gaussian
-
-    rng = np.random.default_rng(2026)
-    n_low = 5000
-    n_high = 1500
-    m_low = rng.uniform(1.10, 1.65, size=n_low)
-    m_high = rng.uniform(1.80, 2.20, size=n_high)
-    m_raw = np.concatenate([m_low, m_high])
-    m1_raw = m_raw[: len(m_raw) // 2]
-    m2_raw = m_raw[len(m_raw) // 2 :]
-
-    n_pair = min(m1_raw.size, m2_raw.size)
-    m1_raw = m1_raw[:n_pair]
-    m2_raw = m2_raw[:n_pair]
-    m1_raw, m2_raw = np.maximum(m1_raw, m2_raw), np.minimum(m1_raw, m2_raw)
-
-    m1, m2 = remap_ns_masses_double_gaussian(
-        m1_raw.copy(),
-        m2_raw.copy(),
-        weights=np.ones(n_pair),
-        rng=rng,
-    )
-
-    raw_in_gap = ((m1_raw >= 1.65) & (m1_raw <= 1.80)).sum() + (
-        (m2_raw >= 1.65) & (m2_raw <= 1.80)
-    ).sum()
-    new_in_gap = ((m1 >= 1.65) & (m1 <= 1.80)).sum() + ((m2 >= 1.65) & (m2 <= 1.80)).sum()
-
-    assert raw_in_gap == 0, (
-        f"Synthetic Fryer-gap input has {raw_in_gap} NSs in the "
-        f"[1.65, 1.80] gap; test setup is broken."
-    )
-    assert new_in_gap >= 0.05 * 2 * n_pair, (
-        f"Alsing remap left only {new_in_gap}/{2 * n_pair} NSs in the "
-        f"[1.65, 1.80] gap; expected at least 5 percent of total to "
-        f"populate the previously empty interval."
-    )
-
-
-# ─────────────────────────────────────────────────────────────────────
 # Foucart, Hinderer and Nissanke (2018) PRD 98, 081501
 # [papers/Foucart_2018.pdf]
 # Eq. (4) coefficients and validity ranges.
@@ -794,6 +731,122 @@ def test_R_CAP_FACTOR_pileup_matches_hernquist_eq38_closed_form():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Behroozi, Wechsler & Conroy (2013) ApJ 770, 57 (arXiv:1207.6105)
+# Dutton & Maccio (2014) MNRAS 441, 3359 (arXiv:1402.7073)
+# Dark-matter halo added to the Section 8 offset host potential.
+# ─────────────────────────────────────────────────────────────────────
+def test_behroozi13_intrinsic_params_match_published_values():
+    """`BEHROOZI13_PARAMS` reproduces the Behroozi+2013 Eq. 3-4 intrinsic fit."""
+    from grb_offsets import BEHROOZI13_PARAMS as p
+
+    assert p["log10_M1_0"] == pytest.approx(11.514, abs=1e-6)
+    assert p["log10_M1_a"] == pytest.approx(-1.793, abs=1e-6)
+    assert p["log10_M1_z"] == pytest.approx(-0.251, abs=1e-6)
+    assert p["log10_eps_0"] == pytest.approx(-1.777, abs=1e-6)
+    assert p["log10_eps_a2"] == pytest.approx(-0.119, abs=1e-6)
+    assert p["alpha_0"] == pytest.approx(-1.412, abs=1e-6)
+    assert p["delta_0"] == pytest.approx(3.508, abs=1e-6)
+    assert p["gamma_0"] == pytest.approx(0.316, abs=1e-6)
+
+
+def test_dutton_maccio14_c200_zeropoint_and_slope_at_z0():
+    """`DUTTON14_C200` reproduces the Planck NFW c200-M200 fit (their Eq. 8/10/11).
+
+    At z = 0 the relation is log10 c200 = 0.905 - 0.101 log10(M200/[1e12 h^-1 Msun]).
+    """
+    from grb_offsets import DUTTON14_C200 as d
+    from grb_offsets import H0_PLANCK15, MSUN_G, concentration_dutton_maccio
+
+    assert d["b_0"] == pytest.approx(-0.101, abs=1e-6)
+    assert d["b_z"] == pytest.approx(0.026, abs=1e-6)
+    assert (d["a_0"] + d["a_inf_offset"]) == pytest.approx(0.905, abs=1e-6)
+    assert d["z_scale"] == pytest.approx(0.617, abs=1e-6)
+    assert d["z_index"] == pytest.approx(1.21, abs=1e-6)
+
+    # A 1e12 h^-1 Msun halo at z = 0 has log10 c200 = 0.905 (c ~ 8.04).
+    h = H0_PLANCK15 / 100.0
+    M200_g = (1e12 / h) * MSUN_G
+    c = concentration_dutton_maccio(M200_g, 0.0)
+    assert c == pytest.approx(10.0**0.905, rel=1e-6)
+
+
+def test_behroozi_smhm_inversion_round_trips_against_forward_relation():
+    """`halo_mass_from_stellar_mass` inverts the published forward relation.
+
+    Feeding a halo mass through the Behroozi+2013 forward M_*(M_h) and then
+    back through the numerical inverse must recover the original halo mass.
+    """
+    from grb_offsets import (
+        MSUN_G,
+        _behroozi_log10_mstar,
+        halo_mass_from_stellar_mass,
+    )
+
+    z = 0.5
+    for log10_Mh in (11.0, 12.0, 13.0):
+        log10_Mstar = _behroozi_log10_mstar(log10_Mh, z)
+        M_star_g = 10.0**log10_Mstar * MSUN_G
+        recovered = halo_mass_from_stellar_mass(M_star_g, z)
+        assert np.log10(recovered / MSUN_G) == pytest.approx(log10_Mh, abs=1e-4)
+
+
+def test_halo_to_stellar_ratio_is_tens_for_sgrb_hosts():
+    """The recovered M200 / M_* lands in the tens for the sGRB host masses.
+
+    Behroozi+2013 puts peak star-formation efficiency near
+    log M_*/Msun ~ 10.5 with M_h/M_* ~ 30, rising on either side.  The
+    HOST_MODELS templates should therefore all sit in the tens, never near
+    unity (which would signal a unit slip in the inversion).
+    """
+    from grb_offsets import HALO_FIDUCIAL_Z, HOST_MODELS, halo_mass_from_stellar_mass
+
+    for name, hp in HOST_MODELS.items():
+        M200 = halo_mass_from_stellar_mass(hp["M_gal"], HALO_FIDUCIAL_Z)
+        ratio = M200 / hp["M_gal"]
+        assert 10.0 < ratio < 300.0, f"{name}: M_halo/M_* = {ratio:.1f} outside [10, 300]"
+
+
+def test_halo_fiducial_z_is_median_measured_bright_redshift():
+    """`HALO_FIDUCIAL_Z` is the median of the measured BRIGHT redshifts.
+
+    Derived from the sample rather than chosen: the bursts Fong et al. 2022
+    place at an assumed z = 1 are excluded so the fiducial reflects the
+    measured-redshift subset only.
+    """
+    from grb_offsets import (
+        FONG22_SGRB_ASSUMED_Z1,
+        FONG22_SGRB_NAMES,
+        FONG22_SGRB_REDSHIFTS,
+        HALO_FIDUCIAL_Z,
+    )
+
+    measured = ~np.isin(np.asarray(FONG22_SGRB_NAMES), np.asarray(FONG22_SGRB_ASSUMED_Z1))
+    expected = float(np.median(FONG22_SGRB_REDSHIFTS[measured]))
+    assert HALO_FIDUCIAL_Z == pytest.approx(expected, abs=1e-9)
+    assert 0.2 < HALO_FIDUCIAL_Z < 1.0
+
+
+def test_total_escape_velocity_reduces_to_hernquist_when_halo_off():
+    """With `Mc = 0` the composite escape velocity equals the Hernquist form."""
+    from grb_offsets import (
+        DEFAULT_M_GAL,
+        DEFAULT_R_E,
+        HostPotential,
+        escape_velocity,
+        hernquist_scale_radius,
+        total_escape_velocity,
+    )
+
+    a = hernquist_scale_radius(DEFAULT_R_E)
+    host0 = HostPotential(M_star=DEFAULT_M_GAL, a=a, Mc=0.0, r_s=1.0)
+    for r_over_a in (0.1, 1.0, 10.0):
+        r = r_over_a * a
+        got = float(total_escape_velocity(r, host0))
+        expected = float(escape_velocity(r, DEFAULT_M_GAL, a))
+        assert got == pytest.approx(expected, rel=1e-12)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Fong and Berger (2013) ApJ 776, 18 [papers/Fong_2013.pdf]
 # Fong et al. (2022) hosts I/II [papers/Fong_2022_hosts_I.pdf, II]
 # Default host R_e and host-type weights.
@@ -992,34 +1045,435 @@ def test_fong_berger_2013_sgrb_offset_array_matches_published_summary():
 # Levan et al. (2024) Nature 626, 737 [papers/Yang_Levan_2024_JWST.pdf]
 # [230307A].
 # ─────────────────────────────────────────────────────────────────────
-def test_lgrb_kn_offsets_match_primary_source_values():
-    """`OBSERVED_LGRB_KN_OFFSETS_KPC` must match per-event published values.
+def test_lgrb_kn_offsets_match_skobe_2026_table_2():
+    """`OBSERVED_LGRB_KN_OFFSETS_KPC` must match Skobe et al. (2026) Table 2.
 
-    The three long GRBs with confirmed kilonova counterparts have
-    projected host offsets published in their discovery papers:
-    GRB 060614 = 0.73 kpc (Della Valle et al. 2006 / GCN 5276),
-    GRB 211211A = 7.91 +/- 0.03 kpc (Rastinejad et al. 2022,
-    Nature 612, 223; arXiv:2204.10864), and GRB 230307A = 38.9 kpc
-    (Levan et al. 2024, Nature 626, 737; arXiv:2307.02098).  The
-    array stores these three values in ascending order.
+    Skobe et al. (2026) arXiv:2604.06586 Sec. 2 classify four of their
+    nine kilonova-bearing GRBs as LGRB-KNe: 050709, 060614, 211211A and
+    230307A.  GRBs 050709 and 060614 are short bursts with extended
+    emission, which they count as merger-driven long events.  Physical
+    offsets are their Table 2, sourced from Fong et al. (2022) Table 4.
     """
-    from grb_offsets import OBSERVED_LGRB_KN_OFFSETS_KPC
-
-    arr = np.asarray(OBSERVED_LGRB_KN_OFFSETS_KPC, dtype=float)
-    assert arr.size == 3, (
-        f"OBSERVED_LGRB_KN_OFFSETS_KPC has {arr.size} entries; expected "
-        f"3 (060614, 211211A, 230307A)."
+    from grb_offsets import (
+        OBSERVED_LGRB_KN_NAMES,
+        OBSERVED_LGRB_KN_OFFSET_ERR_KPC_WMAP9,
+        OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9,
     )
-    expected = {
-        "060614 (Della Valle+ 2006)": 0.73,
-        "211211A (Rastinejad+ 2022)": 7.91,
-        "230307A (Levan+ 2024)": 38.9,
-    }
-    for (label, value), got in zip(expected.items(), np.sort(arr)):
-        assert abs(got - value) <= max(0.05, 0.02 * value), (
-            f"OBSERVED_LGRB_KN_OFFSETS_KPC entry for {label} = {got} "
-            f"kpc drifted from the published value {value} kpc."
+
+    arr = np.asarray(OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9, dtype=float)
+    err = np.asarray(OBSERVED_LGRB_KN_OFFSET_ERR_KPC_WMAP9, dtype=float)
+    assert arr.size == 4, (
+        f"OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9 has {arr.size} entries; Skobe "
+        f"et al. (2026) classify 4 events as LGRB-KN."
+    )
+    assert err.shape == arr.shape
+    assert len(OBSERVED_LGRB_KN_NAMES) == arr.size
+
+    expected = {"060614": 0.70, "050709": 3.76, "211211A": 7.92, "230307A": 38.90}
+    assert tuple(OBSERVED_LGRB_KN_NAMES) == tuple(expected)
+    for name, got in zip(OBSERVED_LGRB_KN_NAMES, arr):
+        assert abs(got - expected[name]) <= 0.01, (
+            f"LGRB-KN offset for {name} = {got} kpc drifted from the "
+            f"Skobe et al. (2026) Table 2 value {expected[name]} kpc."
         )
+    assert np.all(np.diff(arr) > 0), "LGRB-KN offsets must stay in ascending order."
+
+    # Table 2 quotes 060614 at 0.31 +/- 0.35 arcsec, so its uncertainty
+    # exceeds the central offset; the event is consistent with nuclear.
+    assert err[0] > arr[0], (
+        "The 060614 offset uncertainty should exceed its central value "
+        "per Skobe et al. (2026) Table 2."
+    )
+
+
+def test_sgrb_kn_offsets_match_skobe_2026_table_2():
+    """The published kpc column must match Skobe et al. (2026) Table 2.
+
+    The five events they classify as sGRB-KNe are 130603B, 150101B,
+    160821B, 170817A and 200522A, with physical offsets from their
+    Table 2 (sourced from Fong et al. 2022 Table 4).  These are the
+    physical offsets, not the host-normalised R/r50 column.
+    """
+    from grb_offsets import (
+        OBSERVED_SGRB_KN_NAMES,
+        OBSERVED_SGRB_KN_OFFSET_ERR_KPC_WMAP9,
+        OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9,
+    )
+
+    arr = np.asarray(OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9, dtype=float)
+    err = np.asarray(OBSERVED_SGRB_KN_OFFSET_ERR_KPC_WMAP9, dtype=float)
+    assert arr.size == 5, (
+        f"OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9 has {arr.size} entries; Skobe "
+        f"et al. (2026) classify 5 events as sGRB-KN."
+    )
+    assert err.shape == arr.shape
+    expected = {
+        "200522A": 0.93,
+        "170817A": 2.125,
+        "130603B": 5.40,
+        "150101B": 7.35,
+        "160821B": 15.74,
+    }
+    assert tuple(OBSERVED_SGRB_KN_NAMES) == tuple(expected)
+    for name, got in zip(OBSERVED_SGRB_KN_NAMES, arr):
+        assert abs(got - expected[name]) <= 0.01, (
+            f"sGRB-KN offset for {name} = {got} kpc drifted from the "
+            f"Skobe et al. (2026) Table 2 value {expected[name]} kpc."
+        )
+    assert np.all(np.diff(arr) > 0), "sGRB-KN offsets must stay in ascending order."
+    assert np.all(err > 0)
+
+
+def test_kn_offsets_are_physical_not_host_normalised():
+    """The KN arrays must hold Table 2 kpc, never the R/r50 column.
+
+    Skobe et al. (2026) Table 2 carries both a physical offset and a
+    host-normalised R/r50.  Only the physical column is comparable with the
+    orbit-integrated model, and R/r50 is filter-dependent besides (r50 comes
+    from the per-band GALFIT fit).  060614 is the trap worth pinning: its
+    F606W R/r50 is 0.73, numerically identical to the discovery-paper kpc
+    offset this module used to carry, so picking the wrong column there
+    reproduces a stale value rather than raising.
+    """
+    from grb_offsets import (
+        OBSERVED_LGRB_KN_NAMES,
+        OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9,
+        OBSERVED_SGRB_KN_NAMES,
+        OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9,
+    )
+
+    r_over_r50 = {
+        "200522A": 0.25,
+        "170817A": 0.374,
+        "130603B": 1.62,
+        "150101B": 0.58,
+        "160821B": 2.14,
+        "060614": 0.94,
+        "050709": 1.91,
+        "211211A": 3.21,
+        "230307A": 12.12,
+    }
+    stored = dict(
+        zip(OBSERVED_SGRB_KN_NAMES, np.asarray(OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9, float))
+    ) | dict(zip(OBSERVED_LGRB_KN_NAMES, np.asarray(OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9, float)))
+
+    for name, normalised in r_over_r50.items():
+        assert abs(stored[name] - normalised) > 0.05, (
+            f"{name} is stored as {stored[name]}, which matches the Skobe "
+            f"et al. (2026) Table 2 host-normalised R/r50 = {normalised} "
+            f"rather than the physical kpc offset."
+        )
+
+    # The specific historical collision.
+    assert abs(stored["060614"] - 0.73) > 0.02, (
+        "060614 must not carry 0.73: that is its F606W R/r50 and also the "
+        "superseded discovery-paper kpc offset."
+    )
+
+
+def test_kn_offsets_rescaled_to_project_cosmology():
+    """The comparison arrays put Skobe's WMAP9 kpc on the project cosmology.
+
+    Planck 2015 (H0 = 67.74) gives larger distances than the WMAP9 values
+    (H0 = 69.6) Skobe et al. adopt, so every offset moves up by 1 to 3
+    percent over the z = 0.01 to 0.55 span of the sample.
+    """
+    from grb_offsets import (
+        OBSERVED_LGRB_KN_OFFSET_ERR_KPC,
+        OBSERVED_LGRB_KN_OFFSET_ERR_KPC_WMAP9,
+        OBSERVED_LGRB_KN_OFFSETS_KPC,
+        OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9,
+        OBSERVED_SGRB_KN_OFFSET_ERR_KPC,
+        OBSERVED_SGRB_KN_OFFSET_ERR_KPC_WMAP9,
+        OBSERVED_SGRB_KN_OFFSETS_KPC,
+        OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9,
+    )
+
+    for derived, published in [
+        (OBSERVED_SGRB_KN_OFFSETS_KPC, OBSERVED_SGRB_KN_OFFSETS_KPC_WMAP9),
+        (OBSERVED_LGRB_KN_OFFSETS_KPC, OBSERVED_LGRB_KN_OFFSETS_KPC_WMAP9),
+        (OBSERVED_SGRB_KN_OFFSET_ERR_KPC, OBSERVED_SGRB_KN_OFFSET_ERR_KPC_WMAP9),
+        (OBSERVED_LGRB_KN_OFFSET_ERR_KPC, OBSERVED_LGRB_KN_OFFSET_ERR_KPC_WMAP9),
+    ]:
+        ratio = np.asarray(derived, float) / np.asarray(published, float)
+        assert np.all(ratio > 1.0), (
+            "Planck 2015 distances exceed WMAP9 over this redshift range, so "
+            f"the rescaled offsets must all grow; got ratios {ratio}."
+        )
+        assert np.all(ratio < 1.03), f"Rescaling should be a percent-level shift, got {ratio}."
+
+    # Rescaling is a pure distance factor, so it cannot reorder the sample.
+    assert np.all(np.diff(OBSERVED_SGRB_KN_OFFSETS_KPC) > 0)
+    assert np.all(np.diff(OBSERVED_LGRB_KN_OFFSETS_KPC) > 0)
+
+
+def test_planck15_cosmology_constants_match_the_compas_pin():
+    """`grb_physics` cosmology must stay on the COMPAS FastCosmicIntegration pin.
+
+    Planck 2015 as hard-coded in COMPAS post-processing.  Neijssel et al.
+    (2019) quote the rounded H0 = 67.8, Omega_m = 0.308; the pin here is
+    deliberately the unrounded code constant so rates match COMPAS exactly.
+    """
+    from grb_physics import H0_PLANCK15, OMEGA_L_PLANCK15, OMEGA_M_PLANCK15
+
+    assert H0_PLANCK15 == pytest.approx(67.74)
+    assert OMEGA_M_PLANCK15 == pytest.approx(0.3089)
+    assert OMEGA_L_PLANCK15 == pytest.approx(0.6911)
+    assert OMEGA_M_PLANCK15 + OMEGA_L_PLANCK15 == pytest.approx(1.0), (
+        "The cosmology is flat; the rate integration and the offset "
+        "conversion both assume Omega_k = 0."
+    )
+
+
+def test_fong_2022_bright_offsets_match_published_summary():
+    """`FONG22_SGRB_OFFSETS_KPC_WMAP9` must reproduce Fong et al. (2022) Table 4.
+
+    Their Sec. 6.2 quotes an observed median projected offset of 7.92 kpc with
+    a [-6.13, +20.71] kpc interval from the 16th and 84th percentiles of the
+    full 83-burst distribution.  Reproducing all three from the transcribed
+    array is the check that no row was dropped or mistyped; the median alone
+    would not catch a swapped tail.
+    """
+    from grb_offsets import (
+        FONG22_SGRB_ASSUMED_Z1,
+        FONG22_SGRB_NAMES,
+        FONG22_SGRB_OFFSET_ERR_KPC_WMAP9,
+        FONG22_SGRB_OFFSETS_KPC_WMAP9,
+        FONG22_SGRB_REDSHIFTS,
+    )
+
+    arr = np.asarray(FONG22_SGRB_OFFSETS_KPC_WMAP9, dtype=float)
+    assert arr.size == 83, (
+        f"Fong et al. (2022) Table 4 lists 83 measured offsets (plus one upper "
+        f"limit for 081226A, excluded); got {arr.size}."
+    )
+    for parallel in (FONG22_SGRB_REDSHIFTS, FONG22_SGRB_OFFSET_ERR_KPC_WMAP9):
+        assert np.asarray(parallel).size == arr.size
+    assert len(FONG22_SGRB_NAMES) == arr.size
+    assert len(set(FONG22_SGRB_NAMES)) == arr.size, "Duplicate burst in the catalog."
+    assert "081226A" not in FONG22_SGRB_NAMES, (
+        "081226A is an upper limit (< 4.06 kpc), not a measurement."
+    )
+
+    assert np.median(arr) == pytest.approx(7.92, abs=0.01), (
+        f"Median offset {np.median(arr):.2f} kpc drifted from the published 7.92 kpc."
+    )
+    p16, p84 = np.percentile(arr, [16, 84])
+    assert p16 == pytest.approx(7.92 - 6.13, abs=0.05), f"16th percentile {p16:.2f} kpc"
+    assert p84 == pytest.approx(7.92 + 20.71, abs=0.05), f"84th percentile {p84:.2f} kpc"
+
+    # Table 4 note a: bursts without a redshift get their physical offset at an
+    # assumed z = 1, which the stored redshifts have to reproduce for the
+    # cosmology rescaling to be defined.
+    assert len(FONG22_SGRB_ASSUMED_Z1) == 11
+    assert set(FONG22_SGRB_ASSUMED_Z1) <= set(FONG22_SGRB_NAMES)
+    at_unity = {n for n, z in zip(FONG22_SGRB_NAMES, FONG22_SGRB_REDSHIFTS) if z == 1.0}
+    assert at_unity == set(FONG22_SGRB_ASSUMED_Z1)
+
+
+def test_bright_portal_revisions_are_recorded_but_stay_off_the_science_path():
+    """The live BRIGHT portal disagrees with Table 4 for seven of the 83 bursts.
+
+    ``BRIGHT_PORTAL_REVISIONS`` records what the portal reads while the
+    comparison arrays keep the published values, so both halves need pinning:
+    an edit must not quietly adopt the portal numbers, and the recorded deltas
+    must not go stale.  Which revisions are safe to adopt is re-derived here
+    rather than stored, since that is the whole content of the distinction: a
+    revision driven only by a new redshift has to reproduce under the angular
+    scaling, and one that does not means the host association moved.
+    """
+    from grb_offsets import (
+        BRIGHT_PORTAL_REVISIONS,
+        FONG22_SGRB_NAMES,
+        FONG22_SGRB_OFFSETS_KPC_WMAP9,
+        FONG22_SGRB_REDSHIFTS,
+        SGRB_RECLASSIFIED_AS_LGRB_KN,
+        kpc_per_arcsec,
+    )
+
+    published = {
+        "120804": (2.30, 0.74),
+        "150831A": (12.21, 1.09),
+        "160525B": (8.61, 1.00),
+        "170127B": (10.37, 2.28),
+        "170728B": (6.76, 0.62),
+        "200411A": (41.98, 1.93),
+        "210726A": (12.26, 0.2244),
+    }
+    assert set(BRIGHT_PORTAL_REVISIONS) == set(published)
+
+    names = list(FONG22_SGRB_NAMES)
+    for burst, (offset, redshift) in published.items():
+        i = names.index(burst)
+        assert FONG22_SGRB_OFFSETS_KPC_WMAP9[i] == pytest.approx(offset, abs=0.005), (
+            f"{burst} drifted off Fong et al. (2022) Table 4. The comparison "
+            f"arrays are the published census, not the live portal."
+        )
+        assert FONG22_SGRB_REDSHIFTS[i] == pytest.approx(redshift, abs=5e-5)
+
+    reproduced = {
+        burst
+        for burst, (offset, redshift) in BRIGHT_PORTAL_REVISIONS.items()
+        if abs(
+            published[burst][0] * kpc_per_arcsec(redshift) / kpc_per_arcsec(published[burst][1])
+            - offset
+        )
+        <= 0.03 * offset
+    }
+    assert reproduced == {"150831A", "170127B", "170728B", "200411A"}
+
+    # 210726A is the one the literature has not settled: Schroeder et al. (2024)
+    # confirm the host but favour z ~ 2.38 over the portal's 0.37, which is why
+    # its factor-50 revision is not adopted on the strength of the portal alone.
+    assert BRIGHT_PORTAL_REVISIONS["210726A"][0] < 1.0 < published["210726A"][0]
+
+    # Neither way of adopting the portal escapes the band Section 8 already
+    # draws (Gold 5.1 kpc to astrometrically broadened 10.9 kpc), so the choice
+    # reaches no conclusion in the section.
+    offsets = np.asarray(FONG22_SGRB_OFFSETS_KPC_WMAP9, dtype=float)
+    classical = np.array([n not in SGRB_RECLASSIFIED_AS_LGRB_KN for n in names])
+    revised = offsets.copy()
+    for burst, (offset, _) in BRIGHT_PORTAL_REVISIONS.items():
+        revised[names.index(burst)] = offset
+    assert np.median(offsets[classical]) == pytest.approx(8.23, abs=0.01)
+    assert np.median(revised[classical]) == pytest.approx(7.94, abs=0.01)
+
+
+def test_classical_sgrb_comparison_is_fong_2022_less_the_lgrb_kn_reclassifications():
+    """The classical comparison must not double-count Skobe's LGRB-KNe.
+
+    Skobe et al. (2026) count short bursts with extended emission as
+    merger-driven LGRB-KNe.  Three of those sit in the Fong et al. (2022)
+    short-GRB catalog (050709, 060614, 211211A) and also in
+    ``OBSERVED_LGRB_KN_OFFSETS_KPC``, so the classical array drops them to keep
+    the two Section 8 panels disjoint in taxonomy.  The kilonova-selected
+    *short* bursts stay, because KN selection is not a partition of the sGRB
+    population.
+    """
+    from grb_offsets import (
+        FONG22_SGRB_NAMES,
+        OBSERVED_SGRB_CLASSICAL_NAMES,
+        OBSERVED_SGRB_OFFSET_ERR_CLASSICAL_KPC,
+        OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC,
+        SGRB_RECLASSIFIED_AS_LGRB_KN,
+    )
+
+    assert SGRB_RECLASSIFIED_AS_LGRB_KN == ("050709", "060614", "211211A")
+    assert OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC.size == len(FONG22_SGRB_NAMES) - 3 == 80
+    assert OBSERVED_SGRB_OFFSET_ERR_CLASSICAL_KPC.size == 80
+    assert len(OBSERVED_SGRB_CLASSICAL_NAMES) == 80
+
+    dropped = set(FONG22_SGRB_NAMES) - set(OBSERVED_SGRB_CLASSICAL_NAMES)
+    assert dropped == set(SGRB_RECLASSIFIED_AS_LGRB_KN)
+
+    # The sGRB-KNe are a sub-selection of the sGRB population, not a partition.
+    for retained in ("130603B", "150101B", "160821B", "200522A"):
+        assert retained in OBSERVED_SGRB_CLASSICAL_NAMES, (
+            f"{retained} is an sGRB-KN in Skobe et al. and must stay in the "
+            f"classical sGRB population."
+        )
+
+
+def test_fong_berger_2013_array_is_no_longer_the_comparison_sample():
+    """F&B 2013 stays a pinned anchor but must not be the comparison array.
+
+    Section 8 moved onto the Fong et al. (2022) BRIGHT catalog, whose median is
+    ~3.5 kpc larger over four times the sample.  Keeping the older array wired
+    into a comparison would silently understate the observed offsets.
+    """
+    from grb_offsets import (
+        OBSERVED_SGRB_OFFSET_NAMES,
+        OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC,
+        OBSERVED_SGRB_OFFSETS_KPC,
+    )
+
+    assert len(OBSERVED_SGRB_OFFSET_NAMES) == OBSERVED_SGRB_OFFSETS_KPC.size, (
+        "OBSERVED_SGRB_OFFSET_NAMES must stay parallel to OBSERVED_SGRB_OFFSETS_KPC."
+    )
+    assert OBSERVED_SGRB_OFFSETS_KPC.size == 22
+    assert OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC.size != OBSERVED_SGRB_OFFSETS_KPC.size - 1
+    assert np.median(OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC) > np.median(OBSERVED_SGRB_OFFSETS_KPC), (
+        "The BRIGHT catalog median should exceed the F&B 2013 median."
+    )
+
+
+def test_fong_2022_sample_grades_match_published_counts_and_gold_median():
+    """Gold / Silver / Bronze counts and the 4.92 kpc Gold median, Table 2 and Sec. 6.2.
+
+    Fong et al. grade the 84 host associations by minimum probability of chance
+    coincidence: 49 Gold, 22 Silver, 13 Bronze, with 6 further bursts
+    Inconclusive.  Our arrays carry the 83 with measured offsets, so Gold drops
+    to 48 (081226A is Gold but censored) and the other two grades are complete.
+
+    The Gold median is the anchor that matters, because Sec. 6.2 reads it as a
+    minimum on the short-GRB offset distribution and it is the conservative edge
+    of the Section 8 band.
+    """
+    from grb_offsets import (
+        FONG22_SGRB_BRONZE,
+        FONG22_SGRB_NAMES,
+        FONG22_SGRB_OFFSETS_KPC_WMAP9,
+        FONG22_SGRB_SAMPLE_GRADE,
+        FONG22_SGRB_SILVER,
+    )
+
+    grades = np.asarray(FONG22_SGRB_SAMPLE_GRADE)
+    assert grades.size == len(FONG22_SGRB_NAMES) == 83
+    counts = {g: int((grades == g).sum()) for g in ("Gold", "Silver", "Bronze")}
+    assert counts == {"Gold": 48, "Silver": 22, "Bronze": 13}, (
+        f"Grade counts {counts} drifted from Fong et al. (2022) Table 2 "
+        f"(49 / 22 / 13 including the censored 081226A)."
+    )
+
+    # Every named Silver / Bronze burst has to exist in the catalog, or a typo
+    # would silently promote it to Gold.
+    for name in FONG22_SGRB_SILVER + FONG22_SGRB_BRONZE:
+        assert name in FONG22_SGRB_NAMES, f"{name} is graded but not in the catalog."
+
+    gold = np.asarray(FONG22_SGRB_OFFSETS_KPC_WMAP9)[grades == "Gold"]
+    assert np.median(gold) == pytest.approx(4.92, abs=0.02), (
+        f"Gold median {np.median(gold):.2f} kpc drifted from the published 4.92 kpc."
+    )
+
+    # The grade is not a neutral quality flag: robustness of association
+    # correlates with offset, which is what forces the band in Section 8.
+    bronze = np.asarray(FONG22_SGRB_OFFSETS_KPC_WMAP9)[grades == "Bronze"]
+    assert np.median(bronze) > 4 * np.median(gold), (
+        "Bronze associations should sit far outside the Gold ones (Sec. 7.1)."
+    )
+
+
+def test_rice_resampling_reproduces_the_fong_2022_sampled_distribution():
+    """The Rice draws must land on Fong et al. (2022) Sec. 6.2's sampled quantiles.
+
+    They quote a sampled median of 9.82 kpc with a [-7.50, +22.86] kpc interval
+    against an observed 7.92 [-6.13, +20.71], the shift coming from the 15
+    bursts whose uncertainty exceeds their offset.  Agreement here is at the
+    1 to 2 percent level rather than exact, because the realizations come from a
+    different random stream than theirs.
+    """
+    from grb_offsets import (
+        FONG22_SGRB_OFFSET_ERR_KPC_WMAP9,
+        FONG22_SGRB_OFFSETS_KPC_WMAP9,
+        rice_resample_offsets,
+    )
+
+    off = np.asarray(FONG22_SGRB_OFFSETS_KPC_WMAP9)
+    err = np.asarray(FONG22_SGRB_OFFSET_ERR_KPC_WMAP9)
+    assert int((err > off).sum()) == 15, (
+        "Sec. 6.2: 15 bursts have a measurement uncertainty larger than their offset."
+    )
+
+    draws = rice_resample_offsets(off, err)
+    assert np.median(draws) == pytest.approx(9.82, abs=0.35), (
+        f"Sampled median {np.median(draws):.2f} kpc against the published 9.82 kpc."
+    )
+    p16, p84 = np.percentile(draws, [16, 84])
+    assert p16 == pytest.approx(9.82 - 7.50, abs=0.25), f"16th percentile {p16:.2f} kpc"
+    assert p84 == pytest.approx(9.82 + 22.86, abs=1.0), f"84th percentile {p84:.2f} kpc"
+    assert np.median(draws) > np.median(off), (
+        "Folding in the uncertainties must raise the distribution, not lower it."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1188,7 +1642,7 @@ def test_wanderman_piran_2015_piecewise_exponential_continuity_and_slopes():
 
     so the function value is C^0 at z = 0.9 and the left-of-peak slope
     is positive, right-of-peak slope is negative.  Pins the
-    Wanderman-Piran 2015 fit parameters (R0=4.1, z_peak=0.9,
+    Wanderman-Piran 2015 fit parameters (R0=45 at z=z_peak=0.9,
     sigma_lo=0.39, sigma_hi=0.26).
     """
     from grb_rates import wanderman_piran_2015_Rz
@@ -1214,16 +1668,275 @@ def test_wanderman_piran_2015_piecewise_exponential_continuity_and_slopes():
 
 
 def test_wanderman_piran_2015_R0_normalization_within_band():
-    """Default `R0 = 4.1 Gpc^-3 yr^-1` (peak observed sGRB rate) inside paper band."""
+    """Peak `R0 = 45 Gpc^-3 yr^-1` (WP15 Eq. 9) and local rate matches paper rho_0.
+
+    WP15 Eq. 9 sets the peak-of-curve normalization at R0 = 45 Gpc^-3
+    yr^-1 (z_peak = 0.9); the local rate R(z=0) = 45 * exp(-0.9/0.39)
+    ~ 4.47 Gpc^-3 yr^-1 sits inside the paper's Eq. 10 canonical
+    rho_0 = 4.1 (+1.8/-1.4) +/- 0.5 Gpc^-3 yr^-1 (internal 1sigma
+    plus SFR1<->SFR2 systematic).  The R_rate_lo / R_rate_hi arrays
+    propagate rho_0's *internal* 1sigma (+1.8/-1.4) onto the curve.
+    """
     from grb_rates import wanderman_piran_2015_Rz
 
-    out = wanderman_piran_2015_Rz(np.array([0.9]))
-    R0 = float(out["R_best"][0])
-    R_lo = float(out["R_lo"][0])
-    R_hi = float(out["R_hi"][0])
-    assert 2.2 <= R0 <= 6.4, R0
-    assert R_lo == pytest.approx(2.2, rel=1e-9)
-    assert R_hi == pytest.approx(6.4, rel=1e-9)
+    R_peak = float(wanderman_piran_2015_Rz(np.array([0.9]))["R_best"][0])
+    assert R_peak == pytest.approx(45.0, rel=1e-9), R_peak
+
+    R_z0 = float(wanderman_piran_2015_Rz(np.array([0.0]))["R_best"][0])
+    assert 2.7 <= R_z0 <= 5.9, (
+        f"R(z=0) = {R_z0:.3f} outside WP15 Eq. 10 rho_0 internal 1sigma [2.7, 5.9]."
+    )
+
+    R_peak_lo = float(wanderman_piran_2015_Rz(np.array([0.9]))["R_rate_lo"][0])
+    R_peak_hi = float(wanderman_piran_2015_Rz(np.array([0.9]))["R_rate_hi"][0])
+    assert R_peak_lo == pytest.approx(45.0 * 2.7 / 4.1, rel=1e-3)
+    assert R_peak_hi == pytest.approx(45.0 * 5.9 / 4.1, rel=1e-3)
+
+
+def test_wanderman_piran_2015_sfr2_shape_broadens_peak():
+    """SFR2 shape systematic broadens the peak by 1.5x (WP15 Sec. 5).
+
+    WP15 Sec. 5 quotes peak FWHM Delta_z ~ 0.4 for SFR1 and ~ 0.6 for
+    SFR2, so the SFR-model shape systematic broadens sigma by
+    0.6/0.4 = 1.5x.  The broadened curve equals R_best at the peak
+    (same R0 = 45) and exceeds R_best in the wings.
+    """
+    from grb_rates import wanderman_piran_2015_Rz
+
+    out = wanderman_piran_2015_Rz(np.array([0.9, 0.2, 2.5]))
+    # At the peak both shapes give R0.
+    assert out["R_shape_sfr2"][0] == pytest.approx(out["R_best"][0], rel=1e-9)
+    # In the rising wing (z = 0.2 << z_peak) the broadened shape is higher.
+    assert out["R_shape_sfr2"][1] > out["R_best"][1]
+    # Same for the falling wing (z = 2.5 >> z_peak).
+    assert out["R_shape_sfr2"][2] > out["R_best"][2]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Pracchia & Salafia (2026) A&A, arXiv:2601.03861
+#   [papers/Pracchia & Salafia (2026).pdf]
+# Eq. 9 numerical convolution of Madau & Fragos 2017 SFR (Eq. 10) with
+# a DTD kernel (Eq. 7 power-law or Eq. 8 log-normal).  Table 2 posteriors.
+# ─────────────────────────────────────────────────────────────────────
+def test_pracchia_salafia_2026_table2_posteriors_within_paper_band():
+    """Pin all four Table 2 rows to the paper's 90 percent CR posteriors.
+
+    Pracchia and Salafia (2026) Table 2 reports log10(R_0 / Gpc^-3 yr^-1)
+    plus DTD parameters for (ELF, QUSJ) x (power-law, log-normal DTD).
+    R_0 is intrinsic source-frame, per merger, all-orientation.
+    """
+    from grb_rates import (
+        MADAU_FRAGOS_2017_SFR,
+        PRACCHIA_SALAFIA_2026_ELF_LOGNORMAL,
+        PRACCHIA_SALAFIA_2026_ELF_POWERLAW,
+        PRACCHIA_SALAFIA_2026_QUSJ_LOGNORMAL,
+        PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW,
+        PRACCHIA_SALAFIA_2026_ROWS,
+    )
+
+    # ELF power-law: log10 R_0 = 1.92 +1.50/-0.92, alpha_tau = 3.20,
+    # tau_min = 0.03 Gyr, <tau_d> = 77 Myr.
+    p = PRACCHIA_SALAFIA_2026_ELF_POWERLAW
+    assert p["log10_R0"] == 1.92
+    assert p["log10_R0_plus90"] == 1.50
+    assert p["log10_R0_minus90"] == 0.92
+    assert p["alpha_tau"] == 3.20
+    assert p["tau_min_Gyr"] == 0.03
+    assert p["mean_tau_d_Myr"] == 77
+
+    # ELF log-normal: log10 R_0 = 2.60 +1.23/-1.49, mu_tau = 0.08 Gyr,
+    # sigma = 0.11, <tau_d> = 92 Myr.
+    p = PRACCHIA_SALAFIA_2026_ELF_LOGNORMAL
+    assert p["log10_R0"] == 2.60
+    assert p["log10_R0_plus90"] == 1.23
+    assert p["log10_R0_minus90"] == 1.49
+    assert p["mu_tau_Gyr"] == 0.08
+    assert p["sigma_tau"] == 0.11
+    assert p["mean_tau_d_Myr"] == 92
+
+    # QUSJ power-law: log10 R_0 = 2.57 +0.67/-0.63, alpha_tau = 3.33,
+    # tau_min = 0.04 Gyr, <tau_d> = 105 Myr.
+    p = PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW
+    assert p["log10_R0"] == 2.57
+    assert p["log10_R0_plus90"] == 0.67
+    assert p["log10_R0_minus90"] == 0.63
+    assert p["alpha_tau"] == 3.33
+    assert p["tau_min_Gyr"] == 0.04
+    assert p["mean_tau_d_Myr"] == 105
+
+    # QUSJ log-normal: log10 R_0 = 2.25 +0.53/-0.50, mu = 0.09 Gyr,
+    # sigma = 0.14, <tau_d> = 116 Myr.
+    p = PRACCHIA_SALAFIA_2026_QUSJ_LOGNORMAL
+    assert p["log10_R0"] == 2.25
+    assert p["log10_R0_plus90"] == 0.53
+    assert p["log10_R0_minus90"] == 0.50
+    assert p["mu_tau_Gyr"] == 0.09
+    assert p["sigma_tau"] == 0.14
+    assert p["mean_tau_d_Myr"] == 116
+
+    # Registry keys match the four labelled rows.
+    assert set(PRACCHIA_SALAFIA_2026_ROWS.keys()) == {
+        "ELF_powerlaw",
+        "ELF_lognormal",
+        "QUSJ_powerlaw",
+        "QUSJ_lognormal",
+    }
+
+    # Madau and Fragos (2017); Pracchia and Salafia Eq. 10:
+    # (a_psi, b_psi, z_psi) = (2.6, 6.2, 2.2).
+    assert MADAU_FRAGOS_2017_SFR["a_psi"] == 2.6
+    assert MADAU_FRAGOS_2017_SFR["b_psi"] == 6.2
+    assert MADAU_FRAGOS_2017_SFR["z_psi"] == 2.2
+
+
+def test_pracchia_salafia_2026_Rz_local_rate_matches_R0():
+    """R(z=0) equals 10^log10_R0 (Table 2) for every row at rel 1e-6.
+
+    The numerical convolution is normalised so R(z=0) hits the fitted
+    local rate exactly; this pins the calibration.
+    """
+    from grb_rates import PRACCHIA_SALAFIA_2026_ROWS, pracchia_salafia_2026_Rz
+
+    for row, params in PRACCHIA_SALAFIA_2026_ROWS.items():
+        R_0 = 10.0 ** params["log10_R0"]
+        out = pracchia_salafia_2026_Rz(np.array([0.0]), row=row)
+        assert out["R_best"][0] == pytest.approx(R_0, rel=1e-6), (
+            f"{row}: R(z=0) = {out['R_best'][0]:.4f} != R_0 = {R_0:.4f}"
+        )
+        # 90 percent CR bounds scale R_0 by 10^plus90 / 10^minus90.
+        assert out["R_rate_hi"][0] == pytest.approx(
+            10.0 ** (params["log10_R0"] + params["log10_R0_plus90"]), rel=1e-6
+        )
+        assert out["R_rate_lo"][0] == pytest.approx(
+            10.0 ** (params["log10_R0"] - params["log10_R0_minus90"]), rel=1e-6
+        )
+
+
+def test_pracchia_salafia_2026_Rz_shape_tracks_short_DTD_sfr():
+    """Short-DTD R(z) tracks SFR(z) within 15 percent for z <= 3.
+
+    Table 2 rows all have <tau_d> = 77 to 116 Myr (short compared to the
+    Madau and Fragos SFR variation timescale), so R(z) ~ SFR(z) up to a
+    normalisation, and the peak of R(z) sits near the SFR peak at z ~ 1.9.
+    Both are load-bearing shape features: a bug in the DTD kernel or the
+    tau-substitution integrator would push the peak off or under-resolve
+    the low-z rise.
+    """
+    from grb_rates import _madau_fragos_2017_sfr, pracchia_salafia_2026_Rz
+
+    z_grid = np.linspace(0.0, 5.0, 200)
+    out = pracchia_salafia_2026_Rz(z_grid, row="ELF_powerlaw")
+    sfr = (
+        _madau_fragos_2017_sfr(z_grid)
+        * out["R_best"][0]
+        / _madau_fragos_2017_sfr(np.array([0.0]))[0]
+    )
+    zpeak = z_grid[np.argmax(out["R_best"])]
+    assert 1.7 <= zpeak <= 2.3, f"R(z) peak = {zpeak:.2f}; expected ~1.9 (SFR peak)"
+    ratio = out["R_best"][z_grid <= 3.0] / sfr[z_grid <= 3.0]
+    assert np.all(np.abs(ratio - 1.0) < 0.15), (
+        f"R/SFR for z<=3 deviates by more than 15 percent; got range "
+        f"[{ratio.min():.3f}, {ratio.max():.3f}]."
+    )
+
+
+def test_pracchia_salafia_2026_Rz_cosmology_drift_under_015_percent():
+    """P&S curve is < 0.15 percent-sensitive to cosmology choice.
+
+    Pracchia and Salafia (2026) do not quote H0/Omega_m explicitly and
+    inherit their cosmology from Madau and Fragos (2017), who use the
+    Madau and Dickinson (2014) "concordance" (H0=70, Omega_m=0.3).  The
+    project pins Planck 2015 (H0=67.74, Omega_m=0.3089).  Because
+    R(z=0) is normalised to Table 2's R_0 exactly, the absolute
+    normalisation is insensitive to H0; only the look-back-time detail
+    inside the convolution kernel changes.  With <tau_d> < 120 Myr the
+    drift across all three tested cosmologies is bounded well under
+    0.15 percent and the peak location is invariant at z=2.007.
+    """
+    from grb_rates import (
+        COSMO_MADAU14,
+        COSMO_PLANCK14,
+        COSMO_PLANCK15,
+        pracchia_salafia_2026_Rz,
+    )
+
+    z_grid = np.linspace(0.0, 3.0, 50)
+    R_p15 = pracchia_salafia_2026_Rz(z_grid, row="ELF_powerlaw", cosmology=COSMO_PLANCK15)["R_best"]
+    R_p14 = pracchia_salafia_2026_Rz(z_grid, row="ELF_powerlaw", cosmology=COSMO_PLANCK14)["R_best"]
+    R_md14 = pracchia_salafia_2026_Rz(z_grid, row="ELF_powerlaw", cosmology=COSMO_MADAU14)["R_best"]
+    for label, R_other in (("Planck2014", R_p14), ("Madau2014", R_md14)):
+        drift = np.max(np.abs((R_other - R_p15) / R_p15))
+        assert drift < 0.0015, (
+            f"P&S R(z) drift from Planck2015 to {label} = {drift * 100:.3f}% "
+            f"exceeds 0.15 percent bound."
+        )
+    # Peak invariance under cosmology swap.
+    zpk_p15 = z_grid[np.argmax(R_p15)]
+    zpk_md14 = z_grid[np.argmax(R_md14)]
+    assert abs(zpk_p15 - zpk_md14) < 0.1, (
+        f"P&S peak z drifts from {zpk_p15:.3f} (Planck 2015) to {zpk_md14:.3f} "
+        f"(Madau 2014); expected invariant to <0.1."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Du et al. (2025) ApJL 987, L13, DOI 10.3847/2041-8213/ade1d0
+#   [papers/Du et al. (2025).pdf]
+# Table 5 observer-frame local rates per detector across five SFR + DTD
+# combinations; Sec. 4.4 beaming.  Eq. 16 coefficients not published.
+# ─────────────────────────────────────────────────────────────────────
+def test_du25_swift_bat_table5_rates_match_paper():
+    """Pin every Swift/BAT rate in Table 5 (Gpc^-3 yr^-1, +/- 1sigma).
+
+    Du et al. (2025) Table 5 Swift/BAT row: five SFR + DTD combinations
+    (Yuksel+ 2008 undelayed, Gauss-Yuksel, Lognormal-Yuksel, PowerLaw-Yuksel,
+    Madau+ 2014 undelayed) with L_min = 2.57e48 erg/s and theta_j = 9.8 deg
+    (Sec. 4.4; citing Soderberg+ 2006 and Zhang+ 2018).
+    """
+    from grb_rates import (
+        DU25_L_MIN_SWIFT_BAT_ERG_S,
+        DU25_LOCAL_RATES_SWIFT_BAT,
+        DU25_THETA_J_DEG,
+    )
+
+    expected = {
+        "Yuksel2008_undelayed": (0.60, 0.18),
+        "Gauss_Yuksel": (0.56, 0.16),
+        "Lognormal_Yuksel": (0.57, 0.15),
+        "PowerLaw_Yuksel": (0.97, 0.26),
+        "Madau2014_undelayed": (0.73, 0.18),
+    }
+    assert set(DU25_LOCAL_RATES_SWIFT_BAT.keys()) == set(expected.keys())
+    for k, (r, err) in expected.items():
+        assert DU25_LOCAL_RATES_SWIFT_BAT[k] == pytest.approx((r, err), rel=1e-9), (
+            f"{k}: got {DU25_LOCAL_RATES_SWIFT_BAT[k]}, expected ({r}, {err})"
+        )
+    assert DU25_L_MIN_SWIFT_BAT_ERG_S == pytest.approx(2.57e48, rel=1e-9)
+    assert DU25_THETA_J_DEG == pytest.approx(9.8, rel=1e-9)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Chong-Yu Gao (2025) MNRAS 542, 1841, DOI 10.1093/mnras/staf1368
+#   [papers/Chong-Yu Gao 2025.pdf]
+# Table 2 Gaussian-DTD row (DIC-preferred); Fermi/GBM local rate.
+# ─────────────────────────────────────────────────────────────────────
+def test_gao25_fermi_gbm_gaussian_dtd_local_rate_matches_table2():
+    """Pin the Gaussian-DTD local rate R(z=0) = 1.37 +0.30/-0.27.
+
+    Chong-Yu Gao (2025) Table 2 Gaussian-DTD row: DIC-preferred (DIC =
+    94996 vs 95053/95058 for log-normal/power-law).  Fermi/GBM sample,
+    N = 478 sGRBs.  tau_G = 1.14 Gyr central (posterior +0.02/-0.17);
+    sigma_G < 0.26 Gyr is the Table 2 caption upper bound.
+    """
+    from grb_rates import GAO25_LOCAL_RATE_FERMI_GBM
+
+    p = GAO25_LOCAL_RATE_FERMI_GBM
+    assert p["R0"] == pytest.approx(1.37, rel=1e-9)
+    assert p["R0_plus"] == pytest.approx(0.30, rel=1e-9)
+    assert p["R0_minus"] == pytest.approx(0.27, rel=1e-9)
+    assert p["tau_G_Gyr"] == pytest.approx(1.14, rel=1e-9)
+    assert p["sigma_G_Gyr"] == pytest.approx(0.26, rel=1e-9)
+    assert p["detector"] == "Fermi/GBM"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1278,6 +1991,49 @@ def test_fong_2015_beaming_factor_for_fiducial_sbgrb_in_published_range():
     assert 0.015 <= f_beam <= 0.040, (
         f"sbGRB f_beam = {f_beam:.4f} outside Fong (2015) band [0.015, 0.040]."
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Fong et al. (2022) ApJ 940, 56 [arXiv:2206.01763]
+# Ghirlanda et al. (2016) A&A 594, A84
+# Swift-BAT observing envelope + effective sky fraction, used for the
+# Section 6c BRIGHT counts-to-rate-density conversion.
+# ─────────────────────────────────────────────────────────────────────
+def test_swift_bright_window_matches_fong_2022_sample_span():
+    """`T_SWIFT_BRIGHT_YR` must span the Fong+ 2022 BRIGHT catalogue window.
+
+    Fong et al. (2022, ApJ 940, 56, arXiv:2206.01763) Sec. 3 defines
+    the BRIGHT sample as "107 events discovered over 2004-2021 which
+    meet the criteria for our starting sample" (p. 4), i.e. from Swift's
+    launch in November 2004 through the sample cutoff at December 2021.
+    That envelope is ~17.1 detector-frame years; allowance kept for the
+    exact launch-to-cutoff arithmetic and any downstream re-cut.
+    """
+    from grb_rates import T_SWIFT_BRIGHT_YR
+
+    assert 16.5 <= T_SWIFT_BRIGHT_YR <= 17.5, (
+        f"T_SWIFT_BRIGHT_YR = {T_SWIFT_BRIGHT_YR} yr is outside the "
+        f"Fong+ 2022 BRIGHT window [16.5, 17.5] yr."
+    )
+
+
+def test_bat_effective_sky_fraction_matches_ghirlanda_2016():
+    """`F_SKY_BAT` must match the Ghirlanda+ 2016 effective BAT sky fraction.
+
+    Ghirlanda et al. (2016, A&A 594, A84) Sec. 3.2 adopt an effective
+    Swift-BAT sky coverage of Omega_BAT / 4pi ~ 1/6 for their
+    observed-sGRB rate integral (partial coding weighted).  The
+    Lien et al. (2016, ApJ 829, 7) Swift-BAT triggered-GRB catalog
+    gives a compatible number.  The plausible published range spans
+    roughly [0.11, 0.20]; project fiducial is 1/6.
+    """
+    from grb_rates import F_SKY_BAT
+
+    assert 0.11 <= F_SKY_BAT <= 0.20, (
+        f"F_SKY_BAT = {F_SKY_BAT} is outside the published BAT effective "
+        f"sky-fraction band [0.11, 0.20]."
+    )
+    assert F_SKY_BAT == pytest.approx(1.0 / 6.0, rel=1e-9)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -2063,14 +2819,20 @@ def test_CE_PRESCRIPTION_BROEKGAARDEN21_full_string_schema():
 # which is the visible form of "honest plot" the audit guards against.
 # ─────────────────────────────────────────────────────────────────────
 def test_observed_gw_events_match_abbott_2019_2020():
-    """`OBSERVED_GW_EVENTS` coordinates must match Abbott+ 2019 / 2020 low-spin medians.
+    """`OBSERVED_GW_EVENTS` coordinates must sit inside the Abbott+ 2019 / 2020 low-spin 90% CR.
 
-    Abbott et al. (2019) PRX 9, 011001 Table I (low-spin prior) gives
-    GW170817 ``M1 = 1.46, M2 = 1.27 Msun``.  Abbott et al. (2020) ApJL
-    892, L3 Table 1 (low-spin prior) gives GW190425 ``M1 = 1.73,
-    M2 = 1.58 Msun``.  These are the coordinates Section 1 of
-    grb_main.ipynb annotates as star markers on the BNS panel; a drift
-    means the labelled stars no longer sit at the published medians.
+    Abbott et al. (2019) PRX 9, 011001 Table I (low-spin prior) reports
+    GW170817 component-mass 90% CR ``M1 in [1.36, 1.60]``,
+    ``M2 in [1.17, 1.36] Msun``; the representative point pinned here
+    (``M1 = 1.46, M2 = 1.27``) is consistent with the GWTC-1 catalogue
+    (Abbott et al. 2019 PRX 9, 031040) and lies inside those ranges.
+    Abbott et al. (2020) ApJL 892, L3 Table 1 (low-spin prior) reports
+    GW190425 component-mass 90% CR ``M1 in [1.60, 1.87]``,
+    ``M2 in [1.46, 1.69] Msun``; the pinned point ``M1 = 1.73,
+    M2 = 1.58 Msun`` is the CR midpoint (not a directly tabulated
+    median).  These are the coordinates Section 1 of grb_main.ipynb
+    annotates as star markers on the BNS panel; a drift means the
+    labelled stars no longer sit inside the published low-spin CRs.
     """
     from grb_io import OBSERVED_GW_EVENTS
 

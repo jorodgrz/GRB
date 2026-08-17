@@ -244,6 +244,12 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
         "delay_bhns": delay_bhns,
         "v_sys_bns": bns_k["v_sys"],
         "v_sys_bhns": bhns["v_sys"],
+        "v_sys_1_bns": bns_k["v_sys_1"],
+        "v_sys_1_bhns": bhns["v_sys_1"],
+        "t_leg1_bns": bns_k["t_sn2"] - bns_k["t_sn1"],
+        "t_leg1_bhns": bhns["t_sn2"] - bhns["t_sn1"],
+        "t_insp_bns": bns_k["t_inspiral"],
+        "t_insp_bhns": bhns["t_inspiral"],
         "m1_bns": m1_bns,
         "m2_bns": m2_bns,
         "BH": BH,
@@ -484,13 +490,15 @@ def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
 
     The notebook Section 10 panel 3 normalises the all-BNS beamed rate
     to the Wanderman-Piran (2015) ``R(z = 0.0)`` and quotes a reduced
-    chi^2 against the WP15 ``R_lo``-``R_hi`` envelope.  Two physical
-    points to keep in mind:
+    chi^2 against the WP15 ``R_rate_lo``-``R_rate_hi`` envelope (Eq. 10
+    internal 1sigma on rho_0, propagated onto the Eq. 9 shape).  Two
+    physical points to keep in mind:
 
-    1. WP15 ``R_lo`` and ``R_hi`` scale ``R0`` only; the *shape* of the
-       envelope is the same double-exponential as ``R_best``.  So
-       ``sigma_wp15 = 0.5 * (R_hi - R_lo)`` carries the same sharp
-       drop-off (sigma_hi = 0.26 above z = 0.9) as the central curve.
+    1. WP15 ``R_rate_lo`` and ``R_rate_hi`` scale ``R0`` only; the
+       *shape* of the envelope is the same double-exponential as
+       ``R_best``.  So ``sigma_wp15 = 0.5 * (R_rate_hi - R_rate_lo)``
+       carries the same sharp drop-off (sigma_hi = 0.26 above z = 0.9)
+       as the central curve.
     2. The model's intrinsic R(z) is broader than the WP15 observed
        R(z): WP15 is luminosity-function- and beaming-folded; our
        model is the intrinsic merger-rate density times a flat
@@ -526,8 +534,8 @@ def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
     r_model_norm = np.interp(residual_z, z_plot, R_bns_beamed_z[z_mask] * norm_factor)
     r_wp15_norm = np.interp(residual_z, z_plot, wp15_Rz["R_best"])
     sigma_wp15 = 0.5 * (
-        np.interp(residual_z, z_plot, wp15_Rz["R_hi"])
-        - np.interp(residual_z, z_plot, wp15_Rz["R_lo"])
+        np.interp(residual_z, z_plot, wp15_Rz["R_rate_hi"])
+        - np.interp(residual_z, z_plot, wp15_Rz["R_rate_lo"])
     )
     chi2_red = float(
         np.sum(((r_model_norm - r_wp15_norm) / sigma_wp15) ** 2) / max(1, len(residual_z) - 1)
@@ -552,59 +560,148 @@ def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Offset CDF KS test (Fong and Berger 2013).
+# Offset CDFs against the Fong et al. 2022 and Skobe et al. 2026 samples.
 # ─────────────────────────────────────────────────────────────────────
-@pytest.mark.requires_data
-@pytest.mark.slow
-def test_offset_cdf_ks_pvalue_lbgrb_above_threshold(notebook_pipeline):
-    """KS test of lbGRB (HMNS) offset CDF vs Fong-Berger 2013 has p > 0.01.
+def _class_offsets(pipe, mask, population="bns"):
+    """Orbit-integrate one class through the Section 8 host mixture.
 
-    Fong and Berger (2013) ApJ 776, 18 Sec. 3 catalogue the projected
-    galactocentric offsets of 22 short-GRB host galaxies (median
-    ~5 kpc).  The notebook Section 9 simulates per-class offset CDFs
-    by orbit-integrating BNS systems through a Hernquist (1990)
-    potential with a 75/25 SF/elliptical host mix and runs a 2-sample
-    KS test against ``OBSERVED_SGRB_OFFSETS_KPC``.
-
-    The lbGRB (HMNS) class -- short delay times, tightly bound to the
-    host -- is the closest analog to the Fong-Berger 2013 sGRB sample
-    (which is afterglow + host selected, biased to systems near the
-    host).  A p-value above 0.01 means the model and observed CDFs
-    are not distinguishable at the 1 percent level; this is the
-    consistency band the notebook caption already targets.
-
-    Reference: Fong and Berger (2013) ApJ 776, 18; grb_offsets.
+    Uses the two-leg kinematics: the binary drifts at the post-SN1 velocity
+    for the SN1-to-SN2 baseline, then at the post-SN2 velocity for the
+    post-DCO inspiral time, so ``t_delay_myr`` here is the inspiral time.
     """
-    from scipy.stats import ks_2samp
+    from grb_offsets import compute_offsets_mixed_hosts
 
-    from grb_offsets import (
-        OBSERVED_SGRB_OFFSETS_KPC,
-        compute_offsets_mixed_hosts,
-    )
-
-    pipe = notebook_pipeline
-    mask = pipe["lbGRB_hmns"]
     if mask.sum() < 100:
-        pytest.skip("not enough lbGRB (HMNS) systems to KS-test")
+        pytest.skip("not enough systems in this class to AD-test")
 
     res = compute_offsets_mixed_hosts(
-        pipe["v_sys_bns"][mask],
-        pipe["delay_bns"][mask],
-        weights=pipe["w_bns"][mask],
+        pipe[f"v_sys_{population}"][mask],
+        pipe[f"t_insp_{population}"][mask],
+        weights=pipe[f"w_{population}"][mask],
+        v_sys_1_km=pipe[f"v_sys_1_{population}"][mask],
+        t_leg1_myr=pipe[f"t_leg1_{population}"][mask],
         max_systems=20000,
     )
-    finite = res["mixed_offsets"][np.isfinite(res["mixed_offsets"])]
-    if finite.size < 10:
+    finite = np.isfinite(res["mixed_offsets"])
+    if finite.sum() < 10:
         pytest.skip("offset integration produced too few finite samples")
+    return res["mixed_offsets"][finite], res["mixed_weights"][finite]
 
-    ks = ks_2samp(finite, OBSERVED_SGRB_OFFSETS_KPC)
-    assert ks.pvalue > 0.01, (
-        f"KS-test p-value of lbGRB (HMNS) offset CDF vs Fong-Berger "
-        f"2013 sample = {ks.pvalue:.4f} (statistic = {ks.statistic:.3f}) "
-        f"is below the 0.01 consistency threshold.  Check the host "
-        f"mixture (HOST_MODELS), Hernquist scale radius, or the "
-        f"v_sys distribution for drift."
+
+@pytest.mark.requires_data
+@pytest.mark.slow
+def test_offset_cdf_ad_pvalue_sgrb_engine_above_threshold(notebook_pipeline):
+    """The short-GRB engine is consistent with the classical short-GRB offsets.
+
+    Notebook Section 8 orbit-integrates BNS systems through a Hernquist
+    (1990) potential with a 75/25 SF/elliptical host mix and compares each
+    class against the observed sample its predicted signature belongs to.
+    ``sbGRB + blue KN`` is the only class that predicts a short burst, so it
+    is the only one entitled to face the classical short-GRB sample: the Fong
+    et al. (2022) BRIGHT catalogue (ApJ 940, 56) less the bursts Skobe et al.
+    (2026) reclassify as merger-driven long.  Comparing an lbGRB class here
+    would test the model against observations it says those systems cannot
+    produce.
+
+    The test mirrors the notebook: a Monte-Carlo-calibrated one-sample
+    Anderson-Darling goodness-of-fit test (``ad_gof_weighted``), which treats
+    the weighted STROOPWAFEL model as the reference distribution and the
+    ~80-burst catalogue as the observed sample, since the model outnumbers the
+    data by a factor of order 1000.  A p-value above 0.01 means the observed
+    offsets are not distinguishable from the model at the 1 percent level.
+    """
+    from grb_offsets import OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC, ad_gof_weighted
+
+    offsets, weights = _class_offsets(notebook_pipeline, notebook_pipeline["sbGRB_blue"])
+    statistic, pvalue = ad_gof_weighted(
+        offsets, OBSERVED_SGRB_OFFSETS_CLASSICAL_KPC, weights=weights
     )
+    assert pvalue > 0.01, (
+        f"One-sample AD p-value of the classical sGRB sample against the "
+        f"sbGRB + blue KN model offset CDF = {pvalue:.4f} (A2 = {statistic:.3f}) "
+        f"is below the 0.01 consistency threshold.  Check the host mixture "
+        f"(HOST_MODELS), the Hernquist scale radius, or the v_sys "
+        f"distribution for drift."
+    )
+
+
+@pytest.mark.requires_data
+@pytest.mark.slow
+def test_lgrb_engines_are_consistent_with_the_kilonova_selected_long_grbs(
+    notebook_pipeline,
+):
+    """The lbGRB classes match the observed long-GRB kilonova offsets.
+
+    Section 8 puts the five lbGRB engines against ``OBSERVED_LGRB_KN_OFFSETS_KPC``
+    (Skobe et al. 2026 Table 2) rather than against the short-GRB samples.  At
+    N = 4 the test has essentially no power, so this pins the weaker claim the
+    notebook actually makes: none of the lbGRB classes is grossly inconsistent
+    with that sample.  A failure here means the predicted offsets have moved far
+    enough that even four events can see it.
+    """
+    from grb_offsets import OBSERVED_LGRB_KN_OFFSETS_KPC, ad_gof_weighted
+
+    pipe = notebook_pipeline
+    lgrb_engines = [
+        (label, pipe["cls24_masks"][label], "bns")
+        for label in ("lbGRB + red KN (HMNS)", "lbGRB + red KN (disk)", "Faint lbGRB")
+    ] + [
+        (label, pipe["bhns_class_masks"][label], "bhns")
+        for label in ("Faint lbGRB (BHNS)", "lbGRB + red KN (BHNS disk)")
+    ]
+
+    for label, mask, population in lgrb_engines:
+        offsets, weights = _class_offsets(pipe, mask, population)
+        _, pvalue = ad_gof_weighted(offsets, OBSERVED_LGRB_KN_OFFSETS_KPC, weights=weights)
+        assert pvalue > 0.05, (
+            f"One-sample AD p-value of the lGRB-KN sample against {label} = "
+            f"{pvalue:.4f}; four events should not be able to reject a class."
+        )
+
+
+@pytest.mark.requires_data
+@pytest.mark.slow
+def test_offset_consistency_depends_on_the_host_association_cut(notebook_pipeline):
+    """The Section 8 verdict depends on which edge of the classical band you read.
+
+    With the two-leg kinematics the sbGRB engine predicts compact offsets
+    (median ~5-6 kpc), so the consistency ordering runs the other way from a
+    wide-tailed model: the model is most consistent with the tight Gold
+    secure-host sample (median 5.1 kpc), marginal against the all-associations
+    catalogue (8.4 kpc), and rejected by the uncertainty-broadened edge (10.9
+    kpc).  Anderson-Darling is tail-weighted, so broadening the observed sample
+    upward is what breaks the comparison.
+
+    The class under test is ``sbGRB + blue KN``, the only one whose predicted
+    signature belongs in the classical short-GRB sample.
+
+    Pinning the monotone ordering (Gold most consistent, broadened least) means
+    a change to the kick or host prescription that alters the offset scale
+    cannot quietly flip the reported consistency.  The Gold curve is a floor,
+    not a preferred comparison: Fong et al. (2022) Sec. 6.2 read its median as a
+    minimum, and the Inconclusive bursts missing from every curve are plausibly
+    wider still (their Sec. 7.1).
+    """
+    from grb_offsets import classical_sgrb_ad_pvalues
+
+    offsets, weights = _class_offsets(notebook_pipeline, notebook_pipeline["sbGRB_blue"])
+    p = classical_sgrb_ad_pvalues(offsets, weights)
+    assert p["p_sampled"] < p["p_observed"] < p["p_gold"], (
+        f"The compact two-leg model should be most consistent with the tight "
+        f"Gold sample and least with the broadened edge, got Gold "
+        f"{p['p_gold']:.4f}, all-associations {p['p_observed']:.4f}, broadened "
+        f"{p['p_sampled']:.4f}."
+    )
+    assert p["p_gold"] > 0.05, (
+        f"The Gold secure-host comparison is expected to be consistent with this "
+        f"class (p = {p['p_gold']:.4f}); if it now rejects, the model's offset "
+        f"scale has shifted and the Section 8 caption needs rewriting."
+    )
+    assert p["p_sampled"] < 0.05, (
+        f"The uncertainty-broadened edge is expected to reject the compact model "
+        f"(p = {p['p_sampled']:.4f})."
+    )
+    assert p["p_sampled_lo"] <= p["p_sampled"] <= p["p_sampled_hi"]
 
 
 # ─────────────────────────────────────────────────────────────────────

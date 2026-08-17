@@ -283,15 +283,18 @@ def test_calibrate_mean_mass_evolved_redshift_step_invariant():
 # Wanderman and Piran (2015) sGRB R(z), MNRAS 448, 3026 -- Eq. (9)
 # ─────────────────────────────────────────────────────────────────────
 def test_wanderman_piran_2015_peak_at_z_peak():
-    """``wanderman_piran_2015_Rz`` returns R0 at z = z_peak (the
-    piecewise-exponential is C^0 there, so both sides give the same
-    value)."""
+    """``wanderman_piran_2015_Rz`` returns R0 = 45 at z = z_peak = 0.9
+    (WP15 Eq. 9 peak; the piecewise-exponential is C^0 there, so both
+    sides give the same value).  The rate 1sigma band scales
+    proportionally to WP15 Eq. 10's internal-only rho_0 = 4.1 +1.8/-1.4;
+    the SFR2 shape systematic coincides with R_best at the peak."""
     from grb_rates import wanderman_piran_2015_Rz
 
     out = wanderman_piran_2015_Rz(np.array([0.9]))
-    assert np.isclose(out["R_best"][0], 4.1)
-    assert np.isclose(out["R_lo"][0], 2.2)
-    assert np.isclose(out["R_hi"][0], 6.4)
+    assert np.isclose(out["R_best"][0], 45.0)
+    assert np.isclose(out["R_rate_lo"][0], 45.0 * 2.7 / 4.1)
+    assert np.isclose(out["R_rate_hi"][0], 45.0 * 5.9 / 4.1)
+    assert np.isclose(out["R_shape_sfr2"][0], 45.0)
 
 
 # ─────────────────────────────────────────────────────────────────────

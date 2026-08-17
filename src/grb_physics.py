@@ -23,12 +23,22 @@ Supernova engine
 The COMPAS simulations (Broekgaarden et al. 2021, all five Tier-1 models
 A, F, G, J, K) use the Fryer et al. (2012) *delayed* supernova
 explosion mechanism (Broekgaarden+ 2021 Table 1; the rapid prescription
-is Model I, a variation).  Both delayed and rapid produce a ~1.7 Msun
-NS gravitational-mass deficit inherited from the Fryer 2012 Eq. 12-13
+is Model I, a variation).  The delayed engine under-populates NS
+gravitational masses from 1.65 to 1.80 Msun and leaves [1.70, 1.76)
+Msun exactly empty, inherited from the Fryer 2012 Eq. 12-13
 baryonic-to-gravitational mass conversion (Broekgaarden+ 2021 footnote
-3); :func:`remap_ns_masses_double_gaussian` and
-:func:`remap_ns_marginal` close this gap by quantile-remapping to the
-Alsing+ 2018 Galactic-NS PDF, following Mandel & Muller (2020).
+3).  The rapid engine does not share the void: Model I populates
+[1.70, 1.76) with 812 systems where Model A has none, so the void is
+specific to the delayed prescription.  Fixing it at the prescription
+level (Mandel & Muller 2020) means re-running COMPAS, which is out of
+scope here, so Model I is the only self-consistent alternative on hand
+and the Section 11.4 engine comparison carries that systematic.
+
+The fiducial mass treatment keeps the raw COMPAS masses under
+:func:`cold_stable_ns_mask`.  :func:`remap_ns_masses_double_gaussian`
+and :func:`remap_ns_marginal` quantile-remap onto the Alsing+ 2018
+Galactic-NS PDF, but they inflate the weight across the deficit rather
+than recovering it, so they enter only as the Section 2b systematic.
 
 Jet efficiency caveat
 ---------------------
@@ -48,6 +58,17 @@ import warnings
 
 import numpy as np
 from scipy.special import erf
+
+# ---------------------------------------------------------------------------
+# Cosmology
+# ---------------------------------------------------------------------------
+# The values pinned by COMPAS ``FastCosmicIntegration`` (Planck 2015, see the
+# module docstring).  They live here as constants so that code converting
+# angular to physical scales (grb_offsets) uses the same numbers the rate
+# integration does rather than re-deriving them from prose.
+H0_PLANCK15 = 67.74  # km/s/Mpc
+OMEGA_M_PLANCK15 = 0.3089
+OMEGA_L_PLANCK15 = 0.6911
 
 # ---------------------------------------------------------------------------
 # Classification thresholds
@@ -375,11 +396,13 @@ def remap_ns_masses_double_gaussian(
 
     The Broekgaarden et al. (2021) COMPAS catalogues use the Fryer
     (2012) *delayed* SN engine (their Table 1; Model A is the fiducial,
-    Model I is the rapid variation).  Both delayed and rapid produce a
-    NS gravitational-mass deficit near 1.7 Msun, inherited from the
+    Model I is the rapid variation).  The delayed engine leaves a NS
+    gravitational-mass deficit near 1.7 Msun, inherited from the
     Fryer (2012) Eq. 12-13 baryonic-to-gravitational mass conversion
     (Broekgaarden+ 2021 footnote 3; see also Mandel & Muller 2020 MNRAS
-    499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  This helper
+    499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  The rapid
+    engine does not, so the deficit is a property of the delayed
+    prescription and not of the conversion alone.  This helper
     performs a weighted, rank-preserving quantile transform from the
     empirical COMPAS NS-mass distribution to the Alsing, Silva & Berti
     (2018) MNRAS 478, 1377 double-Gaussian fit to Galactic NSs:
@@ -472,6 +495,35 @@ def remap_ns_masses_double_gaussian(
     m1_new = np.maximum(m1_remap, m2_remap)
     m2_new = np.minimum(m1_remap, m2_remap)
     return m1_new, m2_new
+
+
+def cold_stable_ns_mask(*component_masses, m_tov=M_TOV):
+    """Boolean mask of systems whose every NS component is cold-stable.
+
+    COMPAS types a remnant as a neutron star up to its own ``M_NS_max``
+    (2.5 Msun for Model A; 2.0 / 3.0 for Models J / K), a run-time
+    configuration knob that is unrelated to, and larger than, the
+    cold-stability limit ``M_TOV = 2.2`` adopted here (Raaijmakers et
+    al. 2021).  A "neutron star" heavier than ``M_TOV`` cannot exist as
+    a cold, non-rotating star under that EOS, so a BNS row containing
+    such a component is not a BNS at all and must leave the sample
+    before classification.  Passing the EOS-specific ``m_tov`` makes the
+    cut move with the equation of state in the Section 2b sweep.
+
+    Accepts one array per component (``m1, m2`` for BNS; a single
+    ``M_NS`` for the BHNS neutron star) and returns the elementwise AND
+    of ``m_i <= m_tov`` across all of them.  All inputs must share one
+    shape.
+    """
+    if not component_masses:
+        raise ValueError("cold_stable_ns_mask needs at least one mass array")
+    arrs = [np.asarray(m, dtype=float) for m in component_masses]
+    mask = np.ones(arrs[0].shape, dtype=bool)
+    for m in arrs:
+        if m.shape != mask.shape:
+            raise ValueError("all component-mass arrays must share one shape")
+        mask &= m <= m_tov
+    return mask
 
 
 # ---------------------------------------------------------------------------

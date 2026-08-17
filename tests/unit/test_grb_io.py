@@ -298,18 +298,25 @@ def test_load_bhns_type_separation(synthetic_bhns_path):
 # ─────────────────────────────────────────────────────────────────────
 # _match_sn_to_dco vectorised join
 # ─────────────────────────────────────────────────────────────────────
-def test_match_sn_to_dco_last_per_seed(synthetic_kicks_bns_path):
-    """Last SN per seed (highest time) must be returned; no warning fires."""
+def test_match_sn_to_dco_returns_paired_sn_states(synthetic_kicks_bns_path):
+    """SN1/SN2 velocities and times are paired per seed; no warning fires.
+
+    ``v_sys_2`` is the later (DCO-forming) supernova and ``v_sys_1`` the
+    earlier one, with ``t_sn1 < t_sn2``.
+    """
     from grb_io import _match_sn_to_dco
 
     path, seeds, expected_last_vsys, _ = synthetic_kicks_bns_path
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         with h5.File(path, "r") as f:
-            vsys = _match_sn_to_dco(f)
+            sn = _match_sn_to_dco(f)
 
-    np.testing.assert_array_equal(vsys, expected_last_vsys)
-    sn_warnings = [w for w in caught if "DCO seeds had no matching SN" in str(w.message)]
+    np.testing.assert_array_equal(sn["v_sys_2"], expected_last_vsys)
+    np.testing.assert_array_equal(sn["v_sys_1"], np.array([10.0, 20.0, 30.0, 40.0]))
+    np.testing.assert_array_equal(sn["t_sn1"], np.full(4, 1.0))
+    np.testing.assert_array_equal(sn["t_sn2"], np.full(4, 2.0))
+    sn_warnings = [w for w in caught if "DCO seeds had no matching" in str(w.message)]
     assert sn_warnings == [], (
         "All seeds matched; unmatched-SN warning should not fire. "
         f"Got: {[str(w.message) for w in sn_warnings]}"
@@ -320,13 +327,14 @@ def test_match_sn_to_dco_warns_on_unmatched(synthetic_kicks_unmatched_path):
     """Unmatched DCO seeds must fire the missing-SN warning."""
     from grb_io import _match_sn_to_dco
 
-    with pytest.warns(UserWarning, match="had no matching SN"):
+    with pytest.warns(UserWarning, match="had no matching supernova pair"):
         with h5.File(synthetic_kicks_unmatched_path, "r") as f:
-            vsys = _match_sn_to_dco(f)
+            sn = _match_sn_to_dco(f)
 
-    # The third row is the orphan seed (999); v_sys must be NaN.
-    assert np.isnan(vsys[2])
-    assert np.isfinite(vsys[0]) and np.isfinite(vsys[1])
+    # The third row is the orphan seed (999); every SN column must be NaN.
+    for key in ("v_sys_1", "v_sys_2", "t_sn1", "t_sn2"):
+        assert np.isnan(sn[key][2])
+        assert np.isfinite(sn[key][0]) and np.isfinite(sn[key][1])
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -553,3 +561,64 @@ def test_all_model_suffixes_registry_order():
     assert ALL_MODEL_SUFFIXES[0] == "A"
     assert set(ALL_MODEL_SUFFIXES) == set(BROEKGAARDEN21_MODELS)
     assert len(ALL_MODEL_SUFFIXES) == len(set(ALL_MODEL_SUFFIXES)) == 20
+
+
+# ─────────────────────────────────────────────────────────────────────
+# filter_systems
+# ─────────────────────────────────────────────────────────────────────
+def _fake_loader_dict():
+    """Minimal loader-shaped dict: five merging systems plus metadata."""
+    n = 5
+    return {
+        "m1": np.array([1.3, 2.4, 1.5, 1.4, 2.6]),
+        "m2": np.array([1.2, 1.3, 1.4, 1.35, 1.3]),
+        "weights": np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
+        "metallicity": np.full(n, 0.01),
+        "delay_time": np.arange(n, dtype=float),
+        "fc_mt_p1": np.arange(n),  # per-channel column must shrink too
+        "n_merging": n,
+        "mask_merging": np.array([True, True, True, True, True, False, False]),
+        "population": "BNS",
+        "model": "A",
+        "ns_max": 2.5,
+    }
+
+
+def test_filter_systems_shrinks_all_per_system_arrays_together():
+    """Every length-n_merging column is subset by the mask, in step."""
+    from grb_io import filter_systems
+
+    d = _fake_loader_dict()
+    mask = np.array([True, False, True, False, True])
+    out = filter_systems(d, mask)
+
+    assert out["n_merging"] == 3
+    for k in ("m1", "m2", "weights", "metallicity", "delay_time", "fc_mt_p1"):
+        assert out[k].shape == (3,), k
+    np.testing.assert_array_equal(out["m1"], np.array([1.3, 1.5, 2.6]))
+    np.testing.assert_array_equal(out["fc_mt_p1"], np.array([0, 2, 4]))
+    # Original dict is untouched (shallow copy semantics).
+    assert d["n_merging"] == 5
+
+
+def test_filter_systems_preserves_scalar_metadata_and_full_mask():
+    """Scalars/strings survive; mask_merging spans the pre-cut catalogue."""
+    from grb_io import filter_systems
+
+    d = _fake_loader_dict()
+    out = filter_systems(d, np.array([True, False, False, False, True]))
+
+    assert out["population"] == "BNS"
+    assert out["model"] == "A"
+    assert out["ns_max"] == 2.5
+    # mask_merging is left at full pre-merger-cut length (7 here).
+    assert out["mask_merging"].shape == d["mask_merging"].shape
+
+
+def test_filter_systems_all_false_gives_empty_arrays():
+    from grb_io import filter_systems
+
+    d = _fake_loader_dict()
+    out = filter_systems(d, np.zeros(5, dtype=bool))
+    assert out["n_merging"] == 0
+    assert out["m1"].shape == (0,)
