@@ -2432,51 +2432,54 @@ def test_lvk_gwtc5_nsbh_min_bh_mass_matches_lvk_2026():
 
 
 def test_logz_max_physical_anchor():
-    """``LOGZ_MAX_PHYSICAL = 0`` (Z <= Zsun) for the Section 5 figure axis.
+    """``LOGZ_MAX_PHYSICAL = 0`` (Z <= Zsun) for the Section 5 binning range.
 
     The COMPAS STROOPWAFEL prior covers Z in [1e-4, 0.03] ~ [0.007, 2.1]
-    Zsun (Broekgaarden et al. 2021, arXiv:2103.02608 Sec. 3.2).
-    Plotting formation efficiency over the full grid produces a
-    high-Z tail dominated by importance-sampling noise rather than
-    physics:
+    Zsun (Broekgaarden et al. 2021, arXiv:2103.02608 Sec. 3.2), and solar
+    is where the yield curves are binned to, not where the star formation
+    or the simulated grid ends.  Two facts fix what the constant may and
+    may not be justified by:
 
-    - Levina et al. (2026, arXiv:2601.20202) Table 1 fits the TNG100-1
-      MSSFR with the Azzalini skew-log-normal (alpha = -1.8801,
-      mu0 = 0.0247).  Integrating the IMF-weighted cosmic
-      star-formation density above Zsun in this fit returns a small
-      single-digit-percent fraction of the total; the mass-metallicity
-      relation truncates the upper Z tail.
-    - Broekgaarden et al. (2021) Fig. 5 shows COMPAS Model A formation
-      efficiency rolling off above Z ~ 0.5 Zsun and crossing 1 percent
-      of the peak by Zsun for most DCO classes.
+    - Under the Levina et al. (2026, arXiv:2601.20202) Table 1 TNG100-1
+      fit (Azzalini skew-log-normal, alpha = -1.8801, mu0 = 0.0247),
+      64.8 percent of z = 0 cosmic star formation sits above Zsun
+      (39.8 percent SFR-weighted over 0 < z < 10), and 28.5 percent sits
+      above the Z = 0.03 grid ceiling.  The truncated range is the
+      majority of local star formation, so this is a display convention
+      and must never be written up as a relevance or noise cut.
+    - Broekgaarden et al. (2021) Sec. 3.3 report the BHNS yield peaking
+      at Z_i ~ Zsun/5 (Z_i ~ 0.003) and being lowest at Z_i >~ Zsun;
+      Broekgaarden et al. (2022) Sec. 3.1 report the NSNS yield staying
+      roughly constant in Z.  Model A here reproduces both: the BHNS
+      native-grid peak lands at Z = 0.00303 and falls to 28 percent of
+      peak at Zsun, while BNS is still at 76 percent of peak there.
 
-    The Section 5 right-edge truncation at LOGZ_MAX_PHYSICAL = 0 keeps
-    the figure on the physically meaningful axis.  A future change that
-    extends the axis above solar must update both the constant and this
-    anchor.
+    A future change that extends the axis above solar must update both
+    the constant and this anchor.
     """
     from grb_rates import LOGZ_MAX_PHYSICAL
 
     assert LOGZ_MAX_PHYSICAL == pytest.approx(0.0, abs=1e-12), (
-        f"LOGZ_MAX_PHYSICAL = {LOGZ_MAX_PHYSICAL} drifted from the "
-        f"Levina+ 2026 / Broekgaarden+ 2021 motivated Zsun truncation; "
-        f"see Section 5 caption in grb_main.ipynb."
+        f"LOGZ_MAX_PHYSICAL = {LOGZ_MAX_PHYSICAL} drifted from the Zsun "
+        f"binning range; see Section 5 caption in grb_main.ipynb."
     )
 
 
 def test_broekgaarden_2021_formation_efficiency_band():
-    """Intensive eta(Z) must land on the Broekgaarden+ 2021 Fig. 5 axis.
+    """Intensive eta(Z) must land on the published formation-yield axis.
 
-    Broekgaarden et al. (2021, arXiv:2103.02608) Fig. 5 shows the COMPAS
-    Model A BNS formation efficiency at order 10^-6 to 10^-5 mergers per
-    Msun across the sub-solar grid, with an integrated (mass-weighted)
-    value of a few x 10^-6 / Msun.  ``formation_efficiency`` reproduces
-    that band only when it divides each bin by the per-metallicity
-    star-forming mass ``mean_mass_evolved * f_i`` (the uniform-in-ln Z
-    sampling prior).  Dividing by the bare scalar total instead would
-    suppress every bin by ~1/f_i (the number of sampled metallicities,
-    ~40 to 120 on the 53-point grid), landing nearly two orders of
-    magnitude too low.
+    The ordinate is Broekgaarden et al. (2021, arXiv:2103.02608) Fig. 5,
+    "number of BHNS mergers with t_delay <= t_H that form per unit star
+    forming mass", and its BNS counterpart is the NSNS panel of
+    Broekgaarden et al. (2022, arXiv:2112.05763) Fig. 1.  Both run at
+    order 10^-6 to 10^-5 mergers per Msun across the sub-solar grid, with
+    an integrated (mass-weighted) value of a few x 10^-6 / Msun.
+    ``formation_efficiency`` reproduces that band only when it divides
+    each bin by the per-metallicity star-forming mass
+    ``mean_mass_evolved * f_i`` (equal mass at every simulated grid
+    point).  Dividing by the bare scalar total instead would suppress
+    every bin by 1/f_i = 53, landing nearly two orders of magnitude too
+    low.
 
     Anchored on representative Model A numbers (total STROOPWAFEL DCO
     weight ~ 1.0e4, published-rate-calibrated mean_mass_evolved ~ 2.8e9
@@ -2502,12 +2505,12 @@ def test_broekgaarden_2021_formation_efficiency_band():
     assert integrated == pytest.approx(w_all.sum() / mean_mass_evolved, rel=1e-9)
     assert 1e-6 < integrated < 1e-5, (
         f"integrated BNS formation efficiency {integrated:.2e} /Msun outside "
-        f"the Broekgaarden+ 2021 Fig. 5 few x 10^-6 band."
+        f"the published few x 10^-6 band."
     )
 
     sub = (grid <= 0.0142) & (total > 0)
     assert np.all((total[sub] > 1e-7) & (total[sub] < 5e-5)), (
-        f"per-Z eta out of the Broekgaarden Fig. 5 band [1e-6, 1e-5]: "
+        f"per-Z eta out of the published band [1e-7, 5e-5]: "
         f"min {total[sub].min():.2e}, max {total[sub].max():.2e} /Msun."
     )
 
@@ -3195,3 +3198,179 @@ def test_pais25_eps_jet_reproduces_gw170817_energy():
 
     E_j = jet_energy_from_disk(1.5e-3)
     assert 1e49 < E_j < 1e50
+
+
+def test_z_sun_matches_asplund_2009_photospheric():
+    """``Z_SUN`` is the Asplund et al. (2009) photospheric metallicity."""
+    from grb_physics import Z_SUN
+
+    assert Z_SUN == pytest.approx(0.0142, abs=1e-5)
+
+
+def test_metallicity_grid_is_the_broekgaarden_2021_table1_design_grid():
+    """The 53-point grid is uniform in log Z, as Broekgaarden+ 2021 Table 1 states.
+
+    Table 1 gives the metallicity range [0.0001, 0.03] "distributed using a
+    uniform grid in log(Z_i) with 53 metallicities", and samples about 10^6
+    binaries at each grid point.  Equal star-forming mass per point follows
+    from that, and is what ``metallicity_prior_mass_fraction`` returns.
+
+    The published values are rounded, most coarsely at the low-Z end, so the
+    check is against the design grid rather than against uniform spacing:
+    consecutive ln Z gaps in the stored values differ by a factor 2.54, which
+    is rounding and not a real non-uniformity.
+    """
+    from grb_io import METALLICITY_GRID
+    from grb_rates import GRID_LOG_UNIFORM_RTOL, metallicity_prior_mass_fraction
+
+    grid = np.unique(METALLICITY_GRID)
+    assert grid.size == 53
+    assert grid.min() == pytest.approx(1e-4)
+    assert grid.max() == pytest.approx(0.03)
+
+    design = np.geomspace(grid.min(), grid.max(), grid.size)
+    assert np.abs(grid / design - 1.0).max() == pytest.approx(0.036, abs=0.005)
+    np.testing.assert_allclose(grid, design, rtol=GRID_LOG_UNIFORM_RTOL)
+
+    # Rounding, not physics: the stored spacings are far from uniform even
+    # though the design grid is.
+    gaps = np.diff(np.log(grid))
+    assert gaps.max() / gaps.min() == pytest.approx(2.54, rel=0.02)
+
+    f = metallicity_prior_mass_fraction(grid)
+    np.testing.assert_allclose(f, 1.0 / grid.size, rtol=1e-12)
+
+
+def test_ce_lambda_bifurcation_matches_broekgaarden_2022_fig1():
+    """``Z_CE_LAMBDA_BIFURCATION`` is the Broekgaarden+ 2022 Fig. 1 artefact Z.
+
+    Their Fig. 1 caption puts the artificial yield jump, from a bifurcation
+    in the COMPAS common-envelope lambda values, at Z ~ 0.0105.  It has to
+    sit strictly inside the simulated metallicity grid and below solar, or
+    the Section 5 cut would either remove everything or nothing.
+    """
+    from grb_io import METALLICITY_GRID
+    from grb_physics import Z_SUN
+    from grb_rates import Z_CE_LAMBDA_BIFURCATION
+
+    assert Z_CE_LAMBDA_BIFURCATION == pytest.approx(0.0105, abs=1e-5)
+    assert METALLICITY_GRID.min() < Z_CE_LAMBDA_BIFURCATION < Z_SUN
+    # The cut has to separate the two grid points the step falls between,
+    # otherwise it lands in the middle of a native bin.
+    grid = np.unique(METALLICITY_GRID)
+    below = grid[grid < Z_CE_LAMBDA_BIFURCATION].max()
+    above = grid[grid > Z_CE_LAMBDA_BIFURCATION].min()
+    assert below == pytest.approx(0.01018, rel=1e-3)
+    assert above == pytest.approx(0.01137, rel=1e-3)
+
+
+def test_gehrels86_poisson_interval_reproduces_the_published_tables():
+    """``gehrels86_poisson_interval`` matches Gehrels (1986) at ``S = 1``.
+
+    Their Table 1 (upper) and Table 2 (lower) one-sigma limits for small n.
+    The n = 0 upper limit is the value already pinned as
+    ``GEHRELS86_UL_ZERO_COUNTS``, so the two treatments of an empty bin and
+    of a nearly-empty one meet at n = 0 instead of jumping.
+    """
+    from grb_rates import (
+        GEHRELS86_ONE_SIGMA_TAIL,
+        GEHRELS86_UL_ZERO_COUNTS,
+        gehrels86_poisson_interval,
+    )
+
+    # The S = 1 column is the one-sided normal tail, which Gehrels rounds to
+    # 84.13 per cent in the table headers.
+    assert GEHRELS86_ONE_SIGMA_TAIL == pytest.approx(1.0 - 0.8413, abs=1e-4)
+
+    n = np.array([0.0, 1.0, 2.0, 3.0, 5.0, 10.0])
+    lo, hi = gehrels86_poisson_interval(n)
+    np.testing.assert_allclose(hi, [1.841, 3.300, 4.638, 5.918, 8.382, 14.267], rtol=1e-3)
+    np.testing.assert_allclose(lo[1:], [0.173, 0.708, 1.367, 2.840, 6.891], rtol=2e-3)
+    assert hi[0] == pytest.approx(GEHRELS86_UL_ZERO_COUNTS, rel=1e-3)
+
+    # Gaussian limit: both bounds go to sqrt(n) for large n, which is what
+    # makes the asymmetric bar a generalisation of sqrt(sum w^2) and not a
+    # different estimator.
+    big = np.array([1.0e4])
+    lo_b, hi_b = gehrels86_poisson_interval(big)
+    assert (hi_b[0] - big[0]) / np.sqrt(big[0]) == pytest.approx(1.0, rel=0.02)
+    assert (big[0] - lo_b[0]) / np.sqrt(big[0]) == pytest.approx(1.0, rel=0.02)
+
+
+@pytest.mark.requires_data
+def test_ce_lambda_bifurcation_is_visible_in_the_compas_lambda_column(bns_a_path):
+    """The CE-lambda artefact is in the data, not only in a caption.
+
+    Broekgaarden+ 2022 Fig. 1 attribute the yield step near Z = 0.0105 to
+    "an artificial bifurcation in our lambda values for the common-envelope
+    treatment in COMPAS at this Z", without saying what the lambda values do.
+    Every Section 5 / 5b caveat and the shaded band rest on that claim, so it
+    is checked against the stored lambda column instead of taken on trust.
+
+    Model A adopts the Nanjing prescription.  Read the step off ``lambda1``
+    only after dropping the events where star 1 has no envelope to unbind:
+    there ``lambda1`` is exactly 1.0 as a default, and the share of such events
+    jumps from 0.3 to 63 per cent across the step, so a median over the raw
+    column tracks which star is the donor rather than the prescription.
+    Restricted to real donors the median lambda falls by a factor 3 and the
+    median envelope binding energy rises by a factor 4, which is the direction
+    Broekgaarden+ 2022 Sec. 3.1 describe: more orbital energy is needed to
+    unbind the envelope above Z = 0.0105.
+    """
+    import h5py
+
+    from grb_rates import Z_CE_LAMBDA_BIFURCATION
+
+    with h5py.File(bns_a_path, "r") as f:
+        ce = f["commonEnvelopes"]
+        lam = ce["lambda1"][...].squeeze()
+        lam_nanjing = ce["lambdaNanjing1"][...].squeeze()
+        m_env = ce["massEnvelope1"][...].squeeze()
+        binding = ce["bindingEnergy1"][...].squeeze()
+        seed = ce["randomSeed"][...].squeeze()
+        sys_seed = f["systems"]["SEED"][...].squeeze()
+        sys_Z = f["systems"]["Metallicity1"][...].squeeze()
+
+    live = np.isfinite(lam) & (lam > 0)
+    assert np.isclose(lam[live], lam_nanjing[live]).all(), (
+        "Model A is expected to adopt lambda_Nanjing; a different prescription "
+        "would change what the artefact is"
+    )
+    # lambda1 == 1.0 is the no-envelope default, not a fitted lambda.
+    clamped = np.isclose(lam, 1.0)
+    assert (m_env[clamped] == 0).all()
+    assert (binding[clamped] == 0).all()
+    assert (m_env[~clamped] > 0).all()
+
+    uniq, first = np.unique(sys_seed, return_index=True)
+    Z = sys_Z[first[np.clip(np.searchsorted(uniq, seed), 0, uniq.size - 1)]]
+
+    grid = np.unique(Z)
+    below = grid[grid < Z_CE_LAMBDA_BIFURCATION].max()
+    above = grid[grid > Z_CE_LAMBDA_BIFURCATION].min()
+    assert below == pytest.approx(0.01018, rel=1e-3)
+    assert above == pytest.approx(0.01137, rel=1e-3)
+
+    donor = live & (m_env > 0)
+    at_below = donor & np.isclose(Z, below, rtol=1e-4)
+    at_above = donor & np.isclose(Z, above, rtol=1e-4)
+
+    # Donor composition itself steps at the branch, which is why the cut matters.
+    frac_below = float((~clamped)[np.isclose(Z, below, rtol=1e-4)].mean())
+    frac_above = float((~clamped)[np.isclose(Z, above, rtol=1e-4)].mean())
+    assert frac_below == pytest.approx(0.997, abs=0.01)
+    assert frac_above == pytest.approx(0.369, abs=0.01)
+
+    med_below = float(np.median(lam[at_below]))
+    med_above = float(np.median(lam[at_above]))
+    assert med_below == pytest.approx(0.387, rel=0.02)
+    assert med_above == pytest.approx(0.125, rel=0.02)
+    assert med_below / med_above > 2.0, "the bifurcation has to be a step, not a drift"
+
+    # A lower lambda is a more tightly bound envelope, so the binding energy
+    # has to move the other way for the Broekgaarden+ 2022 mechanism to hold.
+    be_below = float(np.median(binding[at_below]))
+    be_above = float(np.median(binding[at_above]))
+    assert be_below == pytest.approx(1.10e48, rel=0.02)
+    assert be_above == pytest.approx(4.31e48, rel=0.02)
+    assert be_above / be_below > 2.0

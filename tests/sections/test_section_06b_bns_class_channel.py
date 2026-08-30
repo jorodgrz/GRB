@@ -68,24 +68,24 @@ _CHANNEL_KEYS = [
 # Channel II is empty for BNS by the Broekgaarden+ 2022 CE picture)
 # and are handled by ``_assert_pinned`` with a 1e-3 absolute tolerance.
 _R0_PINS_BNS = {
-    ("sbGRB + blue KN", "I  Stable MT + CE"): 16.6365,
+    ("sbGRB + blue KN", "I  Stable MT + CE"): 16.6084,
     ("sbGRB + blue KN", "II  Stable MT only"): 0.0,
-    ("sbGRB + blue KN", "III Single-core CE"): 0.0,
+    ("sbGRB + blue KN", "III Single-core CE"): 0.028077,
     ("sbGRB + blue KN", "IV  Double-core CE"): 5.14727,
     ("sbGRB + blue KN", "V   Other"): 0.0,
-    ("lbGRB + red KN (HMNS)", "I  Stable MT + CE"): 3.93932,
+    ("lbGRB + red KN (HMNS)", "I  Stable MT + CE"): 3.92732,
     ("lbGRB + red KN (HMNS)", "II  Stable MT only"): 0.0,
-    ("lbGRB + red KN (HMNS)", "III Single-core CE"): 0.0,
+    ("lbGRB + red KN (HMNS)", "III Single-core CE"): 0.0119975,
     ("lbGRB + red KN (HMNS)", "IV  Double-core CE"): 15.8076,
     ("lbGRB + red KN (HMNS)", "V   Other"): 0.0,
-    ("lbGRB + red KN (disk)", "I  Stable MT + CE"): 0.871183,
+    ("lbGRB + red KN (disk)", "I  Stable MT + CE"): 0.86822,
     ("lbGRB + red KN (disk)", "II  Stable MT only"): 0.0,
-    ("lbGRB + red KN (disk)", "III Single-core CE"): 0.0,
+    ("lbGRB + red KN (disk)", "III Single-core CE"): 0.00296254,
     ("lbGRB + red KN (disk)", "IV  Double-core CE"): 0.488862,
     ("lbGRB + red KN (disk)", "V   Other"): 0.0,
-    ("Faint lbGRB", "I  Stable MT + CE"): 0.531779,
+    ("Faint lbGRB", "I  Stable MT + CE"): 0.527406,
     ("Faint lbGRB", "II  Stable MT only"): 0.0,
-    ("Faint lbGRB", "III Single-core CE"): 0.0,
+    ("Faint lbGRB", "III Single-core CE"): 0.00437286,
     ("Faint lbGRB", "IV  Double-core CE"): 11.5617,
     ("Faint lbGRB", "V   Other"): 0.0,
 }
@@ -137,6 +137,8 @@ def _build_per_cell_rates(mod):
         fc_mt_p1=bns["fc_mt_p1"],
         fc_mt_s1=bns["fc_mt_s1"],
         fc_mt_p1_K1=bns["fc_mt_p1_K1"],
+        fc_mt_p1_K2=bns["fc_mt_p1_K2"],
+        fc_mt_s1_K1=bns["fc_mt_s1_K1"],
         fc_mt_s1_K2=bns["fc_mt_s1_K2"],
     )
 

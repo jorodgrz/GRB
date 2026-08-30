@@ -76,6 +76,8 @@ def _channels(d: dict) -> dict:
         fc_mt_p1=d["fc_mt_p1"],
         fc_mt_s1=d["fc_mt_s1"],
         fc_mt_p1_K1=d["fc_mt_p1_K1"],
+        fc_mt_p1_K2=d["fc_mt_p1_K2"],
+        fc_mt_s1_K1=d["fc_mt_s1_K1"],
         fc_mt_s1_K2=d["fc_mt_s1_K2"],
     )
 
@@ -152,3 +154,58 @@ def test_section_05b_bhns_coarse_bin_additivity(bhns_a_path):
     _assert_coarse_channels_sum_to_class(
         bhns["metallicity"], bhns["weights"], class_masks, _channels(bhns)
     )
+
+
+@pytest.mark.requires_data
+def test_section_05b_needs_the_pooling_section_5_dropped(bns_a_path):
+    """5b pools to 18 bins where Section 5 draws the native 53-point grid.
+
+    Section 5 splits only by GRB class and keeps a few hundred systems at a
+    typical simulated metallicity, so it draws the grid as Broekgaarden+
+    2022 Fig. 1 does.  5b intersects each class with a formation channel,
+    and the sparse channels stop being curves at that resolution.  Pin the
+    asymmetry so the two sections are not "unified" back onto one binning
+    without someone rereading this: at native resolution the sparse
+    class-channel combinations are empty over much of the grid, and pooling
+    to 18 reduces that everywhere.
+    """
+    from grb_io import filter_systems
+    from grb_physics import M_TOV, cold_stable_ns_mask
+    from grb_rates import formation_efficiency_binned
+
+    bns = load_bns_with_channels(bns_a_path, expected_model="A", expected_ns_max=2.5)
+    bns = filter_systems(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
+    cls = classify_bns_2024(bns["m1"], bns["m2"])
+    ch = _channels(bns)
+    grid = np.asarray(METALLICITY_GRID, dtype=float)
+    grid = grid[np.concatenate(([True], np.diff(grid) != 0))]
+
+    masks = {
+        f"{cname} x {chname.split()[0]}": np.asarray(cmask, bool) & np.asarray(chmask, bool)
+        for cname, cmask in cls.items()
+        for chname, chmask in ch.items()
+        if (np.asarray(cmask, bool) & np.asarray(chmask, bool)).any()
+    }
+    empty = {}
+    for n_bins in (grid.size, 18):
+        res = formation_efficiency_binned(
+            grid,
+            bns["metallicity"],
+            bns["weights"],
+            masks,
+            mean_mass_evolved=1e9,
+            n_bins=n_bins,
+            n_min=0,
+            ess_min=0.0,
+        )
+        empty[n_bins] = {k: int((res["n_raw"][k] == 0).sum()) / n_bins for k in masks}
+
+    shattered = [k for k in masks if empty[grid.size][k] >= 0.2]
+    assert len(shattered) >= 4, (
+        f"only {len(shattered)} class-channel combinations are empty over 20 percent "
+        "of the native grid, so 5b may no longer need the pooling Section 5 dropped."
+    )
+    for k in masks:
+        assert empty[18][k] <= empty[grid.size][k], (
+            f"{k}: pooling to 18 did not reduce the empty fraction"
+        )

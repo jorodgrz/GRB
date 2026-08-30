@@ -476,20 +476,31 @@ def test_classify_grid_a_bh_shifts_bhns_partition():
 def _channel_synthetic_table():
     """Six-row hand-built table covering all five Broekgaarden channels.
 
-    Row 0: dblCE = 1 + CE + MT -> IV (priority).
-    Row 1: stable MT first, CE later -> I.
+    Ordinals follow the COMPAS event counter as the Broekgaarden files write
+    it: the common envelope is logged one event after the RLOF episode that
+    went unstable, so a CE that *is* the first mass transfer sits at
+    ``fc_CEE = first RLOF + 1``.
+
+    Row 0: double-core CE as the first mass transfer -> IV.
+    Row 1: stable MT at event 1, CE on the secondary's episode -> I.
     Row 2: stable MT only, no CE -> II.
-    Row 3: CE first, stable MT later -> III.
-    Row 4: dblCE = 1 only -> IV.
+    Row 3: single-core CE as the first mass transfer -> III.
+    Row 4: dblCE = 1 but a stable MT came first -> I, since Broekgaarden+ 2021
+           Sec. 3.1.4 defines IV as double-core CE *as first mass transfer*.
     Row 5: no MT, no CE, no dblCE -> V.
     """
     return dict(
         dblCE=np.array([1, 0, 0, 0, 1, 0]),
-        fc_CEE=np.array([5.0, 5.0, 0.0, 2.0, 0.0, 0.0]),
-        fc_mt_p1=np.array([3.0, 3.0, 4.0, 4.0, 0.0, 0.0]),
-        fc_mt_s1=np.array([0.0, 0.0, 0.0, 6.0, 0.0, 0.0]),
-        fc_mt_p1_K1=np.array([0, 0, 0, 0, 0, 0]),
-        fc_mt_s1_K2=np.array([0, 0, 0, 0, 0, 0]),
+        fc_CEE=np.array([2, 4, 0, 2, 4, 0]),
+        fc_mt_p1=np.array([1, 1, 1, 1, 1, 0]),
+        fc_mt_s1=np.array([0, 3, 3, 4, 3, 0]),
+        # Hurley types at the first RLOF.  Row 1 and 4 use a Hertzsprung-gap
+        # donor (2), which transfers stably; rows 0 and 3 use a core-helium
+        # burning donor (4).  Row 5 never transfers.
+        fc_mt_p1_K1=np.array([4, 2, 2, 4, 2, 0]),
+        fc_mt_p1_K2=np.array([4, 1, 1, 1, 1, 0]),
+        fc_mt_s1_K1=np.array([0, 13, 13, 13, 13, 0]),
+        fc_mt_s1_K2=np.array([0, 4, 4, 4, 4, 0]),
     )
 
 
@@ -506,16 +517,17 @@ def test_classify_formation_channels_partition_is_exclusive_and_complete():
     assert (counts == 1).all(), f"Channel partition broken: per-row counts = {counts.tolist()}"
 
 
-def test_dblCE_priority_routes_to_channel_IV():
-    """A system with ``dblCE = 1`` always lands in Channel IV.
+def test_dblCE_routes_to_channel_IV_only_when_the_CE_is_the_first_mass_transfer():
+    """``dblCE = 1`` is necessary but not sufficient for Channel IV.
 
-    Broekgaarden+ 2021 Sec. 5: double-core CE is a distinct channel
-    that is checked first; the implementation enforces this priority
-    by computing ``ch_IV = dblCE == 1`` before any other channel.
+    Broekgaarden+ 2021 Sec. 3.1.4 defines IV as a double-core CE *as first
+    mass transfer*.  Row 0 satisfies both; row 4 carries the same flag behind
+    an earlier stable MT and so belongs to the classic channel I.
     """
     out = classify_formation_channels(**_channel_synthetic_table())
-    for i in (0, 4):
-        assert bool(out["IV  Double-core CE"][i]), i
+    assert bool(out["IV  Double-core CE"][0])
+    assert bool(out["I  Stable MT + CE"][4])
+    assert not bool(out["IV  Double-core CE"][4])
 
 
 def test_no_mt_and_no_ce_routes_to_channel_V():
@@ -534,21 +546,23 @@ def test_channel_II_when_stable_mt_and_no_ce():
     assert bool(out["II  Stable MT only"][2])
 
 
-def test_channel_III_when_ce_precedes_stable_mt():
-    """CE before stable MT lands in Channel III (Single-core CE).
+def test_channel_III_when_the_first_mass_transfer_is_the_ce():
+    """A single-core CE as the first mass transfer lands in Channel III.
 
-    Row 3: ``fc_CEE = 2 < fc_mt_p1 = 4``, so the CE fires first.
-    The cascade routes it to III rather than I.
+    Row 3: the first RLOF is at event 1 and ``fc_CEE = 2``, so that episode
+    is the one that went unstable.  ``dblCE = 0`` makes it single-core.
+    An implementation that tests ``fc_CEE < fc_mt_p1`` never fires here,
+    because COMPAS logs the CE after the RLOF, and empties III into I.
     """
     out = classify_formation_channels(**_channel_synthetic_table())
     assert bool(out["III Single-core CE"][3])
 
 
-def test_channel_I_when_stable_mt_precedes_ce():
-    """Stable MT before CE lands in Channel I (Stable MT + CE).
+def test_channel_I_when_a_stable_mt_precedes_the_ce():
+    """Stable MT before the CE lands in Channel I (Stable MT + CE).
 
-    Row 1: ``fc_mt_p1 = 3 < fc_CEE = 5``, so the stable MT fires
-    first.  The cascade routes it to I rather than III.
+    Row 1: the first RLOF is at event 1 but the CE sits at event 4, on the
+    secondary's episode at event 3, so the first mass transfer was stable.
     """
     out = classify_formation_channels(**_channel_synthetic_table())
     assert bool(out["I  Stable MT + CE"][1])

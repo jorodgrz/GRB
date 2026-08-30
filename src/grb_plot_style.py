@@ -126,8 +126,8 @@ MODEL_LINESTYLES: dict[str, object] = {
 
 # Broekgaarden+ 2021 formation channels I-V (Sec. 4, Fig. 9).  Fixed once and
 # reused wherever a figure splits a population by channel, so a reader tracks
-# a channel across panels by colour.  Channels III and V are empty in the BNS
-# and BHNS samples but are kept here so the mapping is complete and stable.
+# a channel across panels by colour.  Channel V is empty in every model of the
+# grid but is kept here so the mapping is complete and stable.
 C_CHANNEL_I: str = "#3B82F6"
 """Channel I: classic isolated binary (stable MT then CE)."""
 
@@ -373,3 +373,180 @@ def weighted_hist_pdf_per_dex(
         fill[last + 2 :] = False
         out[fill] = zero_fill
     return out
+
+
+def plot_gated_curve(
+    ax,
+    x,
+    y,
+    ok,
+    color,
+    ls="-",
+    label=None,
+    lw=1.1,
+    ms=2.5,
+    marker="o",
+    yerr=None,
+    n_raw=None,
+    y_ul=None,
+    artifact=None,
+    faded_alpha=0.35,
+    alpha=1.0,
+):
+    """Draw ``y(x)`` over a quality gate, showing every bin the sample has.
+
+    The gate (``ok``) sets how a bin is drawn, never whether it appears.
+    Four states, matching what ``grb_rates.formation_efficiency_binned``
+    returns:
+
+    ``ok``
+        filled marker joined by a solid line, the well-measured curve.
+        ``marker`` sets the shape, which is how two curves sharing a
+        colour stay separable once the points are dense enough to hide
+        the linestyle.
+    ``~ok`` with ``n_raw > 0``
+        measured but imprecise: open marker with no connecting line, so it
+        reads as a point estimate rather than as part of the curve.
+        ``yerr`` is optional and adds a 1-sigma bar to that marker; without
+        it the open marker carries the sample-support statement alone.  It
+        may be a 1-D symmetric bar or a ``(2, N)`` [lower, upper] pair; on a
+        log ordinate the asymmetric form is the honest one for a bin holding
+        a few systems, since the symmetric bar reaches below zero.
+    ``n_raw == 0``
+        the subset produces nothing in this bin, which a log ordinate
+        cannot show as a value.  Drawn as a downward-arrow upper limit at
+        ``y_ul`` so an exact zero is distinguishable from an unmeasured bin.
+    ``artifact``
+        bins the caller has flagged as simulation artefact rather than
+        physics.  Rendered at ``faded_alpha`` in whichever of the three
+        states above applies, keeping the curve's own linestyle, so the
+        reader sees the values and their provenance at once without two
+        same-coloured classes merging.  The segment joining a flagged point
+        to an unflagged neighbour is drawn in the faded style, so a step at
+        the flag boundary reads as a step rather than as a gap in the data.
+        ``alpha`` scales the whole curve, for a reference envelope that
+        should not compete with the classes.
+
+    Passing only the original arguments reproduces the plain gated curve.
+    Returns the Line2D list of the main curve, so the caller's legend
+    handling is unchanged.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    ok = np.asarray(ok, dtype=bool)
+    art = np.zeros_like(ok) if artifact is None else np.asarray(artifact, dtype=bool)
+    n = None if n_raw is None else np.asarray(n_raw)
+
+    drawable = np.isfinite(y) & (y > 0)
+    solid = ok & drawable & ~art
+    faded = ok & drawable & art
+
+    handle = ax.plot(
+        x,
+        np.where(solid, y, np.nan),
+        color=color,
+        ls=ls,
+        lw=lw,
+        marker=marker,
+        ms=ms,
+        alpha=alpha,
+        label=label,
+    )
+    if faded.any():
+        # Keep the caller's linestyle here.  Overriding it with a dash made
+        # two curves that share a colour and differ only by linestyle (the
+        # two lbGRB + red KN classes) collapse onto each other inside the
+        # flagged range, which on the Section 5 panel is a fifth of the BNS
+        # weight.  Provenance is carried by the alpha and by the caller's
+        # shaded band instead.
+        ax.plot(
+            x,
+            np.where(faded, y, np.nan),
+            color=color,
+            ls=ls,
+            lw=lw,
+            marker=marker,
+            ms=ms,
+            alpha=faded_alpha * alpha,
+            zorder=1,
+        )
+
+        # The solid and faded runs are two separate series, so the one segment
+        # that spans the state change belongs to neither and the curve reads as
+        # broken right at the flag boundary.  On the Section 5 panel that is
+        # the CE-lambda step itself, the feature the shaded band exists to
+        # show, and a gap there reads as missing data rather than as a jump.
+        # Bridge each crossing with a line-only segment in the faded style;
+        # NaN separators keep it to one artist however many crossings there
+        # are, and no marker is drawn so neither endpoint is doubled.
+        cross = np.flatnonzero((solid[:-1] & faded[1:]) | (faded[:-1] & solid[1:]))
+        if cross.size:
+            xb = np.full(3 * cross.size, np.nan)
+            yb = np.full(3 * cross.size, np.nan)
+            xb[0::3], xb[1::3] = x[cross], x[cross + 1]
+            yb[0::3], yb[1::3] = y[cross], y[cross + 1]
+            ax.plot(
+                xb,
+                yb,
+                color=color,
+                ls=ls,
+                lw=lw,
+                alpha=faded_alpha * alpha,
+                zorder=1,
+            )
+
+    # Measured but below the precision gate.  Drawn whether or not the caller
+    # supplies an uncertainty: the open marker is a statement about how many
+    # systems back the bin, which stands on its own.
+    if n is not None:
+        # A (2, N) yerr is the asymmetric [lower, upper] pair; a 1-D yerr is
+        # the symmetric bar.  Matplotlib wants the asymmetric form as (2, k)
+        # after the subset, so index the columns rather than the rows.
+        err = None if yerr is None else np.asarray(yerr, dtype=float)
+        thin = (~ok) & drawable & (n > 0)
+        for sub, a in ((thin & ~art, alpha), (thin & art, faded_alpha * alpha)):
+            if not sub.any():
+                continue
+            if err is None:
+                bar = None
+            else:
+                bar = err[:, sub] if err.ndim == 2 else err[sub]
+            ax.errorbar(
+                x[sub],
+                y[sub],
+                yerr=bar,
+                fmt=marker,
+                ms=ms,
+                mfc="none",
+                mec=color,
+                ecolor=color,
+                elinewidth=0.7,
+                capsize=1.5,
+                ls="none",
+                alpha=a,
+                zorder=1,
+            )
+
+    # Exact zeros, as upper limits.
+    if y_ul is not None and n is not None:
+        ul = np.asarray(y_ul, dtype=float)
+        empty = (n == 0) & np.isfinite(ul) & (ul > 0)
+        for sub, a in ((empty & ~art, alpha), (empty & art, faded_alpha * alpha)):
+            if not sub.any():
+                continue
+            container = ax.errorbar(
+                x[sub],
+                ul[sub],
+                yerr=ul[sub] * 0.30,
+                uplims=True,
+                fmt="none",
+                ecolor=color,
+                elinewidth=0.7,
+                alpha=a,
+                zorder=1,
+            )
+            # matplotlib draws the uplims caret at the default marker size,
+            # which swamps the data markers on a crowded panel.
+            for cap in container.lines[1]:
+                cap.set_markersize(ms * 1.6)
+    return handle

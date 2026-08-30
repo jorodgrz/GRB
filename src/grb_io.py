@@ -298,7 +298,7 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
     Returns the same dict as load_bns, plus additional keys for the
     formation-channel classification:
         'dblCE', 'fc_CEE', 'fc_mt_p1', 'fc_mt_s1',
-        'fc_mt_p1_K1', 'fc_mt_s1_K2',
+        'fc_mt_p1_K1', 'fc_mt_p1_K2', 'fc_mt_s1_K1', 'fc_mt_s1_K2',
         'm1zams', 'm2zams', 'sep_preCE', 'sep_postCE'
 
     ``expected_model`` / ``expected_ns_max`` behave as in ``load_bns``.
@@ -330,7 +330,9 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
         fc_seed = fc["m_randomSeed"][...].squeeze()
         fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
         fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
+        fc_mt_p1_K2 = fc["mt_primary_ep1_K2"][...].squeeze()
         fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
+        fc_mt_s1_K1 = fc["mt_secondary_ep1_K1"][...].squeeze()
         fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
         fc_CEE = fc["CEE"][...].squeeze()
 
@@ -339,7 +341,9 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
     _fc_row = _fc_to_dco_index(fc_seed, dco_seed, path)
     fc_mt_p1 = fc_mt_p1[_fc_row]
     fc_mt_p1_K1 = fc_mt_p1_K1[_fc_row]
+    fc_mt_p1_K2 = fc_mt_p1_K2[_fc_row]
     fc_mt_s1 = fc_mt_s1[_fc_row]
+    fc_mt_s1_K1 = fc_mt_s1_K1[_fc_row]
     fc_mt_s1_K2 = fc_mt_s1_K2[_fc_row]
     fc_CEE = fc_CEE[_fc_row]
 
@@ -379,7 +383,9 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
         "sep_postCE": sep_post[mask],
         "fc_mt_p1": fc_mt_p1[mask],
         "fc_mt_p1_K1": fc_mt_p1_K1[mask],
+        "fc_mt_p1_K2": fc_mt_p1_K2[mask],
         "fc_mt_s1": fc_mt_s1[mask],
+        "fc_mt_s1_K1": fc_mt_s1_K1[mask],
         "fc_mt_s1_K2": fc_mt_s1_K2[mask],
         "fc_CEE": fc_CEE[mask],
         "population": "BNS",
@@ -497,7 +503,9 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
         fc_seed = fc["m_randomSeed"][...].squeeze()
         fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
         fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
+        fc_mt_p1_K2 = fc["mt_primary_ep1_K2"][...].squeeze()
         fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
+        fc_mt_s1_K1 = fc["mt_secondary_ep1_K1"][...].squeeze()
         fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
         fc_CEE = fc["CEE"][...].squeeze()
 
@@ -506,7 +514,9 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
     _fc_row = _fc_to_dco_index(fc_seed, dco_seed, path)
     fc_mt_p1 = fc_mt_p1[_fc_row]
     fc_mt_p1_K1 = fc_mt_p1_K1[_fc_row]
+    fc_mt_p1_K2 = fc_mt_p1_K2[_fc_row]
     fc_mt_s1 = fc_mt_s1[_fc_row]
+    fc_mt_s1_K1 = fc_mt_s1_K1[_fc_row]
     fc_mt_s1_K2 = fc_mt_s1_K2[_fc_row]
     fc_CEE = fc_CEE[_fc_row]
 
@@ -533,7 +543,9 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
         "sep_preCE": sep_pre[mask],
         "fc_mt_p1": fc_mt_p1[mask],
         "fc_mt_p1_K1": fc_mt_p1_K1[mask],
+        "fc_mt_p1_K2": fc_mt_p1_K2[mask],
         "fc_mt_s1": fc_mt_s1[mask],
+        "fc_mt_s1_K1": fc_mt_s1_K1[mask],
         "fc_mt_s1_K2": fc_mt_s1_K2[mask],
         "fc_CEE": fc_CEE[mask],
         "population": "BHNS",

@@ -86,12 +86,13 @@ is not burst duration but the merger remnant: a hyper-massive neutron star
 binary evolution. We test it by classifying 20 population-synthesis models by
 central engine, weighting every statistic by the simulations' importance
 weights, and integrating each class's metallicity-dependent merger rate to
-$z = 10$. In the fiducial model, long-duration engines account for $76\%$ of
-the binary neutron star (BNS) population against a $24\%$ short-duration,
-blue-kilonova minority, and three-quarters of black hole neutron star (BHNS)
+$z = 10$. In the fiducial model the binary neutron star (BNS) engine mix is
+close to even, long-duration engines taking $53\%$ of the weighted population
+against a $47\%$ short-duration, blue-kilonova class that nonetheless supplies
+$65\%$ of the local merger rate, and $82\%$ of black hole neutron star (BHNS)
 mergers swallow the neutron star and produce no burst. The intrinsic local BNS
-rate, $55\,\Gpcyr$, is consistent with GWTC-5.0; the BHNS rate, $84.5\,\Gpcyr$,
-exceeds the NSBH $90\%$ credible region by a factor of $\sim 2.6$. The observed
+rate, $54\,\Gpcyr$, is consistent with GWTC-5.0; the BHNS rate, $74\,\Gpcyr$,
+exceeds the NSBH $90\%$ credible region by a factor of $\sim 2.3$. The observed
 kilonova-bearing bursts invert the naive duration-to-engine mapping: the ejecta
 of the long-duration events are consistent with a black-hole-disk origin, while
 the short-duration events carry $1.65$ dex (a factor of $\sim 45$) more ejecta
@@ -567,10 +568,19 @@ history with the per-system formation efficiency,
 following \citet[their Eq.~1]{neijssel2019}, where the sum runs over \compas\
 systems $i$ with STROOPWAFEL weight $w_i$ and birth metallicity $Z_i$, the
 formation redshift $z_f$ is fixed by the system delay time $t_{d,i}$ through
-$t(z_f) = t(z_m) - t_{d,i}$, and $p_{\rm draw}$ is the metallicity sampling
-prior. The normalization $\langle M_{\rm evolved}\rangle$ is the mean stellar
-mass evolved per \compas\ binary (the star-forming mass per simulated system;
-\citealt{neijssel2019}, their Sec.~2.1). The
+$t(z_f) = t(z_m) - t_{d,i}$, the delay time runs from zero-age main sequence to
+merger ($t_{\rm form} + t_c$, not the inspiral alone), and $p_{\rm draw}$ is the
+metallicity sampling prior. The normalization $\langle M_{\rm evolved}\rangle$
+is the \emph{total} star-forming mass the simulated population represents, not a
+per-binary mass (\citealt{neijssel2019}, their Sec.~2.1); $w_i$ then carries each
+system's share of that population. For Model A the calibration returns
+$2.80\times10^{9}\,\Msun$, and dividing by the star-forming mass per drawn
+primary under a \citet{kroupa2001} IMF ($52.1\,\Msun$) implies
+$5.4\times10^{7}$ simulated binaries, matching the $5.3\times10^{7}$ implied by
+the ``about a million binaries per $Z_i$ grid point'' at each of 53 grid
+metallicities that \citet{broekgaarden2021} report. That agreement is an
+independent check on both the normalization and the equal-mass-per-grid-point
+convention used for the yields in Section~\ref{sec:pop}. The
 metallicity-specific star-formation rate density factorizes as
 $\mathcal{S}(Z, z) = \mathrm{SFR}(z)\,dP/d\ln Z$. The cosmic star-formation rate
 uses the \citet{madau2014} functional form
@@ -595,7 +605,13 @@ high-redshift inconsistency in the rate integral. The per-population
 $\langle M_{\rm evolved}\rangle$ is back-derived from the \compas\ local-rate
 anchor encoded in the published $w_{000}$ weights using the \citet{neijssel2019}
 MSSFR; this anchor is a simulation property and is MSSFR-independent, so the
-Levina TNG100-1 MSSFR is used for all reported rates. Rates are intrinsic,
+Levina TNG100-1 MSSFR is used for all reported rates. The back-derivation runs
+over the full merging population of each file, matching the population the
+$w_{000}$ sum covers, so the cold-stability cut of
+Section~\ref{sec:remap} lowers the reported rate instead of being absorbed
+into the normalisation; calibrating on the cut sample instead would understate
+$\langle M_{\rm evolved}\rangle$ by 0.9 per cent for BNS and 7.6 per cent for
+BHNS, whose cut is the deeper of the two. Rates are intrinsic,
 comoving, source-frame in $\Gpcyr$ unless stated otherwise. Because the disk-mass
 classification assumes 100 percent jet launching above threshold, all GRB rates
 are upper bounds \citep{gottlieb2023}.
@@ -624,8 +640,8 @@ N_{\rm det} = \int_0^{z_{\rm det}} \mathcal{R}_{\rm det}(z)\,
 \end{equation}
 where the $(1+z)^{-1}$ converts source-frame to detector-frame time and the
 integration cap $z_{\rm det} = 1$ (the \fci\ default) lies well beyond the O3
-horizon for neutron-star binaries. Because the local rate reproduces the
-\citet{broekgaarden2021} anchor by construction
+horizon for neutron-star binaries. Because the local rate of the uncut
+population reproduces the \citet{broekgaarden2021} anchor by construction
 (the $\langle M_{\rm evolved}\rangle$ calibration above), $N_{\rm det}$
 provides an independent check of the absolute normalization: it stresses the
 amplitude and shape of $\Rz$ over $z \in [0, 1]$ rather than the $z = 0$
@@ -762,8 +778,115 @@ of the plotted range, so the density there is cut off rather than declining.
 The BHNS lbGRB + red KN curve is still at its maximum in the final bin, so
 closing it would assert a decline the population does not show. \textit{Bottom:} formation efficiency versus birth
 metallicity, which couples each class to the metallicity-specific
-star-formation history. All classes form more efficiently at sub-solar
-metallicity, where weaker winds keep the binaries massive and close.
+star-formation history. The abscissa, the ordinate, the fixed-$Z$ vertical
+guides and the shared wide decade range follow Fig.~1 of
+\citet{broekgaarden2022}, which plots the same quantity over the same
+\compas\ grid split by population-synthesis model rather than by GRB class,
+so the two figures can be read side by side. All classes form more efficiently at sub-solar
+metallicity, where weaker winds keep the binaries massive and close. The
+per-metallicity star-forming mass in the denominator is
+$M_{\rm evolved}/53$, equal at every grid point because
+\citet[][their Table~1]{broekgaarden2021} sample about $10^{6}$ binaries at
+each of the 53 grid metallicities from $Z$-independent initial-condition
+distributions; it is not proportional to the spacing of the published grid
+values, which is rounded and jitters by a factor 2.54. The total BHNS curve
+peaks at $\eta=9.8\times10^{-6}\,M_\odot^{-1}$ at $Z=0.00303=Z_\odot/4.7$,
+the $Z_i\approx Z_\odot/5$ peak \citet{broekgaarden2021} quote in their
+Sec.~3.3; the curves are drawn on the native grid, so that is a simulated
+metallicity rather than a bin centre and the binning cannot displace it. The peak
+position is an independent check; the normalisation matches their Fig.~5 to
+the roughly 20 per cent readable off a log axis but is partly inherited,
+since $M_{\rm evolved}$ is back-derived from their own \texttt{w\_000}
+anchor. The shape in $Z$ and the ratios between classes are set by the
+\compas\ sample; the absolute height carries that anchor and the equal-mass
+convention with it. Numerator and denominator are different populations:
+$\eta$ counts systems surviving the cold-stability cut, while
+$M_{\rm evolved}$ covers every row in the file, since the \texttt{w\_000}
+anchor it derives from does. The cut is not a flat rescaling. It removes
+23.9 per cent of the BHNS weight at the lowest grid metallicity and none at
+the highest (18.5 per cent overall), so the surviving fraction runs from
+0.761 to 1.000 across the plotted range; for BNS it is 8.8 per cent, 3.1 per
+cent overall, and 0.912 to 1.000. It therefore tilts $\eta(Z)$ rather than
+shifting it, and it acts against the sub-solar preference we report, so that
+preference survives but its amplitude is understated by up to a quarter in
+the BHNS panel. For the same reason this is not the quantity plotted in the
+BHNS panel of Fig.~1 of \citet{broekgaarden2022}, which applies no
+$M_{\rm TOV}$ cut; the peak comparison below restores the cut weight before
+comparing, but the two figures should not be read off against each other at
+face value. Each panel is calibrated against its own population's
+anchor (33.4 and 43.0\,$\mathrm{Gpc^{-3}\,yr^{-1}}$, the latter the
+$\mathcal{R}_m^0\approx43$ that \citet{broekgaarden2021} quote for their
+fiducial model), as it must be, since the two are separate STROOPWAFEL runs
+on separate data releases. The two calibrations are not mutually consistent:
+dividing each $M_{\rm evolved}$ by the \citet{kroupa2001} star-forming mass per
+drawn binary implies $1.02\times10^{6}$ binaries per metallicity for BNS,
+matching their Table~1 to 1.5 per cent, but $1.47\times10^{6}$ for BHNS. The
+reduced data release retains only double-compact-object rows, so the number of
+binaries sampled cannot be recovered to settle this. $M_{\rm evolved}$ enters as
+a single scalar per panel, so peak positions, within-panel class ratios and the
+$Z$ dependence are unaffected; we therefore quote no BHNS-to-BNS amplitude ratio
+across the two panels, where the systematic reaches a factor 1.45.
+All 53 simulated metallicities are drawn as their own markers, with no
+pooling, as in Fig.~1 of \citet{broekgaarden2022}, and every populated point
+is an ordinary point on its curve. Each class carries a distinct marker shape
+as well as its palette colour, following the same figure: at this point density
+the linestyle alone no longer separates the two lbGRB $+$ red KN classes, which
+share the palette red. We
+plot no sampling error, following \citet[][their Sec.~2.7]{broekgaarden2021},
+who evaluate the STROOPWAFEL sampling uncertainty on this same formation
+yield, find it is at most 0.06 per cent, and elect not to quote it anywhere
+in their paper in favour of the stellar-evolution and $\mathrm{SFRD}(Z_i,z)$
+systematics; their Fig.~5 and Fig.~1 of \citet{broekgaarden2022} likewise
+plot every simulated grid point ungated. Their 0.06 per cent is the
+population-integrated rate, so it is an argument against drawing a $\sigma$
+and not a claim that a single class in a single metallicity bin is as well
+sampled. We therefore state the sparsity as raw counts instead. Every BNS
+curve is populated at all 53 metallicities; the thinnest point holds 5 systems
+(faint lbGRB at $Z/Z_\odot=0.01$) and the class totals stay above 75. The BHNS
+curves have one or two empty metallicities each, all of them above $Z_\odot$
+and inside the shaded band, where the top two grid points hold five systems in
+total across the three classes, so the collapsed BHNS tail is an indication
+rather than a measurement. That collapse is \compas's own and not an effect
+of our cut: between $Z/Z_\odot=1.39$ and 1.55 the raw number of merging BHNS
+falls by a factor 46 and the summed weight by 18.5, while the cut removes no
+rows at all at that step. Fig.~1 of \citet{broekgaarden2022} shows the same
+cliff at the same metallicity in all twenty of its BHNS curves; the
+difference is that they floor their ordinate at $10^{-8}$, which here would
+hide exactly one of the 53 points, the single-system
+$4.0\times10^{-10}$ at $Z/Z_\odot=1.90$, which we draw instead.
+Drawing the native grid also exposes a factor 2.6
+dip in every BNS curve near $Z=0.005$ that the pooling had averaged over. It
+is a property of the released weights rather than of this analysis, and it
+coincides with a ninefold drop in the number of merging systems the sampler
+found at those three metallicities, so we read it as a shortfall in the
+STROOPWAFEL refinement there rather than as a metallicity dependence of the
+yield. The two Total curves are wide translucent envelopes
+rather than classes, since neither is an observable prediction; in the right
+panel \textit{No GRB} (the neutron star swallowed whole) carries 82.4 per
+cent of the weight, so the total tracks it to within 10 to 20 per cent and is
+a merger yield, not a GRB yield.
+Shading marks the $Z=0.0105$ step that
+\citet[][their Fig.~1]{broekgaarden2022} identify as an artefact of a
+bifurcation in the \compas\ common-envelope $\lambda$ values rather than as
+stellar physics; its left edge is the $Z=0.0105$ guide they draw and label in
+their own axes, and \compas\ carries that metallicity as a hardcoded branch
+constant selecting the \citet{xu2010} Population~I envelope-structure
+coefficients above it and Population~II below. It is a step rather than a spike and reaches factors of 2.9
+to 4.5 in individual classes; a population total would have masked it, since
+the BHNS total falls across the same step. The curves continue through it,
+faded, rather than stopping, because that range is where most of the star
+formation lies: the \citet{levina2026} TNG100-1 fit puts
+$\langle Z\rangle(z=0)=1.74\,Z_\odot$, so 65 per cent of $z=0$ cosmic star
+formation sits above $Z_\odot$, and the metallicities below the step supply
+only 27.0 per cent of the BNS and 71.1 per cent of the BHNS $\mathcal{R}(z=0)$
+of Section~\ref{sec:rates2}. The artefact is therefore
+a systematic on those rates, biasing them high, and not a plotting nuisance.
+One caveat is not visible in the panel: \citet{foucart2018} is calibrated for
+$Q=M_{\rm BH}/M_{\rm NS}\in[1,7]$ and this sample reaches $Q=29$, with
+23.8 per cent of the post-cut BHNS weight above the calibrated range. That
+weight lies entirely in \textit{No GRB}, where a vanishing disk is the robust
+answer, and none of it in either disk-bearing class, so the extrapolation
+does not touch the curves that predict a transient.
 \label{fig:delaytime}}
 \end{figure*}
 
@@ -797,13 +920,25 @@ jet-launching upper bounds \citep{gottlieb2023}. \label{fig:spinsweep}}
 \begin{figure*}[!tbp]
 \epsscale{0.8}
 \plotone{plots/rate_bns_by_class.pdf}
-\caption{Cosmic history of the BNS merger rate for \compas\ Model A.
-\textit{Top:} the intrinsic rate density $\Rz$ per \citet{gottlieb2024} GRB
-class alongside the all-BNS total. \textit{Bottom:} the all-BNS rate under
-the three \citet{levina2026} IllustrisTNG resolutions of the
-star-formation history; the shaded envelope is the dominant systematic on
-the absolute rate and is common to all classes. GRB-class rates are
-jet-launching upper bounds \citep{gottlieb2023}. \label{fig:rateclass}}
+\caption{Cosmic history of the BNS merger rate for \compas\ Model A: the
+intrinsic rate density $\Rz$ per \citet{gottlieb2024} GRB class, with the
+all-BNS total in black. The two lbGRB $+$ red KN classes share the palette
+red, so the HMNS branch is solid and the disk branch dashed. Sample:
+229{,}470 merging BNS systems surviving the cold-stability cut, carrying
+$\sum w = 9.7 \times 10^{3}$ of STROOPWAFEL weight (Kish effective size
+$6.3 \times 10^{4}$), \compas\ Model A, Zenodo 5189849;
+$\langle M_{\rm evolved}\rangle$ calibrated per population; MSSFR
+\citet{levina2026} TNG100-1; cosmology Planck 2015. GRB-class rates are
+jet-launching upper bounds \citep{gottlieb2023}. The curves are
+Gaussian-smoothed for display ($\sigma = 30$ redshift bins) and the
+kernel's reflective boundary lifts the apparent $z = 0$ value by 32 per
+cent, so local rates quoted in the text are computed unsmoothed and should
+not be read off the left edge. Both the normalisation and the class mix
+inherit the \citet{broekgaarden2022} common-envelope $\lambda$ artefact
+discussed with Figure~\ref{fig:delaytime}: 73 per cent of $\Rzero$ comes
+from $Z \geq 0.0105$, and restricting the integration below that boundary
+shifts the class fractions by up to 22 percentage points.
+\label{fig:rateclass}}
 \end{figure*}
 
 \begin{figure*}[!tbp]

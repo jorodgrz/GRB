@@ -444,7 +444,9 @@ def test_load_bns_with_channels_validates_expected_model_mismatch(tmp_path):
         for col in (
             "mt_primary_ep1",
             "mt_primary_ep1_K1",
+            "mt_primary_ep1_K2",
             "mt_secondary_ep1",
+            "mt_secondary_ep1_K1",
             "mt_secondary_ep1_K2",
             "CEE",
         ):

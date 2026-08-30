@@ -55,12 +55,18 @@ _PINS = {
     "COMPASCompactOutput_BNS_F.h5": {"dblCE": 0.2106, "caseA": 7.1e-05},
     "COMPASCompactOutput_BNS_G.h5": {"dblCE": 0.7701, "caseA": 0.0},
     "COMPASCompactOutput_BNS_J.h5": {"dblCE": 0.7349, "caseA": 0.0},
-    "COMPASCompactOutput_BNS_K.h5": {"dblCE": 0.6697, "caseA": 0.006667},
+    # The K pins used to hold Model H's values (BNS 0.6697 / 0.006667, BHNS
+    # 0.02583 / 0.1805, all four matching H to five figures).  Paper II calls
+    # paper-I H "K", so the letter was resolved through the display convention
+    # instead of the paper-I file the key names.  Measured on the file itself:
+    # its embedded attributes are model=K, ns_max=3.0, and its heaviest NS is
+    # 3.000 Msun, which is Model K and not H.
+    "COMPASCompactOutput_BNS_K.h5": {"dblCE": 0.7476, "caseA": 0.0},
     "COMPASCompactOutput_BHNS_A.h5": {"dblCE": 0.03371, "caseA": 0.04147},
     "COMPASCompactOutput_BHNS_F.h5": {"dblCE": 0.004758, "caseA": 0.02462},
     "COMPASCompactOutput_BHNS_G.h5": {"dblCE": 0.1506, "caseA": 0.02551},
     "COMPASCompactOutput_BHNS_J.h5": {"dblCE": 0.05695, "caseA": 0.05953},
-    "COMPASCompactOutput_BHNS_K.h5": {"dblCE": 0.02583, "caseA": 0.1805},
+    "COMPASCompactOutput_BHNS_K.h5": {"dblCE": 0.02874, "caseA": 0.03380},
 }
 
 # Common parametrize set; tests skip cleanly per-file via the ``compas_file``
@@ -115,6 +121,8 @@ def test_channel_class_crosstab_modelA_real_data(bns_a_path):
         fc_mt_p1=bns["fc_mt_p1"],
         fc_mt_s1=bns["fc_mt_s1"],
         fc_mt_p1_K1=bns["fc_mt_p1_K1"],
+        fc_mt_p1_K2=bns["fc_mt_p1_K2"],
+        fc_mt_s1_K1=bns["fc_mt_s1_K1"],
         fc_mt_s1_K2=bns["fc_mt_s1_K2"],
     )
     classes = classify_bns_2024(bns["m1"], bns["m2"])
@@ -241,6 +249,8 @@ def test_bhns_channel_II_fraction_increases_with_decreasing_metallicity(bhns_a_p
         fc_mt_p1=bhns["fc_mt_p1"],
         fc_mt_s1=bhns["fc_mt_s1"],
         fc_mt_p1_K1=bhns["fc_mt_p1_K1"],
+        fc_mt_p1_K2=bhns["fc_mt_p1_K2"],
+        fc_mt_s1_K1=bhns["fc_mt_s1_K1"],
         fc_mt_s1_K2=bhns["fc_mt_s1_K2"],
     )
     ch_II = channels["II  Stable MT only"]

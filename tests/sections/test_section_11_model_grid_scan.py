@@ -175,6 +175,8 @@ def test_bns_channel_fractions_sum_to_one():
         fc_mt_p1=rng.integers(0, 4, size=n).astype(float),
         fc_mt_s1=rng.integers(0, 4, size=n).astype(float),
         fc_mt_p1_K1=rng.integers(0, 14, size=n),
+        fc_mt_p1_K2=rng.integers(0, 14, size=n),
+        fc_mt_s1_K1=rng.integers(0, 14, size=n),
         fc_mt_s1_K2=rng.integers(0, 14, size=n),
     )
     w = rng.uniform(0.1, 5.0, size=n)

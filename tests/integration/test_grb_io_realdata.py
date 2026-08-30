@@ -328,6 +328,8 @@ def test_channel_seed_join_recovers_misaligned_model(compas_file):
         fc_mt_p1=out["fc_mt_p1"],
         fc_mt_s1=out["fc_mt_s1"],
         fc_mt_p1_K1=out["fc_mt_p1_K1"],
+        fc_mt_p1_K2=out["fc_mt_p1_K2"],
+        fc_mt_s1_K1=out["fc_mt_s1_K1"],
         fc_mt_s1_K2=out["fc_mt_s1_K2"],
     )
     w = out["weights"]

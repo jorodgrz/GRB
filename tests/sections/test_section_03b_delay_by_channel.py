@@ -38,6 +38,8 @@ def _channels(d: dict) -> dict:
         fc_mt_p1=d["fc_mt_p1"],
         fc_mt_s1=d["fc_mt_s1"],
         fc_mt_p1_K1=d["fc_mt_p1_K1"],
+        fc_mt_p1_K2=d["fc_mt_p1_K2"],
+        fc_mt_s1_K1=d["fc_mt_s1_K1"],
         fc_mt_s1_K2=d["fc_mt_s1_K2"],
     )
 

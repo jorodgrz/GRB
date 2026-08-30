@@ -1,25 +1,30 @@
 """Section 5 of grb_main.ipynb: Metallicity Dependence of GRB Formation Efficiency.
 
 Smoke-level invariants on the data plumbing the per-class plot consumes
-and on the artifact-suppression logic the Section 5 cell uses to keep
-high-Z STROOPWAFEL noise out of the figure.
+and on how the figure represents the bins it cannot measure well.
 
-The figure cell combines three independent rules to decide which bins
-to plot:
+The figure bins the whole 53-point COMPAS grid and draws every populated
+bin as an ordinary point, ungated and with no error bar or limit, which is
+what Broekgaarden+ 2021 Fig. 5 and Broekgaarden+ 2022 Fig. 1 do with the
+same quantity; Broekgaarden+ 2021 Sec. 2.7 evaluate the STROOPWAFEL
+sampling uncertainty on this yield and then decline to quote it anywhere.
+Sparsity is reported as raw counts in the cell output and in the caption
+instead.  One per-bin rule still changes how a bin is drawn:
+``Z >= Z_CE_LAMBDA_BIFURCATION``, the Broekgaarden+ 2022 common-envelope
+lambda artefact, flagged and drawn faded but never cut, since it holds
+21 percent of the BNS weight and supplies most of the local rate the later
+sections integrate.
 
-1. ``N_raw >= 50``:  basic floor on the raw COMPAS count.
-2. ``ESS >= 10``:    Kish (1965) effective sample size; rules out bins
-   where one or two high-weight STROOPWAFEL systems dominate the sum.
-3. ``Z <= Z_sun``:   ``LOGZ_MAX_PHYSICAL = 0`` truncation; the COMPAS
-   sample retains < 1 percent of its weight above solar, and the
-   Levina+ 2026 (arXiv:2601.20202) TNG100-1 Azzalini fit (Table 1) puts
-   most cosmic star formation below solar, so the high-Z tail is
-   importance-sampling noise rather than physics.
+``N_MIN`` / ``ESS_MIN`` below mirror the ``ETA_GATE_*`` heuristics that
+``formation_efficiency_binned`` still exposes through ``ok``.  The figure
+does not use them; the tests that reference them use them to select
+well-sampled bins for shape checks, which is a different question from how
+the figure renders.
 
-These tests pin the per-bin reductions the figure consumes and verify
-the masking logic on the real Model A sample so a future refactor that
-silently re-enables the cross-gap stackplot interpolation, drops the
-ESS cutoff, or removes the truncation will fail loudly.
+These tests pin the per-bin reductions the figure consumes and verify the
+logic on the real Model A sample, so a refactor that re-enables the
+cross-gap stackplot interpolation, leaves a curve with an empty bin, or
+goes back to deleting bins on metallicity grounds will fail loudly.
 
 Reference: Broekgaarden et al. (2021), arXiv:2103.02608 Sec. 4
 (formation efficiency definition); Gottlieb et al. (2024),
@@ -37,8 +42,8 @@ from grb_io import METALLICITY_GRID, load_bhns, load_bns
 from grb_physics import remap_ns_marginal, remap_ns_masses_double_gaussian
 from grb_rates import (
     LOGZ_MAX_PHYSICAL,
+    Z_CE_LAMBDA_BIFURCATION,
     formation_efficiency,
-    kish_effective_sample_size,
 )
 
 Z_SUN = 0.0142
@@ -131,82 +136,133 @@ def _contiguous_runs(mask):
 
 
 def _ok_bin(Z_systems, w_systems, grid):
-    """Combined notebook validity mask: N >= 50 AND ESS >= 10 AND Z <= Zsun."""
+    """Notebook precision gate: N >= 50 AND ESS >= 10.
+
+    Metallicity plays no part.  Section 5 bins the whole 53-point grid and
+    flags the Broekgaarden+ 2022 CE-lambda range instead of cutting it, so a
+    Z ceiling folded in here would no longer mirror the notebook.
+    """
     N, ess = _bin_stats(Z_systems, w_systems, grid)
-    z_phys_max = (10.0**LOGZ_MAX_PHYSICAL) * Z_SUN
-    return (N >= N_MIN) & (ess >= ESS_MIN) & (grid <= z_phys_max)
+    return (N >= N_MIN) & (ess >= ESS_MIN)
 
 
 # ─────────────────────────────────────────────────────────────────────
 # New tests.
 # ─────────────────────────────────────────────────────────────────────
-def test_logz_max_physical_truncation_matches_constant():
-    """Cell 16's right-edge equals ``10**LOGZ_MAX_PHYSICAL * Z_sun`` within one bin.
+def test_section_5_bins_the_whole_grid_and_only_flags_the_artefact():
+    """Every native metallicity is binned; the CE-lambda range is flagged, not cut.
 
-    Verifies that no bin above ``Z_phys_max`` survives the combined mask
-    even when the raw count and ESS are arbitrarily inflated.  Bins on the
-    grid at or below the cap should pass given enough samples; bins above
-    should be unconditionally rejected.
+    Section 5 runs ``Z_max=None`` so no grid point is dropped, and reads the
+    artefact range off ``artifact`` rather than off ``ok``.  Cutting at Zsun
+    instead would silently drop seven grid points carrying 13 percent of the
+    BNS weight, and folding ``Z_cut`` into ``ok`` would drop a further fifth.
+    ``LOGZ_MAX_PHYSICAL`` survives only as the solar guide line on the axis.
     """
-    grid = np.asarray(METALLICITY_GRID, dtype=float)
-    z_phys_max = (10.0**LOGZ_MAX_PHYSICAL) * Z_SUN
+    from grb_rates import formation_efficiency_binned
 
+    grid = np.asarray(METALLICITY_GRID, dtype=float)
+    grid = grid[np.concatenate(([True], np.diff(grid) != 0))]
     n_per_bin = 10 * N_MIN
     Z_all = np.repeat(grid, n_per_bin)
     w_all = np.ones_like(Z_all)
-    ok = _ok_bin(Z_all, w_all, grid)
 
-    above_cap = grid > z_phys_max
-    assert not ok[above_cap].any(), (
-        f"bins above Z_phys_max = {z_phys_max:.4f} survived the mask: "
-        f"Z = {grid[above_cap][ok[above_cap]]}"
+    res = formation_efficiency_binned(
+        grid,
+        Z_all,
+        w_all,
+        mean_mass_evolved=1e9,
+        n_bins=18,
+        Z_max=None,
+        Z_cut=Z_CE_LAMBDA_BIFURCATION,
+        n_min=N_MIN,
+        ess_min=ESS_MIN,
     )
-    assert ok[~above_cap].all(), "well-sampled bins at or below Z_phys_max should pass the mask"
+    assert int(res["n_raw"]["total"].sum()) == Z_all.size, (
+        "binning lost systems: Z_max must stay None so the whole grid is covered"
+    )
+    assert res["Z_hi"].max() == pytest.approx(grid.max())
+    assert res["ok"]["total"].all(), "a uniformly sampled grid must clear the precision gate"
+    np.testing.assert_array_equal(res["artifact"], res["Z_hi"] >= Z_CE_LAMBDA_BIFURCATION)
+    assert res["artifact"].any() and not res["artifact"].all()
 
 
 @pytest.mark.requires_data
-def test_per_bin_ess_above_threshold_on_modelA(bns_a_path, bhns_a_path):
-    """Every plotted bin clears ESS >= 10 on the real Model A samples.
+def test_section_5_draws_every_bin_ungated_on_modelA(bns_a_path, bhns_a_path):
+    """Section 5's caption claims are true of the sample it plots.
 
-    Honest-to-COMPAS check: applies the same mass remap the notebook
-    applies in Section 0, then verifies that the combined mask agrees
-    with the per-bin Kish ESS computed independently via
-    ``kish_effective_sample_size``.
+    The figure is drawn on the native 53-point grid and ungated: every
+    populated metallicity is an ordinary point and the sparsity is quoted
+    as raw counts instead of a gate or a limit, following Broekgaarden+
+    2021 Sec. 2.7, who evaluate the STROOPWAFEL sampling uncertainty on
+    this yield and then decline to quote it, and their Fig. 5 /
+    Broekgaarden+ 2022 Fig. 1, which plot every simulated grid point
+    ungated.  An ungated curve renders an exact zero as a line gap, so the
+    caption has to be able to say where the gaps are: none on the BNS
+    panel, and on the BHNS panel only above solar, inside the CE-lambda
+    band where the yield has already collapsed.
+
+    The sample here is the notebook's: raw COMPAS masses with the
+    cold-stability cut, no Alsing remap, which is the fiducial treatment.
     """
+    from grb_io import filter_systems
+    from grb_physics import M_TOV, cold_stable_ns_mask
+    from grb_rates import formation_efficiency_binned
+
+    grid = np.asarray(METALLICITY_GRID, dtype=float)
+    grid = grid[np.concatenate(([True], np.diff(grid) != 0))]
+    # The notebook's ETA_KW + ETA_N_BINS: whole grid at native resolution,
+    # one point per simulated metallicity, gate switched off.
+    eta_kw = dict(n_bins=grid.size, Z_max=None, Z_cut=Z_CE_LAMBDA_BIFURCATION, n_min=0, ess_min=0.0)
+
     bns = load_bns(bns_a_path, expected_model="A", expected_ns_max=2.5)
-    bns["m1"], bns["m2"] = remap_ns_masses_double_gaussian(
-        bns["m1"],
-        bns["m2"],
-        weights=bns["weights"],
-        rng=np.random.default_rng(42),
+    bns = filter_systems(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
+    cls = classify_bns_2024(bns["m1"], bns["m2"])
+    res_bns = formation_efficiency_binned(
+        grid, bns["metallicity"], bns["weights"], dict(cls), mean_mass_evolved=1e9, **eta_kw
     )
 
     bhns = load_bhns(bhns_a_path, expected_model="A", expected_ns_max=2.5)
-    bhns["M_NS"] = remap_ns_marginal(
-        bhns["M_NS"],
-        weights=bhns["weights"],
-        rng=np.random.default_rng(43),
+    bhns = filter_systems(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
+    cbh = classify_bhns(bhns["M_BH"], bhns["M_NS"], a_BH=A_BH_FID)
+    res_bhns = formation_efficiency_binned(
+        grid,
+        bhns["metallicity"],
+        bhns["weights"],
+        {k: v for k, v in cbh.items() if k != "M_disk"},
+        mean_mass_evolved=1e9,
+        **eta_kw,
     )
 
-    grid = np.asarray(METALLICITY_GRID, dtype=float)
-    for label, sample in (("BNS", bns), ("BHNS", bhns)):
-        Z = sample["metallicity"]
-        w = sample["weights"]
-        ok = _ok_bin(Z, w, grid)
-        assert ok.any(), f"{label} sample has no well-sampled bins"
+    for label, res in (("BNS", res_bns), ("BHNS", res_bhns)):
+        for key, n in res["n_raw"].items():
+            assert n.size == grid.size
+        assert res["ok"]["total"].all(), "gate must be off in the Section 5 config"
 
-        for i in np.flatnonzero(ok):
-            in_bin = np.isclose(Z, grid[i])
-            n_eff = kish_effective_sample_size(w[in_bin])
-            assert n_eff >= ESS_MIN, (
-                f"{label} bin Z={grid[i]:.4f} passes the mask but Kish "
-                f"ESS = {n_eff:.2f} < {ESS_MIN}"
-            )
-            assert grid[i] <= (10.0**LOGZ_MAX_PHYSICAL) * Z_SUN, (
-                f"{label} bin Z/Zsun = {grid[i] / Z_SUN:.3f} passes the "
-                f"mask but exceeds the LOGZ_MAX_PHYSICAL = "
-                f"{LOGZ_MAX_PHYSICAL} truncation."
-            )
+    # BNS is populated at every simulated metallicity, so that panel has no
+    # gaps at all and the caption can say so without qualification.
+    for key, n in res_bns["n_raw"].items():
+        assert (n > 0).all(), (
+            f"BNS {key}: {int((n == 0).sum())} empty metallicities.  The Section 5 "
+            "caption claims the BNS panel is gap-free; pooling would be needed "
+            "to keep that true."
+        )
+
+    # BHNS does have gaps.  They are allowed, but only where the caption says
+    # they are: above solar, inside the CE-lambda band, on the collapsed tail.
+    for key, n in res_bhns["n_raw"].items():
+        empty = n == 0
+        assert int(empty.sum()) <= 2, f"BHNS {key}: {int(empty.sum())} empty metallicities"
+        assert res_bhns["artifact"][empty].all(), (
+            f"BHNS {key}: an empty metallicity outside the CE-lambda band.  The "
+            "caption confines every gap to Z > Zsun."
+        )
+        assert (res_bhns["Z"][empty] > Z_SUN).all()
+
+    # Raw counts quoted in the Section 5 caption table.
+    assert min(int(n.min()) for k, n in res_bns["n_raw"].items() if k != "total") == 5
+    assert int(res_bns["n_raw"]["sbGRB + blue KN"].min()) == 29
+    assert int(res_bns["n_raw"]["total"].min()) == 75
+    assert int(res_bhns["n_raw"]["total"].min()) == 1
 
 
 @pytest.mark.requires_data
@@ -367,16 +423,17 @@ def test_full_masking_pipeline_on_modelA(bns_a_path, bhns_a_path):
     _ = classify_bhns(bhns["M_BH"], bhns["M_NS"], a_BH=A_BH_FID)
 
     grid = np.asarray(METALLICITY_GRID, dtype=float)
-    z_phys_max = (10.0**LOGZ_MAX_PHYSICAL) * Z_SUN
     for label, Z, w in (
         ("BNS", bns["metallicity"], bns["weights"]),
         ("BHNS", bhns["metallicity"], bhns["weights"]),
     ):
         ok = _ok_bin(Z, w, grid)
         assert ok.any(), f"{label}: no well-sampled bins"
-        assert grid[ok].max() <= z_phys_max + 1e-12, (
-            f"{label}: rightmost kept bin Z = {grid[ok].max():.4f} exceeds "
-            f"Z_phys_max = {z_phys_max:.4f}"
+        # The gate is precision only, so super-solar bins are eligible and the
+        # figure reaches the top of the simulated grid.
+        assert grid[ok].max() > (10.0**LOGZ_MAX_PHYSICAL) * Z_SUN, (
+            f"{label}: no bin above Zsun cleared the gate, so the Section 5 "
+            f"figure would still stop at the old truncation."
         )
 
         runs = _contiguous_runs(ok)
@@ -387,3 +444,81 @@ def test_full_masking_pipeline_on_modelA(bns_a_path, bhns_a_path):
             )
             covered[start:stop] = True
         np.testing.assert_array_equal(covered, ok)
+
+
+@pytest.mark.requires_data
+def test_cold_stability_cut_tilts_eta_rather_than_rescaling_it(bns_a_path, bhns_a_path):
+    """The Section 5 caption quotes how far the cut reshapes the curve.
+
+    ``eta`` counts systems surviving the cold-stability cut while
+    ``M_evolved`` covers every row in the file, so the numerator and the
+    denominator are different populations.  That is the right bookkeeping
+    for a cold-stable-NS yield per unit star formation, but the cut is
+    metallicity dependent, so it changes the shape of ``eta(Z)`` and not
+    just its level.  It is also why this is not the quantity in the BHNS
+    panel of Broekgaarden+ 2022 Fig. 1, which applies no M_TOV cut.
+    """
+    from grb_physics import M_TOV, cold_stable_ns_mask
+
+    grid = np.asarray(METALLICITY_GRID, dtype=float)
+    grid = grid[np.concatenate(([True], np.diff(grid) != 0))]
+
+    bns = load_bns(bns_a_path, expected_model="A", expected_ns_max=2.5)
+    bhns = load_bhns(bhns_a_path, expected_model="A", expected_ns_max=2.5)
+    cases = {
+        "BNS": (
+            bns["metallicity"],
+            bns["weights"],
+            cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV),
+            0.912,
+            0.031,
+        ),
+        "BHNS": (
+            bhns["metallicity"],
+            bhns["weights"],
+            cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV),
+            0.761,
+            0.185,
+        ),
+    }
+    for label, (Z, w, keep, surv_min, overall) in cases.items():
+        surv = np.array([w[(Z == z) & keep].sum() / w[Z == z].sum() for z in grid])
+        assert surv.max() == pytest.approx(1.0, abs=1e-12), (
+            f"{label}: the caption says the cut removes nothing at some metallicity"
+        )
+        assert surv.min() == pytest.approx(surv_min, abs=0.005), (
+            f"{label}: surviving fraction floor moved; the caption quotes {surv_min}"
+        )
+        assert 1 - w[keep].sum() / w.sum() == pytest.approx(overall, abs=0.005)
+        # A pure normalisation shift would be flat.  It is not, and the
+        # suppression is concentrated at low Z, against the reported trend.
+        assert surv[0] < surv[-1], f"{label}: cut no longer bites hardest at low Z"
+
+
+@pytest.mark.requires_data
+def test_bhns_high_z_collapse_is_compas_not_the_cold_stability_cut(bhns_a_path):
+    """The BHNS cliff above solar is in the simulation, not in our filter.
+
+    Broekgaarden+ 2022 Fig. 1 shows every one of its twenty BHNS curves
+    plunging near log10 Z = -1.7.  The caption attributes ours to the same
+    cause, so pin that the cut is not doing it.
+    """
+    from grb_physics import M_TOV, cold_stable_ns_mask
+
+    Z_SUN = 0.0142
+    bhns = load_bhns(bhns_a_path, expected_model="A", expected_ns_max=2.5)
+    Z, w = bhns["metallicity"], bhns["weights"]
+    keep = cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV)
+
+    grid = np.unique(Z)
+    before = grid[np.argmin(np.abs(grid / Z_SUN - 1.39))]
+    after = grid[np.argmin(np.abs(grid / Z_SUN - 1.55))]
+    n_before, n_after = int((Z == before).sum()), int((Z == after).sum())
+
+    assert n_before / n_after > 30, "the high-Z BHNS cliff is gone from the sample"
+    assert w[Z == before].sum() / w[Z == after].sum() > 10
+    removed = 1 - w[(Z == after) & keep].sum() / w[Z == after].sum()
+    assert removed == pytest.approx(0.0, abs=1e-12), (
+        "the cut now removes weight at the cliff, so the caption's attribution "
+        "of the collapse to COMPAS alone no longer holds"
+    )

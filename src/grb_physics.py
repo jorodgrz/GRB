@@ -70,6 +70,10 @@ H0_PLANCK15 = 67.74  # km/s/Mpc
 OMEGA_M_PLANCK15 = 0.3089
 OMEGA_L_PLANCK15 = 0.6911
 
+# Solar metallicity, Asplund et al. (2009) photospheric Z.  Only ever used to
+# put a metallicity axis in Z/Zsun; no COMPAS quantity depends on it.
+Z_SUN = 0.0142
+
 # ---------------------------------------------------------------------------
 # Classification thresholds
 # ---------------------------------------------------------------------------

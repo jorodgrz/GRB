@@ -15,6 +15,7 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
+from scipy.stats import chi2 as _chi2
 
 from grb_physics import (
     EOS_MODELS,
@@ -183,6 +184,20 @@ def compute_merger_rate(
     and smooth a display copy via ``smooth_rate_curve`` for plotting
     (the same artifact is guarded against in
     ``calibrate_mean_mass_evolved``).
+
+    Carries a ~1 percent numerical bias from two FCI discretisations, on
+    top of whatever the astrophysics contributes.  FCI takes the
+    metallicity column with ``np.digitize``, which selects the grid bin
+    *above* each system's Z rather than the nearest (on the Model A BNS
+    sample the two agree for only 22 percent of systems, mean offset
+    +0.78 bins of dlnZ = 0.01), and it indexes formation times on its own
+    redshift grid instead of interpolating.  Evaluating the same equation
+    with nearest-bin metallicity and an interpolated age-redshift
+    relation gives 0.988 of this function's R(z=0), rising to 1.000 by
+    z ~ 4; adopting both FCI conventions reproduces it to 1.2e-4.  The
+    bias is far below the modelling systematics (the common-envelope
+    lambda artefact alone moves the BNS normalisation by a factor ~3.7),
+    but it is a floor on how precisely any rate here can be quoted.
 
     Parameters
     ----------
@@ -528,6 +543,16 @@ def calibrate_mean_mass_evolved(
 
     Parameters
     ----------
+    COMPAS_Z, COMPAS_delay_times, COMPAS_weights : 1-D arrays
+        The **full** merging population of the file, before any physics
+        cut.  ``expected_local_rate`` sums ``w_000`` over every row in the
+        file, so calibrating against a subset silently rescales the
+        recovered mass by the subset's share of R(z = 0): feeding the
+        cold-stability-cut sample makes the cut vanish from the rate
+        normalisation instead of lowering it (7.6 per cent on Model A
+        BHNS, which loses 18.5 per cent of its weight to that cut).
+        Apply cuts to the sample passed to ``compute_merger_rate``, never
+        to the sample passed here.
     expected_local_rate : float
         Sum of ``weights_intrinsic/w_000`` from the Broekgaarden+ 2021
         HDF5 file (the published intrinsic local rate, Gpc^-3 yr^-1).
@@ -579,17 +604,42 @@ def calibrate_mean_mass_evolved(
 # ═══════════════════════════════════════════════════════════════════════════
 # Formation efficiency (per metallicity bin)
 # ═══════════════════════════════════════════════════════════════════════════
-# Right edge of the physically meaningful metallicity axis, log10(Z / Zsun).
-# The COMPAS STROOPWAFEL prior extends to Z = 0.03 ~ 2.1 Zsun, but the
+# Right edge of the metallicity axis used for display binning, log10(Z / Zsun).
+# The COMPAS STROOPWAFEL prior extends to Z = 0.03 ~ 2.1 Zsun, where the
+# simulated grid runs out while cosmic star formation does not: under the
 # Levina+ 2026 (arXiv:2601.20202) Azzalini skew-log-normal fit to TNG100-1
-# (Table 1) places the bulk of IMF-weighted cosmic star formation below Zsun;
-# the COMPAS Model A merging sample retains < 1 percent of its STROOPWAFEL
-# weight above Zsun in the per-bin tallies used by ``formation_efficiency``.
-# Plotting that high-Z tail without truncation gives the per-class efficiency
-# curves a slope that is dominated by importance-sampling noise rather than
-# the underlying binary physics (Broekgaarden+ 2021 arXiv:2103.02608 Fig. 5
-# rolls over the same way for the same reason).
+# (Table 1) the mean birth metallicity is <Z>(z=0) = 0.0247 = 1.74 Zsun, and
+# 28.5 percent of z = 0 star formation (16.2 percent SFR-weighted over
+# 0 < z < 10) falls above the grid ceiling entirely.  Solar is a round place to
+# stop a yield plot, not a place where the star formation stops.
+#
+# This is therefore a display convention, not a relevance cut and not a noise
+# cut: 64.8 percent of z = 0 cosmic star formation (39.8 percent SFR-weighted)
+# sits above Zsun, and the Model A merging samples hold 13.4 percent (BNS) and
+# 1.7 percent (BHNS) of their STROOPWAFEL weight there, at Kish effective
+# sample sizes of 4.7e4 and 4.3e3.  Any figure that applies the truncation
+# should say what fraction it removed rather than imply the tail was
+# unimportant or too noisy to plot.
 LOGZ_MAX_PHYSICAL: float = 0.0
+
+# Birth metallicity above which the Broekgaarden+ 2021 COMPAS grid carries an
+# artificial jump in formation yield.  Their paper II (Broekgaarden+ 2022,
+# arXiv:2112.05763) states in the Fig. 1 caption that the sharp yield increase
+# around Z = 0.0105, "particularly visible in the NSNS panel", comes from a
+# bifurcation in the common-envelope lambda values at this Z, not from stellar
+# physics.  The value is not read off their figure: COMPAS hardcodes it as
+# LAMBDA_NANJING_ZLIMIT = 0.0105 in src/constants.h, the branch that picks the
+# Xu & Li (2010) Population I lambda coefficients above it and Population II
+# below, with no interpolation on the path this grid was run with.  Yield curves plotted against Z should stop here, or the step reads
+# as a prediction.  It is a step and not a spike: eta jumps between the
+# adjacent grid points at Z = 0.01018 and 0.01137 and stays at the new level
+# for the rest of the grid.  Both populations are affected once they are split
+# by class, so neither is safe to plot through it.  Model A jump factors are
+# 2.9 (BNS sbGRB + blue KN), 3.4 (BNS lbGRB + red KN HMNS) and 4.5 (BHNS
+# lbGRB + red KN disk).  A population total can hide this: the BHNS total
+# falls by 0.75 across the same step because the 82-percent-weight No GRB
+# class declines there, which is why the check has to be done per class.
+Z_CE_LAMBDA_BIFURCATION: float = 0.0105
 
 
 def kish_effective_sample_size(weights):
@@ -615,60 +665,97 @@ def kish_effective_sample_size(weights):
     return float(s1 * s1 / s2)
 
 
-def metallicity_prior_mass_fraction(metallicityGrid, z_min=None, z_max=None):
-    """Prior star-forming-mass fraction per metallicity grid point.
+# Fractional tolerance on the check that a metallicity grid really is the
+# uniform-in-log design grid the equal-mass-per-point convention assumes.  The
+# published Broekgaarden+ 2021 grid is stored rounded (two significant figures
+# at the low-Z end, more at the high-Z end) and departs from the uniform design
+# grid by at most 3.6 per cent, so the tolerance sits above the rounding and
+# well below any genuinely non-uniform grid.
+GRID_LOG_UNIFORM_RTOL: float = 0.05
 
-    COMPAS draws birth metallicity uniformly in ln Z over the sampling
-    range [z_min, z_max]; FastCosmicIntegration encodes this as
-    ``p_draw = 1 / (ln z_max - ln z_min)``.  The star-forming mass
-    evolved at grid point Z_i is therefore proportional to the width of
-    its log-Z cell, and the fraction of the simulation's total mass at
-    Z_i is::
 
-        f_i = Delta(ln Z)_i / (ln z_max - ln z_min),   sum_i f_i = 1
+def metallicity_prior_mass_fraction(metallicityGrid):
+    """Star-forming-mass fraction simulated at each metallicity grid point.
 
-    Cell edges sit at the midpoints between adjacent grid points in
-    ln Z, with the outer edges clamped to ln z_min / ln z_max.  Multiply
-    by a population's total ``mean_mass_evolved`` to get the
+    Broekgaarden+ 2021 (arXiv:2103.02608) Table 1 samples "about a million
+    binaries per Z_i grid point" on a grid "distributed using a uniform grid
+    in log(Z_i) with 53 metallicities".  Every grid point therefore draws the
+    same number of binaries from the same Z-independent initial-condition
+    distributions, so each carries the same star-forming mass::
+
+        f_i = 1 / N,   sum_i f_i = 1
+
+    Multiply by a population's total ``mean_mass_evolved`` to get the
     per-metallicity star-forming mass M_SF(Z_i), the denominator of the
-    intensive formation efficiency in Broekgaarden+ 2021
-    (arXiv:2103.02608, Fig. 5).
+    intensive formation efficiency their Fig. 5 plots.
 
-    Parameters
-    ----------
-    metallicityGrid : 1-D array
-        Metallicity grid (e.g. the 53-point COMPAS grid).  Need not be
-        sorted; the result matches the input ordering.
-    z_min, z_max : float, optional
-        COMPAS metallicity sampling bounds [linear].  Default to the
-        grid min / max.
+    Do not derive f_i from differences of the stored grid values.  They are
+    rounded (0.0001, 0.00011, 0.00012 at the low-Z end against a design
+    spacing of Delta ln Z = 0.10969), which makes the apparent cell widths
+    jitter by a factor 2.54 across the grid and would swing eta(Z) by up to
+    25 per cent at interior points on rounding noise alone, and by a factor
+    2.3 at the two ends, where a midpoint-edge construction gives the first
+    and last points half-width cells.  Equal mass per
+    point is also what the rate path already assumes: FastCosmicIntegration
+    weights every system by a constant ``dlogZ / p_draw``, independent of
+    where the system's Z sits in the grid.
 
-    Returns
-    -------
-    f : 1-D array, same shape / ordering as ``metallicityGrid``, summing to 1.
+    Raises
+    ------
+    ValueError
+        If the grid is not uniform in log Z to within
+        ``GRID_LOG_UNIFORM_RTOL``, since equal mass per point is then not
+        the right convention.
     """
     Z = np.asarray(metallicityGrid, dtype=float)
     if Z.ndim != 1 or Z.size == 0:
         raise ValueError("metallicityGrid must be a non-empty 1-D array")
-    order = np.argsort(Z)
-    lnZ = np.log(Z[order])
-    lo = float(np.log(z_min)) if z_min is not None else lnZ[0]
-    hi = float(np.log(z_max)) if z_max is not None else lnZ[-1]
-    if hi <= lo:
-        raise ValueError("require z_max > z_min")
-    edges = np.empty(lnZ.size + 1)
-    edges[1:-1] = 0.5 * (lnZ[:-1] + lnZ[1:])
-    edges[0] = lo
-    edges[-1] = hi
-    f_sorted = np.diff(edges) / (hi - lo)
-    f = np.empty_like(f_sorted)
-    f[order] = f_sorted
-    return f
+    if np.any(Z <= 0):
+        raise ValueError("metallicity grid values must be positive")
+    if Z.size > 2:
+        design = np.geomspace(Z.min(), Z.max(), Z.size)
+        if not np.allclose(np.sort(Z), design, rtol=GRID_LOG_UNIFORM_RTOL):
+            raise ValueError(
+                "metallicity grid is not uniform in log Z to within "
+                f"{GRID_LOG_UNIFORM_RTOL:.0%}; equal star-forming mass per "
+                "grid point does not apply"
+            )
+    return np.full(Z.size, 1.0 / Z.size)
 
 
-def formation_efficiency(
-    metallicityGrid, Z_all, w_all, masks=None, mean_mass_evolved=None, z_min=None, z_max=None
-):
+def _grid_index(metallicityGrid, Z_all):
+    """Index of each system's birth metallicity in a sorted metallicity grid.
+
+    Raises if any system falls off the grid, rather than dropping it: the
+    system would vanish from the eta(Z) numerator while its star-forming
+    mass stayed in the denominator, biasing the yield low with no warning.
+    """
+    grid = np.asarray(metallicityGrid, dtype=float)
+    Z = np.asarray(Z_all, dtype=float)
+    idx = np.searchsorted(grid, Z)
+    idx = np.clip(idx, 0, grid.size - 1)
+    on_grid = np.isclose(Z, grid[idx], rtol=1e-6, atol=0.0)
+    if not np.all(on_grid):
+        n_off = int((~on_grid).sum())
+        raise ValueError(
+            f"{n_off} of {Z.size} systems carry a birth metallicity that is "
+            "not on the supplied grid; eta(Z) would silently lose them"
+        )
+    return idx
+
+
+def _grid_weight_sums(idx, w_all, n_grid, mask=None):
+    """Per-grid-point (sum w, sum w^2, raw count) for an optional subset."""
+    w = np.asarray(w_all, dtype=float)
+    if mask is not None:
+        idx, w = idx[mask], w[mask]
+    Sw = np.bincount(idx, weights=w, minlength=n_grid)
+    Sw2 = np.bincount(idx, weights=w * w, minlength=n_grid)
+    N = np.bincount(idx, minlength=n_grid)
+    return Sw, Sw2, N
+
+
+def formation_efficiency(metallicityGrid, Z_all, w_all, masks=None, mean_mass_evolved=None):
     """
     Intensive formation efficiency eta(Z) per metallicity bin.
 
@@ -679,18 +766,18 @@ def formation_efficiency(
         eta(Z_i) = (sum of STROOPWAFEL weights at Z_i) / M_SF(Z_i)
 
     The per-metallicity star-forming mass is the population total split
-    by the COMPAS uniform-in-ln Z sampling prior,
+    equally over the simulated grid points,
     ``M_SF(Z_i) = mean_mass_evolved * f_i`` with ``f_i`` from
     ``metallicity_prior_mass_fraction``.  Dividing by the per-Z mass
     rather than the scalar total makes eta(Z) intensive (independent of
     how the grid is binned) and lands it on the published
-    Gpc-scale formation-efficiency axis; using the bare total instead
+    formation-efficiency axis; using the bare total instead
     suppresses every bin by ~1/f_i (the number of sampled metallicities).
 
     Parameters
     ----------
     metallicityGrid : 1-D array
-        Grid of metallicity values (e.g. 53-point COMPAS grid).
+        Sorted grid of metallicity values (e.g. 53-point COMPAS grid).
     Z_all : 1-D array
         Metallicity of each merging system.
     w_all : 1-D array
@@ -701,12 +788,10 @@ def formation_efficiency(
         additive (they share one M_SF(Z_i) denominator) and sum to
         'total' bin by bin.
     mean_mass_evolved : float
-        Total stellar mass evolved in the simulation [Msun].
-        Required; use ``calibrate_mean_mass_evolved()`` to derive it
-        for each population (BNS, BHNS) separately.
-    z_min, z_max : float, optional
-        COMPAS metallicity sampling bounds passed through to
-        ``metallicity_prior_mass_fraction``.
+        Total stellar mass evolved in the simulation [Msun].  Required;
+        use ``calibrate_mean_mass_evolved()`` on the population *before*
+        any physics cut, so the cut shows up in the yield instead of
+        being absorbed into the normalisation.
 
     Returns
     -------
@@ -716,23 +801,193 @@ def formation_efficiency(
         raise ValueError(
             "mean_mass_evolved must be provided; use calibrate_mean_mass_evolved() to derive it"
         )
-    f = metallicity_prior_mass_fraction(metallicityGrid, z_min=z_min, z_max=z_max)
-    M_SF = mean_mass_evolved * f  # per-metallicity star-forming mass [Msun]
-    unique_Z = np.unique(Z_all)
-    result = {"total": np.zeros(len(metallicityGrid))}
+    grid = np.asarray(metallicityGrid, dtype=float)
+    M_SF = mean_mass_evolved * metallicity_prior_mass_fraction(grid)
+    idx = _grid_index(grid, Z_all)
+
+    result = {"total": _grid_weight_sums(idx, w_all, grid.size)[0] / M_SF}
     if masks is not None:
-        for name in masks:
-            result[name] = np.zeros(len(metallicityGrid))
-
-    for i, Z in enumerate(metallicityGrid):
-        if Z in unique_Z:
-            maskZ = Z_all == Z
-            result["total"][i] = np.sum(w_all[maskZ]) / M_SF[i]
-            if masks is not None:
-                for name, m in masks.items():
-                    result[name][i] = np.sum(w_all[maskZ & m]) / M_SF[i]
-
+        for name, m in masks.items():
+            result[name] = _grid_weight_sums(idx, w_all, grid.size, m)[0] / M_SF
     return result
+
+
+GEHRELS86_UL_ZERO_COUNTS: float = 1.841
+"""One-sigma (84.13 per cent) Poisson upper limit on the true rate given zero
+observed events.  Gehrels (1986), ApJ 303, 336, Table 1, ``n = 0`` column at
+``S = 1``.  Used to place an upper limit on eta in a coarse bin that holds no
+system of a given subset, so an empty bin is drawn as a bound rather than as
+a gap the reader cannot distinguish from an unmeasured one."""
+
+ETA_GATE_N_MIN: int = 50
+"""Raw-count floor below which ``formation_efficiency_binned`` stops calling a
+coarse bin well sampled.  CODE HEURISTIC; not from any single paper.  Neither
+Broekgaarden+ 2021 nor Broekgaarden+ 2022 gates their yield-versus-metallicity
+figures at all (their Fig. 5 and Fig. 1 plot every simulated grid point and name
+sampling noise in the caption), so no published threshold exists to inherit.
+The value is returned as ``ok`` for callers who want it; the Section 5 and 5b
+figures do not draw it, because the cut is arbitrary at the margin: on Model A
+the two bins it rejects hold 45 and 40 systems against a neighbour it accepts
+at 56."""
+
+ETA_GATE_ESS_MIN: float = 10.0
+"""Kish (1965) effective-size floor paired with ``ETA_GATE_N_MIN``.  CODE
+HEURISTIC; not from any single paper.  It exists because STROOPWAFEL importance
+sampling lets a bin hold many raw systems whose weight is carried by one of
+them, so a raw count alone can overstate the support."""
+
+GEHRELS86_ONE_SIGMA_TAIL: float = 0.158655
+"""Lower-tail probability of the one-sigma (84.13 per cent) Poisson bound,
+the ``S = 1`` column Gehrels (1986) tabulates."""
+
+
+def gehrels86_poisson_interval(n):
+    """One-sigma Poisson bounds on a true count given ``n`` counts observed.
+
+    Exact chi-square form of the limits Gehrels (1986), ApJ 303, 336
+    tabulates at ``S = 1`` (upper in their Table 1, lower in their Table 2),
+    rather than his series approximations: ``n = 0`` returns
+    ``GEHRELS86_UL_ZERO_COUNTS`` (1.8410 against the tabulated 1.841) and
+    ``n = 1`` a lower bound of 0.1728 against the tabulated 0.173.
+
+    ``n`` need not be an integer.  A weighted sample enters through its Kish
+    effective count, which is continuous, and the bounds are smooth in n.
+    """
+    n = np.asarray(n, dtype=float)
+    if np.any(n < 0):
+        raise ValueError("counts must be non-negative")
+    lo = np.where(n > 0, 0.5 * _chi2.ppf(GEHRELS86_ONE_SIGMA_TAIL, 2.0 * n), 0.0)
+    hi = 0.5 * _chi2.ppf(1.0 - GEHRELS86_ONE_SIGMA_TAIL, 2.0 * n + 2.0)
+    return lo, hi
+
+
+def formation_efficiency_binned(
+    metallicityGrid,
+    Z_all,
+    w_all,
+    masks=None,
+    mean_mass_evolved=None,
+    n_bins=15,
+    Z_max=None,
+    Z_cut=None,
+    n_min=ETA_GATE_N_MIN,
+    ess_min=ETA_GATE_ESS_MIN,
+):
+    """``formation_efficiency`` pooled into equal-count coarse log-Z bins.
+
+    Pooling adjacent grid points into ``n_bins`` equal-count groups trades
+    metallicity resolution for per-bin sample size.  eta stays intensive
+    under the pooling because numerator and denominator are summed over the
+    same group, and stays additive over disjoint masks because every mask
+    shares one denominator, so ``n_bins`` is a display choice and not a
+    change of estimator.  Passing ``n_bins = metallicityGrid.size`` leaves
+    the native grid untouched, which is what Broekgaarden+ 2021 Fig. 5 and
+    Broekgaarden+ 2022 Fig. 1 plot.
+
+    How far the pooling has to go depends on how finely the sample is cut,
+    not on the grid.  A split by GRB class alone holds a few hundred systems
+    per native point and needs none; a split by class and formation channel
+    puts most of the weight in one channel and leaves the others empty over
+    much of the grid, and there the pooling is what keeps a curve joined.
+
+    ``ok`` marks the bins that clear raw count ``n_min`` and Kish (1965)
+    effective size ``ess_min``.  It is a precision statement and nothing
+    else: a bin that fails it still carries a measured eta and its
+    ``eta_err``, and the caller decides how to draw it.  Deleting the bin
+    instead throws away coverage the sample actually has.
+
+    Parameters
+    ----------
+    Z_max : float, optional
+        Drop native grid points above this metallicity before pooling.
+    Z_cut : float, optional
+        Flag (do not drop) any coarse bin holding a native point at or above
+        this metallicity, for the Broekgaarden+ 2022 common-envelope lambda
+        artefact at ``Z_CE_LAMBDA_BIFURCATION``.  Returned as ``artifact``.
+
+    Returns
+    -------
+    dict
+        ``Z`` (geometric-mean centre of each coarse bin), ``Z_hi`` (its
+        highest native member) and ``artifact`` (the ``Z_cut`` flag) are
+        per-bin arrays.  ``eta``, ``eta_err``, ``eta_err_lo``, ``eta_err_hi``,
+        ``eta_ul``, ``ok``, ``n_raw`` and ``ess`` are dicts keyed as ``masks``
+        plus ``'total'``.  ``eta_err`` is the symmetric sqrt(sum w^2)/M_SF;
+        ``eta_err_lo`` / ``eta_err_hi`` are the asymmetric Poisson bars that
+        converge to it and stay above zero at small ``ess``.
+
+        Three states are distinguishable and a log ordinate renders them
+        identically, so a caller that draws this has to separate them:
+        ``ok`` (draw the point), ``~ok & n_raw > 0`` (measured but
+        imprecise, draw with ``eta_err_lo`` / ``eta_err_hi``), and ``n_raw == 0`` (the subset
+        genuinely produces nothing here, draw ``eta_ul`` as an upper limit).
+    """
+    if mean_mass_evolved is None:
+        raise ValueError(
+            "mean_mass_evolved must be provided; use calibrate_mean_mass_evolved() to derive it"
+        )
+    grid = np.asarray(metallicityGrid, dtype=float)
+    f_native = metallicity_prior_mass_fraction(grid)
+    idx = _grid_index(grid, Z_all)
+
+    keep_grid = np.arange(grid.size) if Z_max is None else np.where(grid <= Z_max)[0]
+    if keep_grid.size < n_bins:
+        raise ValueError(
+            f"{keep_grid.size} grid points below Z_max cannot fill {n_bins} coarse bins"
+        )
+    grp = np.arange(keep_grid.size) * n_bins // keep_grid.size
+    count = np.bincount(grp, minlength=n_bins)
+
+    Z_c = np.exp(np.bincount(grp, weights=np.log(grid[keep_grid]), minlength=n_bins) / count)
+    Z_hi = np.zeros(n_bins)
+    np.maximum.at(Z_hi, grp, grid[keep_grid])
+    f_c = np.bincount(grp, weights=f_native[keep_grid], minlength=n_bins)
+    M_SF = mean_mass_evolved * f_c
+
+    artifact = np.zeros(n_bins, dtype=bool) if Z_cut is None else (Z_hi >= Z_cut)
+
+    # Mean weight of every system in each coarse bin, whatever its class.  It
+    # is the local estimate of what one more system would have contributed,
+    # and so sets the scale of the zero-count upper limit below.
+    Sw_all, _, N_all = _grid_weight_sums(idx, w_all, grid.size)
+    Sw_all_c = np.bincount(grp, weights=Sw_all[keep_grid], minlength=n_bins)
+    N_all_c = np.bincount(grp, weights=N_all[keep_grid], minlength=n_bins)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        w_bar = np.where(N_all_c > 0, Sw_all_c / N_all_c, np.nan)
+    eta_ul_bin = GEHRELS86_UL_ZERO_COUNTS * w_bar / M_SF
+
+    def _one(mask):
+        Sw, Sw2, N = _grid_weight_sums(idx, w_all, grid.size, mask)
+        Sw_c = np.bincount(grp, weights=Sw[keep_grid], minlength=n_bins)
+        Sw2_c = np.bincount(grp, weights=Sw2[keep_grid], minlength=n_bins)
+        N_c = np.bincount(grp, weights=N[keep_grid], minlength=n_bins)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            ess = np.where(Sw2_c > 0, Sw_c * Sw_c / Sw2_c, 0.0)
+        ok = (N_c >= n_min) & (ess >= ess_min)
+        ul = np.where(N_c == 0, eta_ul_bin, np.nan)
+
+        # Asymmetric bars for the bins the gate rejects.  sqrt(sum w^2) is the
+        # Gaussian limit of the same statistic and runs below zero once a bin
+        # holds a handful of systems, which a log ordinate cannot draw; the
+        # last coarse bin of the Model A BHNS sample holds five.  Putting the
+        # exact Poisson bounds on the Kish effective count and scaling by the
+        # bin's effective weight sum w^2 / sum w recovers sqrt(sum w^2)
+        # exactly in the large-ess limit, so this generalises eta_err rather
+        # than replacing it with a different estimator.
+        with np.errstate(invalid="ignore", divide="ignore"):
+            w_eff = np.where(Sw_c > 0, Sw2_c / Sw_c, 0.0)
+        lo_n, hi_n = gehrels86_poisson_interval(ess)
+        err_lo = (ess - lo_n) * w_eff / M_SF
+        err_hi = (hi_n - ess) * w_eff / M_SF
+        return Sw_c / M_SF, np.sqrt(Sw2_c) / M_SF, err_lo, err_hi, ul, ok, N_c, ess
+
+    keys = ("eta", "eta_err", "eta_err_lo", "eta_err_hi", "eta_ul", "ok", "n_raw", "ess")
+    out = {"Z": Z_c, "Z_hi": Z_hi, "artifact": artifact}
+    out.update({k: {} for k in keys})
+    for name, m in [("total", None)] + list((masks or {}).items()):
+        for k, v in zip(keys, _one(m), strict=True):
+            out[k][name] = v
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════

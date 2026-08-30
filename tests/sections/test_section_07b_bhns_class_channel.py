@@ -68,19 +68,19 @@ _CHANNEL_KEYS = [
 # project's COMPAS commit ``81722d4``.  Channels III and V are empty
 # for BHNS in this run.  See ``_assert_pinned`` for tolerance rules.
 _R0_PINS_BHNS = {
-    ("No GRB", "I  Stable MT + CE"): 29.7408,
+    ("No GRB", "I  Stable MT + CE"): 26.4085,
     ("No GRB", "II  Stable MT only"): 0.504796,
-    ("No GRB", "III Single-core CE"): 0.0,
+    ("No GRB", "III Single-core CE"): 3.33225,
     ("No GRB", "IV  Double-core CE"): 0.135121,
     ("No GRB", "V   Other"): 0.0,
-    ("Faint lbGRB (BHNS)", "I  Stable MT + CE"): 8.79915,
+    ("Faint lbGRB (BHNS)", "I  Stable MT + CE"): 7.36837,
     ("Faint lbGRB (BHNS)", "II  Stable MT only"): 0.947377,
-    ("Faint lbGRB (BHNS)", "III Single-core CE"): 0.0,
+    ("Faint lbGRB (BHNS)", "III Single-core CE"): 1.43078,
     ("Faint lbGRB (BHNS)", "IV  Double-core CE"): 0.155602,
     ("Faint lbGRB (BHNS)", "V   Other"): 0.0,
-    ("lbGRB + red KN (BHNS disk)", "I  Stable MT + CE"): 1.34086,
+    ("lbGRB + red KN (BHNS disk)", "I  Stable MT + CE"): 0.912474,
     ("lbGRB + red KN (BHNS disk)", "II  Stable MT only"): 0.538304,
-    ("lbGRB + red KN (BHNS disk)", "III Single-core CE"): 0.0,
+    ("lbGRB + red KN (BHNS disk)", "III Single-core CE"): 0.428388,
     ("lbGRB + red KN (BHNS disk)", "IV  Double-core CE"): 0.0685578,
     ("lbGRB + red KN (BHNS disk)", "V   Other"): 0.0,
 }
@@ -124,6 +124,8 @@ def _build_per_cell_rates(mod):
         fc_mt_p1=bhns_ch["fc_mt_p1"],
         fc_mt_s1=bhns_ch["fc_mt_s1"],
         fc_mt_p1_K1=bhns_ch["fc_mt_p1_K1"],
+        fc_mt_p1_K2=bhns_ch["fc_mt_p1_K2"],
+        fc_mt_s1_K1=bhns_ch["fc_mt_s1_K1"],
         fc_mt_s1_K2=bhns_ch["fc_mt_s1_K2"],
     )
 
@@ -284,12 +286,17 @@ def test_section_08d_each_cell_equals_half_intrinsic(bhns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channels_III_V_together_negligible(bhns_class_channel_rates):
-    """(f_III + f_V) / f_total < 1e-2 in every BHNS class at z = 0.
+def test_section_08d_channel_V_empty_and_III_material(bhns_class_channel_rates):
+    """Channel V carries no BHNS weight; channel III carries a real share.
 
-    Channels III (single-core CE) and V (catch-all "Other") carry no
-    measurable BHNS weight in Model A; CH_PLOT filter in
-    ``grb_main.ipynb`` Section 7b drops both from the legend.
+    Channel V is the catch-all, and every system in all 40 files of the grid
+    lands in one of I to IV, so a non-zero V means the partition has sprung a
+    leak.  Channel III is the opposite check.  It reads as empty whenever the
+    single-core CE is missed (COMPAS logs the CE one event after the RLOF that
+    destabilised, and stores only the last CE per system), and Broekgaarden+
+    2021 Table 5 puts f_III between 2.1 and 60 per cent across their 420
+    variations, so an exactly-zero channel III is a bug signature rather than
+    a result.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
     R_per_class = bhns_class_channel_rates["R_per_class"]
@@ -298,11 +305,14 @@ def test_section_08d_channels_III_V_together_negligible(bhns_class_channel_rates
         R_total = float(R_per_class[cl][iz0])
         if R_total <= 0.0:
             continue
+        assert float(R_cell[cl]["V   Other"][iz0]) == 0.0, (
+            f"Channel V is non-empty in {cl!r}; the I to IV partition leaks."
+        )
         f_III = float(R_cell[cl]["III Single-core CE"][iz0]) / R_total
-        f_V = float(R_cell[cl]["V   Other"][iz0]) / R_total
-        assert (f_III + f_V) < 1e-2, (
-            f"Channels III + V are non-negligible in {cl!r}: "
-            f"f_III + f_V = {f_III + f_V:.3e} >= 1e-2"
+        assert f_III > 1e-2, (
+            f"Channel III is negligible in {cl!r}: f_III = {f_III:.3e}.  "
+            f"Below 1 per cent it is almost certainly the CE-ordering bug, "
+            f"not physics."
         )
 
 

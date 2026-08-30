@@ -411,10 +411,47 @@ def classify_grid(
 # ═══════════════════════════════════════════════════════════════════════════
 # Formation channel classification (Broekgaarden et al.)
 # ═══════════════════════════════════════════════════════════════════════════
-def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1, fc_mt_p1_K1, fc_mt_s1_K2):
+_NO_EVENT = 9999
+"""Sentinel ordinal for a star that never filled its Roche lobe.  Larger than
+any COMPAS event counter in the Broekgaarden+ 2021 grid (max 7 on Model A)."""
+
+_CORE_ENVELOPE_TYPES = (3, 4, 5, 6)
+"""Hurley+ 2000 stellar types with a clear core-envelope structure: first
+giant branch, core helium burning, early and thermally pulsing AGB.  The
+Hertzsprung gap (2) is deliberately excluded, since its radiative envelope
+transfers stably and it is the donor of the classic channel I."""
+
+_MAIN_SEQUENCE_TYPES = (0, 1)
+"""Hurley+ 2000 main-sequence types, the companion in a single-core CE."""
+
+
+def classify_formation_channels(
+    *,
+    dblCE,
+    fc_CEE,
+    fc_mt_p1,
+    fc_mt_s1,
+    fc_mt_p1_K1,
+    fc_mt_p1_K2,
+    fc_mt_s1_K1,
+    fc_mt_s1_K2,
+):
     """Event-sequence formation channel classification.
 
-    Parameters are 1-D arrays over the merging subset.
+    Parameters are 1-D arrays over the merging subset.  ``fc_mt_p1`` /
+    ``fc_mt_s1`` are the event ordinals of each star's first Roche-lobe
+    overflow (0 if it never transferred) and ``fc_CEE`` the ordinal of the
+    common envelope, all on the COMPAS event counter.  The four ``_K``
+    arrays are the Hurley+ 2000 stellar types at those first episodes:
+    ``fc_mt_p1_K1`` / ``fc_mt_p1_K2`` are the donor and companion when the
+    primary transfers, ``fc_mt_s1_K2`` / ``fc_mt_s1_K1`` the donor and
+    companion when the secondary does.
+
+    Broekgaarden+ 2021 Sec. 3.1 keys channels III and IV on the *first* mass
+    transfer phase being a common envelope, so that is what separates them
+    from the classic channel I.  Two things have to be read to establish it,
+    because the archive stores one CE ordinal per system and it is the last
+    one; see the comments on the two ``ce_*_first`` terms.
 
     Returns
     -------
@@ -424,28 +461,61 @@ def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1, fc_mt_p1_K
     """
     has_p1 = fc_mt_p1 > 0
     has_s1 = fc_mt_s1 > 0
-    first_is_primary = has_p1 & (~has_s1 | (fc_mt_p1 < fc_mt_s1))
-    first_is_secondary = has_s1 & (~has_p1 | (fc_mt_s1 < fc_mt_p1))
-    no_stable_mt = ~has_p1 & ~has_s1
+    no_mt = ~has_p1 & ~has_s1
+    had_CE = fc_CEE > 0
 
     # Case A donors (donor Hurley K = 0 or 1 at first RLOF) are folded into
     # I or II based on whether a CE follows, matching Broekgaarden+ 2022
-    # Sec. 3.2 convention.  Donor stellar type at first RLOF is preserved on
-    # fc_mt_p1_K1 / fc_mt_s1_K2 if a downstream analysis needs to slice on
-    # it; the unused intermediate is dropped from this routine.
-    had_CE = fc_CEE > 0
-
-    first_rlof_time = np.where(
-        first_is_primary, fc_mt_p1, np.where(first_is_secondary, fc_mt_s1, 999)
+    # Sec. 3.2 convention: neither main-sequence type is in
+    # _CORE_ENVELOPE_TYPES, so a Case A donor never reaches channel III.
+    first_rlof = np.minimum(
+        np.where(has_p1, fc_mt_p1, _NO_EVENT), np.where(has_s1, fc_mt_s1, _NO_EVENT)
     )
-    ce_first = had_CE & (no_stable_mt | (fc_CEE < first_rlof_time))
 
-    ch_IV = dblCE == 1
-    ch_other = ~ch_IV & no_stable_mt & ~had_CE
-    ch_II = ~ch_IV & ~ch_other & ~had_CE
-    ch_III = ~ch_IV & ~ch_other & ce_first
-    ch_I = ~ch_IV & ~ch_other & had_CE & ~ce_first
-    ch_other = ch_other | ~(ch_I | ch_II | ch_III | ch_IV)
+    # COMPAS logs the common envelope as the event immediately after the RLOF
+    # episode that went dynamically unstable, so a CE that *is* the first mass
+    # transfer sits one ordinal above it.  Testing fc_CEE < first_rlof instead
+    # never fires on the Broekgaarden files (fc_CEE exceeds the first RLOF
+    # ordinal for every system in Models A to T) and silently empties channel
+    # III into channel I: 11.7 per cent of the weighted BHNS population and
+    # 0.1 per cent of BNS on Model A.
+    ce_logged_first = had_CE & ~no_mt & (fc_CEE == first_rlof + 1)
+
+    # Second arm, needed because the archive stores one CE ordinal per system
+    # and it is the *last* one.  Balancing eventCounter against every named
+    # event (mass-transfer episodes, the logged CE, and the supernovae, with
+    # the SN slots counted rather than assumed) leaves exactly one unnamed
+    # event for 10.6 per cent of the Model A BHNS weight, and every one of
+    # those systems has a core-bearing donor transferring onto a main-sequence
+    # companion at its first RLOF.  That is Broekgaarden+ 2021 Sec. 3.1.3
+    # verbatim, and their Sec. 3.1.3 also notes such systems often go on to a
+    # second CE, which is the one fc_CEE ends up holding.  The BNS ledger
+    # balances at 100 per cent with no system in that configuration, which is
+    # what validates the method.  Unlike the ordinal test above this rests on
+    # an inference from the event count, not on a column the archive provides;
+    # it recovers 98.0 per cent of the surplus-carrying systems.
+    from_primary = has_p1 & (fc_mt_p1 == first_rlof)
+    donor_K = np.where(from_primary, fc_mt_p1_K1, fc_mt_s1_K2)
+    companion_K = np.where(from_primary, fc_mt_p1_K2, fc_mt_s1_K1)
+    ce_unlogged_first = (
+        had_CE
+        & ~no_mt
+        & np.isin(donor_K, _CORE_ENVELOPE_TYPES)
+        & np.isin(companion_K, _MAIN_SEQUENCE_TYPES)
+    )
+
+    ce_is_first = ce_logged_first | ce_unlogged_first
+
+    # Single- versus double-core is then COMPAS's own flag.  On Model A it
+    # agrees with "both stars carry a core-envelope structure at the first
+    # RLOF" for 100 per cent of the CE-first BHNS and all but 47 of the BNS.
+    # A main-sequence companion cannot make it double-core, so the second arm
+    # only ever feeds channel III.
+    ch_IV = ce_is_first & (dblCE == 1)
+    ch_III = ce_is_first & (dblCE != 1)
+    ch_II = ~had_CE & ~no_mt
+    ch_I = had_CE & ~ce_is_first & ~no_mt
+    ch_other = ~(ch_I | ch_II | ch_III | ch_IV)
 
     return {
         "I  Stable MT + CE": ch_I,

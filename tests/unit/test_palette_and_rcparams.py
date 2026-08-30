@@ -333,3 +333,86 @@ def test_per_dex_zero_fill_closes_an_end_only_when_a_bin_is_free_to_close_into()
     )
     assert edge[0] == 1e-9, "the low end still closes"
     assert np.isfinite(edge[-1]), "a truncated high end is drawn, not closed away"
+
+
+def _segments(ax):
+    """Every consecutive finite point pair actually joined by a drawn line."""
+    import numpy as np
+
+    out = []
+    for line in ax.lines:
+        x, y = np.asarray(line.get_xdata(), float), np.asarray(line.get_ydata(), float)
+        good = np.isfinite(x) & np.isfinite(y)
+        joined = good[:-1] & good[1:]
+        out += [(x[i], x[i + 1]) for i in np.flatnonzero(joined)]
+    return out
+
+
+def test_plot_gated_curve_joins_the_artifact_boundary():
+    """The step at the flag boundary is drawn as a step, not as a gap.
+
+    ``plot_gated_curve`` renders the unflagged and flagged runs as two
+    separate series, so the segment spanning the change of state belongs
+    to neither.  On the Section 5 panel that segment carries the
+    Broekgaarden+ 2022 common-envelope lambda step, the feature the shaded
+    band exists to point at, and leaving it out reads as missing data
+    rather than as a jump in the yield.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from grb_plot_style import plot_gated_curve
+
+    x = np.arange(6.0)
+    y = np.array([1.0, 1.0, 1.0, 3.0, 3.0, 3.0])
+    art = np.array([False, False, False, True, True, True])
+
+    fig, ax = plt.subplots()
+    plot_gated_curve(ax, x, y, np.ones(6, bool), "k", artifact=art)
+    seg = _segments(ax)
+    plt.close(fig)
+
+    assert (2.0, 3.0) in seg, (
+        "no line segment spans the artifact boundary: the curve breaks exactly "
+        "where the CE-lambda step is."
+    )
+    # The bridge must not double the markers at either endpoint, and must not
+    # invent joins across a genuine gap.
+    assert seg.count((2.0, 3.0)) == 1
+    y_gap = y.copy()
+    y_gap[3] = 0.0  # an empty bin: eta = 0 is not drawable on a log ordinate
+    fig, ax = plt.subplots()
+    plot_gated_curve(ax, x, y_gap, np.ones(6, bool), "k", artifact=art)
+    seg_gap = _segments(ax)
+    plt.close(fig)
+    assert (2.0, 3.0) not in seg_gap, "bridged across an undrawable point"
+
+
+def test_plot_gated_curve_marker_applies_to_solid_and_faded():
+    """Marker shape carries across the artifact flag.
+
+    Two Section 5 classes share the palette red and are told apart by
+    shape, so a shape that reverted to the default inside the shaded band
+    would merge them exactly where the CE-lambda step is.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from grb_plot_style import plot_gated_curve
+
+    x = np.arange(6.0)
+    y = np.full(6, 2.0)
+    art = np.array([False, False, False, True, True, True])
+
+    fig, ax = plt.subplots()
+    plot_gated_curve(ax, x, y, np.ones(6, bool), "k", marker="^", artifact=art)
+    shapes = {line.get_marker() for line in ax.lines if line.get_marker() not in (None, "None", "")}
+    plt.close(fig)
+
+    assert shapes == {"^"}, f"marker not carried through every state: {shapes}"
