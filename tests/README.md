@@ -30,6 +30,11 @@ Pure module-level invariants over `grb_*.py`. No `data/`, no
 | `test_phase4_helpers.py` | `marginalize_bh_spin`, `channel_class_crosstab`, offsets vectorisation |
 | `test_physics.py` | Foucart 2018, Kruger-Foucart 2020, MSSFR normalisation |
 | `test_rates.py` | `dPdlogZ`, `compute_merger_rate`, `calibrate_mean_mass_evolved` |
+| `test_beaming.py` | `beamed_rate`, `beamed_rate_mixed`, `CLASS_THETA_J` |
+| `test_bns_jet_breakout.py` | `breakout_fraction_bns_eos` and the intrinsic-to-observable rate ladder |
+| `test_eos_sensitivity.py` | `compute_eos_sensitivity` contract on one population |
+| `test_eos_sensitivity_grid.py` | `compute_eos_sensitivity` over NS-mass treatment x EOS |
+| `test_offsets_kick_velocity.py` | kick velocity sets the offset scale in `compute_offsets_mixed_hosts` |
 
 ### `sections/` (one file per notebook section)
 
@@ -44,10 +49,9 @@ Thin smoke tests aligned with the figures in
 | 3 | `test_section_03_delay_times.py` | Delay Time Distributions by GRB Class |
 | 4 | `test_section_04_mssfr.py` | Cosmic Integration / MSSFR Grid Setup |
 | 5 | `test_section_05_metallicity_efficiency.py` | Metallicity Dependence of GRB Formation Efficiency |
-| 6 | `test_section_06_bns_rate.py` (+ `06b` channel split, `06c` LVK cross-check, `06d` formation channels) | BNS Merger Rate R(z) per GRB Class |
-| 7 | `test_section_07_bhns_spin.py` (+ `07b` channel split, `07c` LVK cross-check) | BHNS Merger Rate R(z) with BH Spin Sensitivity |
-| 8 | `test_section_08_offsets.py` (+ `08b` kick variations) | Physical Host-Galaxy Offset Distributions |
-| 10 | `test_section_10_beaming.py`, `test_section_10_bns_breakout.py` (+ `10c` EOS comparator) | BNS Jet Breakout and Beaming (Intrinsic vs Observable) |
+| 6 | `test_section_06_bns_rate.py`, `test_section_06_lvk_rate_comparison.py` (+ `06b` channel split and `06b` formation-channel classifier) | BNS Merger Rate R(z) per GRB Class |
+| 7 | `test_section_07_bhns_spin.py`, `test_section_07_lvk_rate_comparison.py` (+ `07b` channel split) | BHNS Merger Rate R(z) with BH Spin Sensitivity |
+| 8 | `test_section_08_offsets.py` | Physical Host-Galaxy Offset Distributions |
 | 11 | `test_section_11_model_grid_scan.py` | Full 20-model Broekgaarden+ 2021 grid scan (population-synthesis robustness) |
 
 ### `anchors/` (literature audit)

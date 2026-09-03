@@ -38,7 +38,8 @@ The fiducial mass treatment keeps the raw COMPAS masses under
 :func:`cold_stable_ns_mask`.  :func:`remap_ns_masses_double_gaussian`
 and :func:`remap_ns_marginal` quantile-remap onto the Alsing+ 2018
 Galactic-NS PDF, but they inflate the weight across the deficit rather
-than recovering it, so they enter only as the Section 2b systematic.
+than recovering it, so no notebook figure applies them; they are here for
+an explicit sensitivity run only.
 
 Jet efficiency caveat
 ---------------------
@@ -356,7 +357,7 @@ def remap_ns_marginal(
 
     ``target_cdf`` overrides the default Alsing+ 2018 target with an
     arbitrary ``cdf(x, m_min, m_max)`` callable (e.g. a uniform prior),
-    used by the Section 2b remap-dependence test to quantify how much of
+    used by the remap-dependence tests to quantify how much of
     the BNS demographics is set by the imposed mass function rather than
     by COMPAS.  When ``None`` the Alsing double Gaussian is used.
     """
@@ -464,7 +465,7 @@ def remap_ns_masses_double_gaussian(
         Override the Alsing+ 2018 target with an arbitrary
         ``cdf(x, m_min, m_max)`` (e.g. ``uniform_mass_cdf``).  Passed
         through to both per-component :func:`remap_ns_marginal` calls.
-        Used by the Section 2b remap-dependence test.
+        Used by the remap-dependence tests.
     """
     if rng is None:
         rng = np.random.default_rng(0)
@@ -512,7 +513,8 @@ def cold_stable_ns_mask(*component_masses, m_tov=M_TOV):
     a cold, non-rotating star under that EOS, so a BNS row containing
     such a component is not a BNS at all and must leave the sample
     before classification.  Passing the EOS-specific ``m_tov`` makes the
-    cut move with the equation of state in the Section 2b sweep.
+    cut move with the equation of state in an EOS sweep, as the Section 11.6
+    matrix does.
 
     Accepts one array per component (``m1, m2`` for BNS; a single
     ``M_NS`` for the BHNS neutron star) and returns the elementwise AND

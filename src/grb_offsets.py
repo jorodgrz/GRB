@@ -1708,7 +1708,7 @@ def weighted_offset_cdf(offsets, weights):
 
 # Number of Rice realizations and the seed used for them.  500 is the Fong
 # et al. (2022) Sec. 6.2 choice; the seed is fixed so a figure regenerates
-# identically (42 and 43 are already taken by the Alsing remap in Section 2b).
+# identically (42 and 43 are reserved for the NS-mass remap helpers).
 RICE_N_SAMPLES = 500
 RICE_SEED = 44
 

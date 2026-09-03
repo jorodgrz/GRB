@@ -66,9 +66,8 @@ def _build_setup(bns_a_path):
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
     from grb_classify import classify_bns_2024
-    from grb_io import filter_systems, load_bns, read_expected_local_rate
+    from grb_io import METALLICITY_GRID, filter_systems, load_bns, read_expected_local_rate
     from grb_physics import M_TOV, cold_stable_ns_mask
-    from grb_rates import calibrate_mean_mass_evolved
 
     bns = load_bns(path=bns_a_path)
     # Fiducial raw COMPAS masses after the cold-stability cut (m_i <= M_TOV);
@@ -87,6 +86,10 @@ def _build_setup(bns_a_path):
     mask = cls["sbGRB + blue KN"]
     assert mask.any(), "sbGRB + blue KN class is empty on BNS A; setup is broken"
 
+    # The COMPAS prior bounds, not the empirical range of this sample.  In
+    # some models the extreme metallicity bins hold no merging systems, so
+    # the empirical range is narrower than the range the sampler drew from,
+    # and p_draw would come out wrong.
     return SimpleNamespace(
         fci=fci,
         Planck15=Planck15,
@@ -94,9 +97,10 @@ def _build_setup(bns_a_path):
         delays=delays,
         w=w,
         Z_grid=Z_grid,
+        Z_prior=(float(METALLICITY_GRID[0]), float(METALLICITY_GRID[-1])),
+        Z_grid_53=METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))],
         mask=mask,
         expected_local_rate=read_expected_local_rate(bns_a_path),
-        calibrate_mean_mass_evolved=calibrate_mean_mass_evolved,
     )
 
 
@@ -107,6 +111,8 @@ def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
     from grb_rates import (
         MSSFR_PARAMS_LEVINA26_TNG100,
         SFR_PARAMS_LEVINA26_TNG100,
+        dPdlogZ_binned_to_grid,
+        simulation_star_forming_mass,
     )
 
     redshifts, _, times, time_first_SF, _, _ = setup.fci.calculate_redshift_related_params(
@@ -115,21 +121,20 @@ def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
     sfr = setup.fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
     dPdlogZ, mets, p_draw = setup.fci.find_metallicity_distribution(
         redshifts,
-        min_logZ_COMPAS=np.log(setup.Z.min()),
-        max_logZ_COMPAS=np.log(setup.Z.max()),
+        min_logZ_COMPAS=np.log(setup.Z_prior[0]),
+        max_logZ_COMPAS=np.log(setup.Z_prior[1]),
         **MSSFR_PARAMS_LEVINA26_TNG100,
     )
-    mean_mass = setup.calibrate_mean_mass_evolved(
-        redshifts,
-        times,
-        time_first_SF,
-        setup.Z,
-        setup.delays,
-        setup.w,
-        setup.expected_local_rate,
-        Z_min_COMPAS=setup.Z.min(),
-        Z_max_COMPAS=setup.Z.max(),
-    )
+    # COMPAS ClassMSSFR bin convention (notebook Section 4): the top and
+    # bottom grid points absorb the star formation off the ends of the
+    # simulated grid, which the pointwise lookup drops entirely.
+    dPdlogZ = dPdlogZ_binned_to_grid(dPdlogZ, mets, setup.Z_grid_53, p_draw)
+    # Run-configuration star-forming mass: a property of the sampler, so it
+    # is one constant rather than a per-population fit.  Using the constant
+    # also makes the redshift-step invariance test below a statement about
+    # compute_merger_rate alone, instead of one that folds in the
+    # dz-dependence of a calibration step.
+    mean_mass = simulation_star_forming_mass(n_metallicities=setup.Z_grid_53.size)
     n_formed = sfr / mean_mass
     return SimpleNamespace(
         redshifts=redshifts,

@@ -3,7 +3,7 @@
 Six end-to-end checks on the live Model A pipeline, all reusing the
 shared ``_model_cache.get_model("A")`` so the expensive load +
 Alsing-remap + MEAN_MASS_EVOLVED calibration runs at most once per
-session across Sections 7b / 7c / 8c / 8d / 12.
+session across the Section 6, 6b, 7 and 7b tests.
 
 Layered with [tests/unit/test_class_channel_split.py](tests/unit/test_class_channel_split.py)
 which exercises the same partition / non-negative / filter invariants
@@ -68,31 +68,31 @@ _CHANNEL_KEYS = [
 # Channel II is empty for BNS by the Broekgaarden+ 2022 CE picture)
 # and are handled by ``_assert_pinned`` with a 1e-3 absolute tolerance.
 _R0_PINS_BNS = {
-    ("sbGRB + blue KN", "I  Stable MT + CE"): 16.6084,
-    ("sbGRB + blue KN", "II  Stable MT only"): 0.0,
-    ("sbGRB + blue KN", "III Single-core CE"): 0.028077,
-    ("sbGRB + blue KN", "IV  Double-core CE"): 5.14727,
-    ("sbGRB + blue KN", "V   Other"): 0.0,
-    ("lbGRB + red KN (HMNS)", "I  Stable MT + CE"): 3.92732,
-    ("lbGRB + red KN (HMNS)", "II  Stable MT only"): 0.0,
-    ("lbGRB + red KN (HMNS)", "III Single-core CE"): 0.0119975,
-    ("lbGRB + red KN (HMNS)", "IV  Double-core CE"): 15.8076,
-    ("lbGRB + red KN (HMNS)", "V   Other"): 0.0,
-    ("lbGRB + red KN (disk)", "I  Stable MT + CE"): 0.86822,
-    ("lbGRB + red KN (disk)", "II  Stable MT only"): 0.0,
-    ("lbGRB + red KN (disk)", "III Single-core CE"): 0.00296254,
-    ("lbGRB + red KN (disk)", "IV  Double-core CE"): 0.488862,
-    ("lbGRB + red KN (disk)", "V   Other"): 0.0,
-    ("Faint lbGRB", "I  Stable MT + CE"): 0.527406,
-    ("Faint lbGRB", "II  Stable MT only"): 0.0,
-    ("Faint lbGRB", "III Single-core CE"): 0.00437286,
-    ("Faint lbGRB", "IV  Double-core CE"): 11.5617,
-    ("Faint lbGRB", "V   Other"): 0.0,
+    ("sbGRB + blue KN", "I  Stable MT + CE"): 10.3378,
+    ("sbGRB + blue KN", "II  Stable MT only"): 0,
+    ("sbGRB + blue KN", "III Single-core CE"): 0.0357908,
+    ("sbGRB + blue KN", "IV  Double-core CE"): 21.9003,
+    ("sbGRB + blue KN", "V   Other"): 0,
+    ("lbGRB + red KN (HMNS)", "I  Stable MT + CE"): 3.15915,
+    ("lbGRB + red KN (HMNS)", "II  Stable MT only"): 0,
+    ("lbGRB + red KN (HMNS)", "III Single-core CE"): 0.0035502,
+    ("lbGRB + red KN (HMNS)", "IV  Double-core CE"): 3.91778,
+    ("lbGRB + red KN (HMNS)", "V   Other"): 0,
+    ("lbGRB + red KN (disk)", "I  Stable MT + CE"): 1.18067,
+    ("lbGRB + red KN (disk)", "II  Stable MT only"): 0,
+    ("lbGRB + red KN (disk)", "III Single-core CE"): 0.000479847,
+    ("lbGRB + red KN (disk)", "IV  Double-core CE"): 3.25663,
+    ("lbGRB + red KN (disk)", "V   Other"): 0,
+    ("Faint lbGRB", "I  Stable MT + CE"): 0.0335034,
+    ("Faint lbGRB", "II  Stable MT only"): 0,
+    ("Faint lbGRB", "III Single-core CE"): 0.00256846,
+    ("Faint lbGRB", "IV  Double-core CE"): 3.07977,
+    ("Faint lbGRB", "V   Other"): 0,
 }
 
 
 def _assert_pinned(value: float, pinned: float, name: str) -> None:
-    """Same idiom as ``test_section_06d_formation_channels._assert_pinned``.
+    """Same idiom as ``test_section_06b_formation_channels._assert_pinned``.
 
     Above 1e-3 Gpc^-3 yr^-1 the rate density is a population-level
     statistic, so a 5 percent relative tolerance is the right band for
@@ -181,7 +181,7 @@ def bns_class_channel_rates():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_channel_sum_equals_per_class_total(bns_class_channel_rates):
+def test_section_06b_channel_sum_equals_per_class_total(bns_class_channel_rates):
     """sum_ch R_cell[cl][ch] == R_per_class[cl] at rtol = 1e-12 for every BNS class.
 
     Mirrors the in-cell ``assert np.allclose(R_sum, merger_rates_BNS[cl_label])``
@@ -209,7 +209,7 @@ def test_section_07c_channel_sum_equals_per_class_total(bns_class_channel_rates)
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_class_sum_equals_per_channel_total(bns_class_channel_rates):
+def test_section_06b_class_sum_equals_per_channel_total(bns_class_channel_rates):
     """sum_cl R_cell[cl][ch] == R_per_channel[ch] at rtol = 1e-12 for every channel.
 
     Mirrors the in-cell ``assert np.allclose(R_sum, merger_rates_ch[ch_label])``
@@ -237,7 +237,7 @@ def test_section_07c_class_sum_equals_per_channel_total(bns_class_channel_rates)
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_all_cells_nonnegative_everywhere(bns_class_channel_rates):
+def test_section_06b_all_cells_nonnegative_everywhere(bns_class_channel_rates):
     """Every (class, channel) curve is >= 0 at every redshift.
 
     The Section 6b y-axis is log-scaled (``ax.set_yscale('log')``), so a
@@ -257,7 +257,7 @@ def test_section_07c_all_cells_nonnegative_everywhere(bns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_channel_II_negligible_in_every_BNS_class(bns_class_channel_rates):
+def test_section_06b_channel_II_negligible_in_every_BNS_class(bns_class_channel_rates):
     """f_II / f_total < 1e-2 in every BNS class at z = 0.
 
     Anchor: Broekgaarden et al. (2022) arXiv:2112.05763, Sec. 4.2.  BNS
@@ -287,7 +287,7 @@ def test_section_07c_channel_II_negligible_in_every_BNS_class(bns_class_channel_
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_channels_III_V_together_negligible(bns_class_channel_rates):
+def test_section_06b_channels_III_V_together_negligible(bns_class_channel_rates):
     """(f_III + f_V) / f_total < 1e-2 in every BNS class at z = 0.
 
     Same anchor family as Channel II: Channels III (single-core CE) and
@@ -317,7 +317,7 @@ def test_section_07c_channels_III_V_together_negligible(bns_class_channel_rates)
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_dominant_channel_per_class_is_I_or_IV(bns_class_channel_rates):
+def test_section_06b_dominant_channel_per_class_is_I_or_IV(bns_class_channel_rates):
     """argmax_ch R(z = 0) per BNS class is "I  Stable MT + CE" or "IV  Double-core CE".
 
     Model-A-specific anchor: under alpha_CE = 1, Fryer+ 2012 delayed
@@ -345,15 +345,21 @@ def test_section_07c_dominant_channel_per_class_is_I_or_IV(bns_class_channel_rat
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_R0_per_cell_pinned_to_model_A(bns_class_channel_rates):
+def test_section_06b_R0_per_cell_pinned_to_model_A(bns_class_channel_rates):
     """Per-(class, channel) R(z = 0) within 5 percent of the COMPAS-81722d4 pin.
 
     Tolerance scheme: 5 percent relative above 1e-3 Gpc^-3 yr^-1, 1e-3
-    absolute below.  Pin source: ``tests/sections/_extract_pins.py`` run
-    against the project's pinned COMPAS commit ``81722d4`` and Levina+
-    2026 TNG100-1 MSSFR, ``smooth_sigma = 0``.  A drift here flags one
-    of: COMPAS-pin change, NS remap change, MSSFR change, calibration
-    change in ``calibrate_mean_mass_evolved``.
+    absolute below.  Pins are the notebook's own Section 6b values, taken
+    from ``_model_cache`` on the science path: raw COMPAS masses, the
+    cold-stability cut, the shared run-configuration ``M_SF``, the
+    ``ClassMSSFR`` metallicity binning, ``smooth_sigma = 0``, the project's
+    pinned COMPAS commit ``81722d4`` and the Levina+ 2026 TNG100-1 MSSFR.
+    They reproduce the table Section 6b prints.  A drift here flags a
+    change to the COMPAS pin, the MSSFR, the cut, or the star-forming-mass
+    normalisation.  The absolute scale is anchored separately, by
+    ``tests/integration/test_cosmic_integration_vs_compas.py`` against the
+    published ``w_000``; these pins are a regression tripwire on the split,
+    not an independent measurement of it.
     """
     R_cell = bns_class_channel_rates["R_cell"]
     iz0 = bns_class_channel_rates["mod"]["iz0"]

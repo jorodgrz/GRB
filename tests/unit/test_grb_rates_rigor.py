@@ -5,7 +5,7 @@ detected_rate / calibrate_mean_mass_evolved / Wanderman-Piran /
 Kroupa / Kish / beaming round-trips),
 ``tests/unit/test_phase4_helpers.py`` (marginalize_bh_spin /
 observed_frame_rate / compute_eos_sensitivity / beamed_class_comparison),
-``tests/sections/test_section_10_beaming.py`` (beaming + CLASS_THETA_J),
+``tests/unit/test_beaming.py`` (beaming + CLASS_THETA_J),
 ``tests/sections/test_section_05_metallicity_efficiency.py``
 (formation_efficiency real-data), and the literature-anchor block in
 ``tests/anchors/test_literature_anchors.py``.

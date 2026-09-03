@@ -37,12 +37,19 @@ import pytest
 def notebook_pipeline(bns_a_path, bhns_a_path):
     """Reproduce ``grb_main.ipynb`` Sections 4-11 numerical pipeline.
 
-    Loads BNS A + BHNS A, applies the Alsing 2018 NS remap, runs the
-    Gottlieb 2024 BNS classifier and the Foucart 2018 BHNS disk-mass
-    classifier at fiducial ``a_BH = 0.5``, calibrates
-    ``MEAN_MASS_EVOLVED`` per population against the Broekgaarden 2021
-    ``w_000`` reference, and computes ``compute_merger_rate`` at
-    ``smooth_sigma=30`` (the notebook's production setting).
+    Loads BNS A + BHNS A on the raw COMPAS masses, applies the Section 0
+    cold-stability cut, runs the Gottlieb 2024 BNS classifier and the
+    Foucart 2018 BHNS disk-mass classifier at fiducial ``a_BH = 0.5``,
+    normalises by the shared run-configuration star-forming mass, and
+    computes ``compute_merger_rate`` at ``smooth_sigma=0``.
+
+    Unsmoothed is not an optimisation, it is the only correct setting for
+    a test that reads R(z = 0) off the array.  The production
+    ``smooth_sigma=30`` kernel reflects at the z = 0 boundary and folds the
+    rising side of R(z) back onto the first bin, inflating the local rate by
+    about 30 percent; the notebook smooths a display copy only and quotes
+    every number from the unsmoothed array.  Comparing a smoothed R(z = 0)
+    against a literature band tests the smoothing kernel, not the model.
 
     Returns a dict mirroring the variables the notebook prints; tests
     consume the exact same numbers.
@@ -57,6 +64,8 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     from grb_io import (
         DEFAULT_BHNS_PATH,
         DEFAULT_BNS_PATH,
+        METALLICITY_GRID,
+        filter_systems,
         load_bhns_with_kicks,
         load_bns_with_channels,
         load_bns_with_kicks,
@@ -64,27 +73,27 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
         verify_shared_metallicity_prior,
     )
     from grb_physics import (
+        M_TOV,
         MISALIGNMENT_SYSTEMATIC_FACTOR,
-        remap_ns_masses_double_gaussian,
+        cold_stable_ns_mask,
     )
     from grb_rates import (
         apply_bhns_misalignment,
-        calibrate_mean_mass_evolved,
         compute_merger_rate,
+        dPdlogZ_binned_to_grid,
+        simulation_star_forming_mass,
     )
 
     # ------------------------------------------------------------------
-    # BNS load and Alsing 2018 NS remap (notebook lines 106-115).
+    # BNS load and cold-stability cut (notebook Section 0).  Raw COMPAS
+    # gravitational masses, no quantile remap, and every component above
+    # M_TOV leaves the sample before any classifier sees it.
     # ------------------------------------------------------------------
     bns_ch = load_bns_with_channels(path=bns_a_path)
     bns_k = load_bns_with_kicks(path=bns_a_path)
-    bns_ch["m1"], bns_ch["m2"] = remap_ns_masses_double_gaussian(
-        bns_ch["m1"].copy(),
-        bns_ch["m2"].copy(),
-        weights=bns_ch["weights"],
-        rng=np.random.default_rng(42),
-    )
-    bns_k["m1"], bns_k["m2"] = bns_ch["m1"], bns_ch["m2"]
+    _keep_bns = cold_stable_ns_mask(bns_ch["m1"], bns_ch["m2"], m_tov=M_TOV)
+    bns_ch = filter_systems(bns_ch, _keep_bns)
+    bns_k = filter_systems(bns_k, _keep_bns)
 
     m1_bns, m2_bns = bns_ch["m1"], bns_ch["m2"]
     w_bns = bns_ch["weights"]
@@ -101,6 +110,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # BHNS load and Foucart 2018 disk-mass classification at a_BH=0.5.
     # ------------------------------------------------------------------
     bhns = load_bhns_with_kicks(path=bhns_a_path)
+    bhns = filter_systems(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
     BH, NS_bh = bhns["M_BH"], bhns["M_NS"]
     w_bhns = bhns["weights"]
     Z_bhns = bhns["metallicity"]
@@ -139,28 +149,17 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     expected_rate_bns = read_expected_local_rate(bns_a_path)
     expected_rate_bhns = read_expected_local_rate(bhns_a_path)
 
-    mean_mass_bns = calibrate_mean_mass_evolved(
-        redshifts,
-        times,
-        time_first_SF,
-        Z_bns,
-        delay_bns,
-        w_bns,
-        expected_rate_bns,
-        Z_min_COMPAS=Z_range[0],
-        Z_max_COMPAS=Z_range[1],
-    )
-    mean_mass_bhns = calibrate_mean_mass_evolved(
-        redshifts,
-        times,
-        time_first_SF,
-        Z_bhns,
-        delay_bhns,
-        w_bhns,
-        expected_rate_bhns,
-        Z_min_COMPAS=Z_range[0],
-        Z_max_COMPAS=Z_range[1],
-    )
+    # COMPAS ClassMSSFR bin convention (notebook Section 4): the top grid
+    # point absorbs the 28.5 percent of z = 0 star formation above the
+    # Z = 0.03 ceiling, which the pointwise lookup assigns to nothing.
+    Z_grid_53 = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
+    dPdlogZ = dPdlogZ_binned_to_grid(dPdlogZ, metallicities, Z_grid_53, p_draw)
+
+    # Run-configuration star-forming mass, shared by both populations.  The
+    # published w_000 anchors above stay reference values: with this
+    # normalisation and the binning above the rate path has no free
+    # parameter, so reproducing them is a result rather than an input.
+    mean_mass_bns = mean_mass_bhns = simulation_star_forming_mass(n_metallicities=Z_grid_53.size)
     n_formed_BNS = sfr / mean_mass_bns
     n_formed_BHNS = sfr / mean_mass_bhns
 
@@ -186,6 +185,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
             Z_bns[mask],
             delay_bns[mask],
             w_bns[mask],
+            smooth_sigma=0,
         )
         for label, mask in bns_class_masks.items()
     }
@@ -204,6 +204,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
         Z_bhns,
         delay_bhns,
         w_bhns,
+        smooth_sigma=0,
     )
     rate_bhns_all_misaligned = apply_bhns_misalignment(rate_bhns_all)
 
@@ -218,6 +219,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
         Z_bhns[bhns_long],
         delay_bhns[bhns_long],
         w_bhns[bhns_long],
+        smooth_sigma=0,
     )
 
     iz0 = int(np.argmin(np.abs(redshifts)))
@@ -268,67 +270,90 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 def test_bns_modelA_R0_within_LIGO_O4_BNS_band(notebook_pipeline):
-    """All-BNS intrinsic R(z=0) sits inside the LIGO/Virgo GWTC-3 BNS posterior.
+    """All-BNS intrinsic R(z=0) sits inside the LVK GWTC-5.0 BNS 90 percent CR.
 
-    Abbott et al. (2023) ApJ 949, 76 (GWTC-3 population paper) report
-    the local BNS merger-rate density (90 percent credible interval):
+    ``LVK_GWTC5_LOCAL_RATES["BNS"]`` carries the intrinsic source-frame
+    merger-rate density at z = 0 from the GWTC-5.0 population analysis
+    (LVK 2026, arXiv:2605.27226, Table 2 "Joint" row): 5.1 to 154.7
+    Gpc^-3 yr^-1.  This supersedes the GWTC-3 envelope of 10 to 1700 the
+    test used to quote, which is roughly ten times wider and could not
+    fail for any drift this pipeline is capable of.
 
-        R_BNS(z = 0) in [10, 1700] Gpc^-3 yr^-1
-
-    depending on the population model.  The corresponding O4
-    public-alert observing-run summary (Abbott+ 2023, ApJ submitted)
-    quotes the same envelope.  Model A's BNS rate (Broekgaarden+ 2021
-    fiducial, ~33 Gpc^-3 yr^-1 from ``weights_intrinsic/w_000``) sits
-    near the lower edge of this band.
-
-    Loose envelope; surfaces only catastrophic miscalibration.
+    Both sides are intrinsic rates at z = 0, so the comparison is direct:
+    no beaming factor and no misalignment factor, per the GW-rate
+    convention in CLAUDE.md.  Model A lands at about 47 Gpc^-3 yr^-1,
+    inside the band with a factor of roughly 3 of headroom either way.
     """
+    from grb_rates import LVK_GWTC5_LOCAL_RATES
+
     pipe = notebook_pipeline
     R0 = float(pipe["merger_rates_BNS"]["All BNS"][pipe["iz0"]])
     assert R0 > 0
-    lo, hi = 10.0, 1700.0
+    band = LVK_GWTC5_LOCAL_RATES["BNS"]
+    lo, hi = band["R_lo"], band["R_hi"]
     assert lo <= R0 <= hi, (
-        f"All-BNS R(z=0) = {R0:.2f} Gpc^-3 yr^-1 is outside the "
-        f"LIGO/Virgo GWTC-3 envelope [{lo}, {hi}] (Abbott+ 2023).  "
-        f"Either the calibration broke (check w_000 anchor) or the "
-        f"sample is no longer Model A."
+        f"All-BNS R(z=0) = {R0:.2f} Gpc^-3 yr^-1 is outside the LVK "
+        f"GWTC-5.0 BNS 90 percent CR [{lo}, {hi}].  Either the "
+        f"star-forming-mass normalisation broke, the metallicity binning "
+        f"drifted, or the sample is no longer Model A."
     )
 
 
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 def test_bhns_modelA_R0_within_LIGO_O4_BHNS_band(notebook_pipeline):
-    """All-BHNS intrinsic R(z=0), after misalignment correction, in LIGO O4 band.
+    """All-BHNS intrinsic R(z=0) overshoots the GWTC-5.0 NSBH band, by the documented factor.
 
-    Abbott et al. (2023) ApJ 949, 76 GWTC-3: the local BHNS merger-rate
-    density (90 percent credible interval) is
+    Two separate claims, both of which the earlier form of this test got
+    wrong by comparing a misalignment-corrected rate against a GW band
+    inside an envelope wide enough to accept anything.
 
-        R_BHNS(z = 0) in [7.4, 320] Gpc^-3 yr^-1
+    First, the comparison has to be made on the *intrinsic* rate.
+    ``MISALIGNMENT_SYSTEMATIC_FACTOR`` is a jet-orientation suppression;
+    the GW measurement already folds in its own selection effects through
+    the population analysis, so applying the jet factor as well would
+    double-suppress the model by 2x against a band it is being tested on
+    (the GW-rate convention in CLAUDE.md).
 
-    after marginalising over population models.  Model A's BHNS rate
-    (Broekgaarden+ 2021 fiducial) is a few Gpc^-3 yr^-1; after the
-    population-averaged ``MISALIGNMENT_SYSTEMATIC_FACTOR = 0.5``
-    correction (Fragos et al. 2010, Kawaguchi et al. 2015), the
-    notebook-printed value should sit at the low end of the LIGO band.
+    Second, Model A does not sit inside the band and the notebook does not
+    claim it does.  GWTC-5.0 added no new NSBH, so the NSBH band tightened
+    to 6.7 to 32.8 Gpc^-3 yr^-1 while Model A predicts about 73, a factor
+    of roughly 2.2 above the upper edge.  That overshoot is the finding
+    Sections 7 and 11.1b report, so the test asserts it rather than
+    hiding it inside a loose envelope.  The band on the ratio is a
+    regression tripwire: it would catch a factor-of-2 drift in either
+    direction while tolerating the sampling and MSSFR spread.
 
-    The 50 percent misalignment correction (``apply_bhns_misalignment``
-    in ``grb_rates.py``) is rate-level, not sample-level.  Any analysis
-    that double-counts by additionally dropping systems from the sample
-    silently halves the BHNS rate twice.
+    The rate-level-only nature of the misalignment factor is checked here
+    too, since a sample-level double-count is the classic way to halve
+    this rate twice without any test noticing.
     """
+    from grb_rates import LVK_GWTC5_LOCAL_RATES
+
     pipe = notebook_pipeline
-    R0 = float(pipe["rate_bhns_all_misaligned"][pipe["iz0"]])
-    assert R0 > 0
-    # Drop the lower edge to 1.0 to allow Model A's intrinsically low
-    # BHNS rate (~few Gpc^-3 yr^-1 before misalignment, ~1-3 after) to
-    # pass.  Upper edge held at the LIGO 90 percent UL.
-    lo, hi = 1.0, 320.0
-    assert lo <= R0 <= hi, (
-        f"All-BHNS R(z=0) (after misalignment x"
-        f"{pipe['misalignment_factor']}) = {R0:.3f} Gpc^-3 yr^-1 is "
-        f"outside [{lo}, {hi}] (LIGO/Virgo GWTC-3 90 percent CR).  "
-        f"Verify both the calibration anchor and that "
-        f"apply_bhns_misalignment was applied at the rate level only."
+    iz0 = pipe["iz0"]
+    R0_intrinsic = float(pipe["rate_bhns_all"][iz0])
+    R0_misaligned = float(pipe["rate_bhns_all_misaligned"][iz0])
+    assert R0_intrinsic > 0
+
+    # Misalignment is a scalar applied once, at the rate level.
+    assert R0_misaligned == pytest.approx(R0_intrinsic * pipe["misalignment_factor"], rel=1e-12), (
+        f"misalignment-corrected R(z=0) = {R0_misaligned:.4f} is not "
+        f"{pipe['misalignment_factor']} x the intrinsic {R0_intrinsic:.4f}; "
+        f"apply_bhns_misalignment must be rate-level only, never also a "
+        f"sample-level cut."
+    )
+
+    band = LVK_GWTC5_LOCAL_RATES["NSBH"]
+    ratio = R0_intrinsic / band["R_hi"]
+    lo, hi = 1.5, 4.0
+    assert lo <= ratio <= hi, (
+        f"All-BHNS intrinsic R(z=0) = {R0_intrinsic:.2f} Gpc^-3 yr^-1 is "
+        f"{ratio:.2f}x the GWTC-5.0 NSBH upper edge {band['R_hi']}, outside "
+        f"the documented overshoot band [{lo}, {hi}].  Below {lo} the "
+        f"headline tension in Sections 7 and 11.1b has gone away and the "
+        f"manuscript needs rewording; above {hi} something broke in the "
+        f"normalisation or the Foucart disk-mass classification."
     )
 
 
@@ -351,11 +376,11 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
     Combined envelope: ~[0.3, 6.5] Gpc^-3 yr^-1 (taking the widest
     union of the lower / upper edges).
 
-    The intrinsic BNS sbGRB rate from Section 7 multiplied by f_beam =
+    The intrinsic BNS sbGRB rate from Section 6 multiplied by f_beam =
     1 - cos(theta_j_fid) at theta_j_fid = 13 deg (Fong 2015 / Beniamini
-    and Nakar 2019 fiducial) should sit in this band.  The notebook
-    Section 10 quote shows R_sbGRB beamed ~ 0.7 Gpc^-3 yr^-1 for Model
-    A, well inside the envelope.
+    and Nakar 2019 fiducial) should sit in this band.  Section 6c prints
+    R_sbGRB beamed ~ 0.8 Gpc^-3 yr^-1 for Model A, well inside the
+    envelope.
 
     Cited assumption: 100 percent jet launching above the disk-mass
     threshold (Gottlieb 2023); all disk-mass GRB rates are therefore
@@ -368,12 +393,13 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     R_sb_beamed = float(beamed_rate(R_sb_int, theta_fid))
 
-    # Combined union envelope of WP15, Ghirlanda 2016, Colombo 2022.
-    # We loosen the upper edge to 10.0 to account for the
-    # upper-bound caveat (100 percent jet efficiency); a model
-    # prediction near the upper edge is consistent with the full WP15
-    # +2.3 sigma extension.
-    lo, hi = 0.10, 10.0
+    # The union envelope the docstring cites, used as cited.  An earlier
+    # form widened it to [0.10, 10.0] "to account for the upper-bound
+    # caveat", which is a reason to expect the model at or below the top
+    # of the band, not a reason to move the band; the widened version had
+    # roughly eight times the slack in each direction and could not fail.
+    # Model A lands at about 0.83, comfortably inside as cited.
+    lo, hi = 0.30, 6.5
     assert lo <= R_sb_beamed <= hi, (
         f"Beamed sbGRB R(z=0) = {R_sb_beamed:.4f} Gpc^-3 yr^-1 (theta_j "
         f"= {theta_fid} deg) is outside the observed sGRB envelope "
@@ -481,41 +507,43 @@ def test_bhns_lbgrb_disk_fraction_matches_gottlieb_2023_band(notebook_pipeline):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Wanderman-Piran (2015) reduced chi^2 against the modeled R(z).
+# Wanderman-Piran (2015): the model R(z) is broader than the observed
+# short-GRB rate history.
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
-def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
-    """Notebook chi^2_red of model-vs-WP15 over z in (0.1, 3) sits in regression band.
+def test_model_rate_history_is_broader_than_wanderman_piran_2015(notebook_pipeline):
+    """The intrinsic model R(z) outruns the WP15 observed sGRB rate above the peak.
 
-    The notebook Section 10 panel 3 normalises the all-BNS beamed rate
-    to the Wanderman-Piran (2015) ``R(z = 0.0)`` and quotes a reduced
-    chi^2 against the WP15 ``R_rate_lo``-``R_rate_hi`` envelope (Eq. 10
-    internal 1sigma on rho_0, propagated onto the Eq. 9 shape).  Two
-    physical points to keep in mind:
+    This replaces a reduced-chi-square regression band.  That test
+    normalised the beamed all-BNS curve to the Wanderman and Piran (2015)
+    R(z = 0), computed a chi^2 against their 1-sigma envelope, and
+    asserted the result landed in [1e4, 1e6] around a value of 1.7e5.  A
+    reduced chi-square of 170,000 is not a fit statistic anyone should
+    record as a baseline, and the quantity is not a goodness-of-fit in the
+    first place: the two curves are different observables, so the number
+    was never going to approach unity and the band around it could only
+    ever detect a gross structural break.  The notebook no longer draws a
+    WP15 panel at all; Section 6c compares against Pracchia and Salafia
+    (2026) and Du et al. (2025) instead.
 
-    1. WP15 ``R_rate_lo`` and ``R_rate_hi`` scale ``R0`` only; the
-       *shape* of the envelope is the same double-exponential as
-       ``R_best``.  So ``sigma_wp15 = 0.5 * (R_rate_hi - R_rate_lo)``
-       carries the same sharp drop-off (sigma_hi = 0.26 above z = 0.9)
-       as the central curve.
-    2. The model's intrinsic R(z) is broader than the WP15 observed
-       R(z): WP15 is luminosity-function- and beaming-folded; our
-       model is the intrinsic merger-rate density times a flat
-       beaming factor.  The model therefore stays much higher than
-       WP15 at z > 1.5 (where the WP15 envelope is exponentially
-       small), and the chi^2 contribution there is dominated by
-       cells where ``sigma_wp15`` itself is exponentially small.
+    What the old docstring correctly identified is worth keeping, so it is
+    asserted directly here.  WP15 Eq. (9) is a luminosity-function- and
+    beaming-folded *observed* short-GRB rate that falls off sharply above
+    its z = 0.9 peak.  The model curve is an intrinsic merger-rate
+    density carrying only a flat top-hat beaming factor, and it is fed by
+    a star-formation history that peaks near z = 2.4.  It must therefore
+    grow relative to WP15 with increasing redshift once past the WP15
+    peak.  Both curves are normalised at z = 0 so the comparison is one of
+    shape alone.
 
-    Result: the notebook printed value is intentionally large (~1e5)
-    and is *expected* to be large; the figure caption documents this.
-    The regression baseline is therefore an order-of-magnitude band
-    around the current value, not ``< 5``.  A drift outside the band
-    indicates that either the SFR or MSSFR convolution shape changed,
-    or the WP15 normalisation drifted.
+    A failure here means the delay-time convolution or the MSSFR shape
+    changed enough to alter the redshift evolution of the population,
+    which is a real result and should not pass silently.
 
     Reference: Wanderman and Piran (2015) MNRAS 448, 3026, Eq. (9);
-    grb_rates.wanderman_piran_2015_Rz; notebook ``rate_beaming_comparison`` panel 3.
+    ``grb_rates.wanderman_piran_2015_Rz``.  The functional form itself is
+    anchored in ``tests/anchors/test_literature_anchors.py``.
     """
     from grb_rates import CLASS_THETA_J, beamed_rate, wanderman_piran_2015_Rz
 
@@ -523,39 +551,35 @@ def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
     redshifts = pipe["redshifts"]
     z_mask = redshifts <= 5.0
     z_plot = redshifts[z_mask]
-    wp15_Rz = wanderman_piran_2015_Rz(z_plot)
+    wp15 = wanderman_piran_2015_Rz(z_plot)["R_best"]
+
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
+    model = beamed_rate(pipe["merger_rates_BNS"]["All BNS"], theta_fid)[z_mask]
 
-    R_bns_all_z = pipe["merger_rates_BNS"]["All BNS"]
-    R_bns_beamed_z = beamed_rate(R_bns_all_z, theta_fid)
-    norm_factor = wp15_Rz["R_best"][0] / max(R_bns_beamed_z[0], 1e-30)
+    # Shape-only comparison: both curves scaled to 1 at z = 0.
+    model_norm = model / model[0]
+    wp15_norm = wp15 / wp15[0]
+    ratio = model_norm / wp15_norm
 
-    residual_z = z_plot[(z_plot > 0.1) & (z_plot < 3.0)]
-    r_model_norm = np.interp(residual_z, z_plot, R_bns_beamed_z[z_mask] * norm_factor)
-    r_wp15_norm = np.interp(residual_z, z_plot, wp15_Rz["R_best"])
-    sigma_wp15 = 0.5 * (
-        np.interp(residual_z, z_plot, wp15_Rz["R_rate_hi"])
-        - np.interp(residual_z, z_plot, wp15_Rz["R_rate_lo"])
-    )
-    chi2_red = float(
-        np.sum(((r_model_norm - r_wp15_norm) / sigma_wp15) ** 2) / max(1, len(residual_z) - 1)
-    )
+    assert np.all(np.isfinite(ratio)), "model / WP15 shape ratio is not finite"
 
-    assert np.isfinite(chi2_red), (
-        f"chi^2_red = {chi2_red} is not finite; check sigma_wp15 computation and norm_factor."
+    def _at(z):
+        return float(np.interp(z, z_plot, ratio))
+
+    r_peak, r_1p5, r_3 = _at(0.9), _at(1.5), _at(3.0)
+
+    assert r_peak < r_1p5 < r_3, (
+        f"model / WP15 shape ratio is not increasing past the WP15 peak: "
+        f"{r_peak:.3g} at z = 0.9, {r_1p5:.3g} at z = 1.5, {r_3:.3g} at "
+        f"z = 3.  The intrinsic model history should outrun the observed "
+        f"short-GRB history above the WP15 turnover; check the delay-time "
+        f"convolution and the MSSFR shape."
     )
-    # Empirical baseline: notebook prints chi^2_red ~ 1.7e5 for Model A
-    # BNS at the documented Section 10 settings.  Pin to one order of
-    # magnitude either side so a structural drift trips the test but
-    # the natural broad-vs-sharp-shape mismatch does not.
-    lo, hi = 1.0e4, 1.0e6
-    assert lo <= chi2_red <= hi, (
-        f"chi^2_red of model-vs-WP15 over z in (0.1, 3) = "
-        f"{chi2_red:.3e} is outside the regression band [{lo:.0e}, "
-        f"{hi:.0e}].  The notebook caption already documents that this "
-        f"is an order-of-magnitude statistic; an order-of-magnitude "
-        f"drift here signals a real shape change in the rate "
-        f"convolution."
+    assert r_3 > 10.0, (
+        f"model / WP15 shape ratio at z = 3 is only {r_3:.3g}.  WP15 falls "
+        f"off exponentially above its peak while the model tracks the star "
+        f"formation history, so the separation by z = 3 should be at least "
+        f"an order of magnitude."
     )
 
 

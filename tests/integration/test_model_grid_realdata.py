@@ -1,6 +1,6 @@
 """Real-data audit tying ``BROEKGAARDEN21_MODELS`` to the on-disk grid.
 
-The Section 14 scan loops ``grb_io.BROEKGAARDEN21_MODELS`` and loads one
+The Section 11 scan loops ``grb_io.BROEKGAARDEN21_MODELS`` and loads one
 HDF5 per (model, population).  This module pins, for every one of the 40
 files actually present in ``data/``, that:
 

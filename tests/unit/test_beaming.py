@@ -1,12 +1,12 @@
-"""Section 10 of grb_main.ipynb: Beaming Correction (Intrinsic vs Observable).
+"""Beaming correction: intrinsic rate to observable rate.
 
 Smoke-level invariants on ``beamed_rate``, ``beamed_rate_mixed`` and the
-project's per-class ``CLASS_THETA_J`` table.
+project's per-class ``CLASS_THETA_J`` table, which Section 6c of
+``grb_main.ipynb`` uses to put the model curve on the Swift-BAT axis.
 
-The literature anchors for ``CLASS_THETA_J`` and Fong+ 2015 beaming
-factors live in
-``tests/anchors/test_literature_anchors.py``; this section file pins
-the round-trip relations the figure relies on.
+The literature anchors for ``CLASS_THETA_J`` and the Fong+ 2015 beaming
+factors live in ``tests/anchors/test_literature_anchors.py``; this file pins
+the round-trip relations.
 
 Reference: Fong et al. (2015), ApJ 815, 102; Beniamini and Nakar
 (2019), MNRAS 482, 5430; Gottlieb et al. (2023), arXiv:2309.00038.

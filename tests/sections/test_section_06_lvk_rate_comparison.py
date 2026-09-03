@@ -8,9 +8,9 @@ Merging Compact Binaries*, arXiv:2605.27226; published BNS band 5.1 -
 
 Pins two end-to-end claims:
 
-1. ``test_section_06c_R0_BNS_inside_LVK_GWTC5_band`` -- the calibrated
+1. ``test_section_06_R0_BNS_inside_LVK_GWTC5_band`` -- the calibrated
    Model A BNS rate sits inside the GWTC-5.0 BNS 90 percent CR.
-2. ``test_section_06c_per_class_rates_sum_to_total`` -- the four
+2. ``test_section_06_per_class_rates_sum_to_total`` -- the four
    Gottlieb (2024) per-class intrinsic rates sum to the All-BNS total
    at ``rtol = 1e-12``; mirrors the in-notebook additivity tripwire so
    any future regression in ``classify_bns_2024`` or
@@ -19,7 +19,7 @@ Pins two end-to-end claims:
 
 Both reuse the shared ``_model_cache.get_model("A")`` so the expensive
 per-model load + cosmic-integration calibration runs at most once per
-session across Sections 7b, 8c, and 12.
+session across the Section 6, 6b, 7 and 7b tests.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from tests.sections._model_cache import get_model as _get_model  # noqa: E402
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_06c_R0_BNS_inside_LVK_GWTC5_band():
+def test_section_06_R0_BNS_inside_LVK_GWTC5_band():
     """Model A R_BNS(z = 0) sits inside the GWTC-5.0 BNS 90 percent CR.
 
     GWTC-5.0 (LVK 2026, arXiv:2605.27226) reports the BNS local
@@ -67,7 +67,7 @@ def test_section_06c_R0_BNS_inside_LVK_GWTC5_band():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_06c_per_class_rates_sum_to_total():
+def test_section_06_per_class_rates_sum_to_total():
     """Per-Gottlieb-2024 BNS class rates sum to the All-BNS total at z = 0.
 
     Mirrors the in-notebook ``assert np.allclose(...)`` from Section 6

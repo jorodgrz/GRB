@@ -68,21 +68,21 @@ _CHANNEL_KEYS = [
 # project's COMPAS commit ``81722d4``.  Channels III and V are empty
 # for BHNS in this run.  See ``_assert_pinned`` for tolerance rules.
 _R0_PINS_BHNS = {
-    ("No GRB", "I  Stable MT + CE"): 26.4085,
-    ("No GRB", "II  Stable MT only"): 0.504796,
-    ("No GRB", "III Single-core CE"): 3.33225,
-    ("No GRB", "IV  Double-core CE"): 0.135121,
-    ("No GRB", "V   Other"): 0.0,
-    ("Faint lbGRB (BHNS)", "I  Stable MT + CE"): 7.36837,
-    ("Faint lbGRB (BHNS)", "II  Stable MT only"): 0.947377,
-    ("Faint lbGRB (BHNS)", "III Single-core CE"): 1.43078,
-    ("Faint lbGRB (BHNS)", "IV  Double-core CE"): 0.155602,
-    ("Faint lbGRB (BHNS)", "V   Other"): 0.0,
-    ("lbGRB + red KN (BHNS disk)", "I  Stable MT + CE"): 0.912474,
-    ("lbGRB + red KN (BHNS disk)", "II  Stable MT only"): 0.538304,
-    ("lbGRB + red KN (BHNS disk)", "III Single-core CE"): 0.428388,
-    ("lbGRB + red KN (BHNS disk)", "IV  Double-core CE"): 0.0685578,
-    ("lbGRB + red KN (BHNS disk)", "V   Other"): 0.0,
+    ("No GRB", "I  Stable MT + CE"): 23.8956,
+    ("No GRB", "II  Stable MT only"): 0.722758,
+    ("No GRB", "III Single-core CE"): 3.15665,
+    ("No GRB", "IV  Double-core CE"): 0.224633,
+    ("No GRB", "V   Other"): 0,
+    ("Faint lbGRB (BHNS)", "I  Stable MT + CE"): 5.51149,
+    ("Faint lbGRB (BHNS)", "II  Stable MT only"): 0.492562,
+    ("Faint lbGRB (BHNS)", "III Single-core CE"): 0.78154,
+    ("Faint lbGRB (BHNS)", "IV  Double-core CE"): 0.0133486,
+    ("Faint lbGRB (BHNS)", "V   Other"): 0,
+    ("lbGRB + red KN (BHNS disk)", "I  Stable MT + CE"): 0.716003,
+    ("lbGRB + red KN (BHNS disk)", "II  Stable MT only"): 0.573901,
+    ("lbGRB + red KN (BHNS disk)", "III Single-core CE"): 0.389575,
+    ("lbGRB + red KN (BHNS disk)", "IV  Double-core CE"): 0.00145935,
+    ("lbGRB + red KN (BHNS disk)", "V   Other"): 0,
 }
 
 
@@ -176,7 +176,7 @@ def bhns_class_channel_rates():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channel_sum_equals_misalignment_corrected_per_class_total(
+def test_section_07b_channel_sum_equals_misalignment_corrected_per_class_total(
     bhns_class_channel_rates,
 ):
     """sum_ch R_cell[cl][ch] == apply_bhns_misalignment(R_per_class_intrinsic[cl]).
@@ -205,7 +205,7 @@ def test_section_08d_channel_sum_equals_misalignment_corrected_per_class_total(
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_class_sum_equals_per_channel_total(bhns_class_channel_rates):
+def test_section_07b_class_sum_equals_per_channel_total(bhns_class_channel_rates):
     """sum_cl R_cell[cl][ch] == R_per_channel[ch] at rtol = 1e-12 for every channel.
 
     The Gottlieb three-class BHNS scheme is exhaustive over the BHNS
@@ -231,7 +231,7 @@ def test_section_08d_class_sum_equals_per_channel_total(bhns_class_channel_rates
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
+def test_section_07b_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
     """Every (class, channel) curve >= 0 at every redshift.
 
     Same motivation as Section 6b: log-scaled y-axis hides negative
@@ -250,7 +250,7 @@ def test_section_08d_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_each_cell_equals_half_intrinsic(bhns_class_channel_rates):
+def test_section_07b_each_cell_equals_half_intrinsic(bhns_class_channel_rates):
     """R_cell[cl][ch] == MISALIGNMENT_FACTOR * R_cell_intrinsic[cl][ch].
 
     Catches a future regression where the misalignment correction
@@ -286,7 +286,7 @@ def test_section_08d_each_cell_equals_half_intrinsic(bhns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channel_V_empty_and_III_material(bhns_class_channel_rates):
+def test_section_07b_channel_V_empty_and_III_material(bhns_class_channel_rates):
     """Channel V carries no BHNS weight; channel III carries a real share.
 
     Channel V is the catch-all, and every system in all 40 files of the grid
@@ -322,7 +322,7 @@ def test_section_08d_channel_V_empty_and_III_material(bhns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
+def test_section_07b_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
     """Channel I weight in the No-GRB class > 0.5 of that class total at z = 0.
 
     Anchor: Broekgaarden+ 2022 Sec. 4.2 finds that Channel I (stable MT
@@ -352,7 +352,7 @@ def test_section_08d_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_R0_per_cell_pinned_to_model_A(bhns_class_channel_rates):
+def test_section_07b_R0_per_cell_pinned_to_model_A(bhns_class_channel_rates):
     """Per-(class, channel) misalignment-corrected R(z = 0) within 5 percent of pin.
 
     Same idiom as 7c: 5 percent relative above 1e-3 Gpc^-3 yr^-1, 1e-3

@@ -7,17 +7,17 @@ Binaries*, arXiv:2605.27226; published NSBH band 6.7 - 32.8 Gpc^-3 yr^-1).
 
 Pins two end-to-end claims:
 
-1. ``test_section_07c_R0_BHNS_above_LVK_GWTC5_band`` -- the calibrated
+1. ``test_section_07_R0_BHNS_above_LVK_GWTC5_band`` -- the calibrated
    Model A BHNS intrinsic rate sits ABOVE the GWTC-5.0 NSBH 90 percent
    CR.  GWTC-5.0 added no new NSBH candidates, so the NSBH band tightened
    from the GWTC-4 9.1 - 84 Gpc^-3 yr^-1 to 6.7 - 32.8 Gpc^-3 yr^-1.  The
-   unsmoothed Model A All-BHNS intrinsic rate (84.5 Gpc^-3 yr^-1) now
-   sits a factor of ~2.6 above the upper edge: the panel's headline
+   unsmoothed Model A All-BHNS intrinsic rate (73.0 Gpc^-3 yr^-1) now
+   sits a factor of ~2.2 above the upper edge: the panel's headline
    finding is precisely this overprediction.  Reconciliation would
    require either a downward shift in the COMPAS BHNS formation rate or
    a re-examination of the Foucart+ 2018 disk-mass calibration at high
    mass ratio.
-2. ``test_section_07c_intrinsic_grb_class_subtotal_at_most_all_bhns``
+2. ``test_section_07_intrinsic_grb_class_subtotal_at_most_all_bhns``
    -- the two intrinsic GRB-class rates (lbGRB + Faint lbGRB at
    fiducial spin) sum to AT MOST the All-BHNS intrinsic rate (with a
    small numerical slack), since the No-GRB / NS-swallowed class
@@ -28,7 +28,7 @@ Pins two end-to-end claims:
 
 Both tests reuse the shared ``_model_cache.get_model("A")`` so the
 expensive per-model load + cosmic-integration calibration runs at most
-once per session across Sections 7b, 8c, and 12.
+once per session across the Section 6, 6b, 7 and 7b tests.
 """
 
 from __future__ import annotations
@@ -56,15 +56,15 @@ A_BH_FID = 0.5
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_R0_BHNS_above_LVK_GWTC5_band():
+def test_section_07_R0_BHNS_above_LVK_GWTC5_band():
     """Model A R_BHNS(z = 0) intrinsic sits above the GWTC-5.0 NSBH band.
 
     GWTC-5.0 (LVK 2026, arXiv:2605.27226) reports the NSBH local
     intrinsic merger rate density at 6.7 - 32.8 Gpc^-3 yr^-1 (90 percent
     CR); no new NSBH candidates were added relative to GWTC-4, so the
     band tightened from 9.1 - 84.  The unsmoothed Model A All-BHNS
-    intrinsic rate (no misalignment, no beaming) is 84.5 Gpc^-3 yr^-1, a
-    factor of ~2.6 above the upper edge: the panel's headline finding is
+    intrinsic rate (no misalignment, no beaming) is 73.0 Gpc^-3 yr^-1, a
+    factor of ~2.2 above the upper edge: the panel's headline finding is
     this overprediction.  The upper ceiling of 100 below is a smoothing
     guard: a smoothed-R(z=0) quote-path regression reproduces the
     inflated ~115 Gpc^-3 yr^-1 (the gaussian_filter1d reflective-boundary
@@ -88,7 +88,7 @@ def test_section_07c_R0_BHNS_above_LVK_GWTC5_band():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_07c_intrinsic_grb_class_subtotal_at_most_all_bhns():
+def test_section_07_intrinsic_grb_class_subtotal_at_most_all_bhns():
     """Sum of intrinsic GRB-class rates does not exceed the All-BHNS total.
 
     The Section 7 right panel shows lbGRB + Faint lbGRB at fiducial

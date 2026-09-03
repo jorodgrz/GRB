@@ -6,8 +6,9 @@ the (M_NS, M_BH) BHNS plane, with a STROOPWAFEL-weighted 2D mass
 histogram on top.  The tests in this file lock the
 end-to-end pipeline that feeds those panels against the COMPAS Model A
 HDF5 files: file identity, the cold-stability cut (raw fiducial masses,
-``m_i <= M_TOV``) plus the ``m1 >= m2`` invariant, the retained NS-mass
-remap determinism (the Section 2b systematic), histogram weighting
+``m_i <= M_TOV``) plus the ``m1 >= m2`` invariant, NS-mass remap
+determinism (a labelled systematic, not on the notebook science path),
+histogram weighting
 honesty on the real sample, and the printed class fractions the summary
 cell emits.
 

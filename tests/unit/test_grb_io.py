@@ -384,9 +384,9 @@ def test_weighted_sample_handles_empty_mask():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Loader return-dict carries `model` and `ns_max` (Section 14 prereq)
+# Loader return-dict carries `model` and `ns_max` (Section 11 prereq)
 # ─────────────────────────────────────────────────────────────────────
-# The Section 14 grid scan of grb_main.ipynb iterates over all 20
+# The Section 11 grid scan of grb_main.ipynb iterates over all 20
 # Broekgaarden+ 2021 models and feeds bns['ns_max'] straight into classify_grid.
 # These tests pin (a) the round-trip from the embedded HDF5 attribute
 # to the loader output dict and (b) the model-substitution defense on

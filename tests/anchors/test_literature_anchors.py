@@ -539,8 +539,9 @@ def test_kruger_foucart_bns_dyn_ejecta_gw170817_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Abbott et al. (2019) PRX 9, 011001  -- GW170817 [papers/Abbott_2019_GW170817.pdf]
-# Abbott et al. (2020) ApJL 892, L3   -- GW190425 [papers/Abbott_2020_GW190425.pdf]
+# Abbott et al. (2019) PRX 9, 011001  -- GW170817; not in papers/, the
+# GW170817 PDF on disk is Abbott_2018.pdf (PRL 121, 161101, radii and EOS)
+# Abbott et al. (2020) ApJL 892, L3   -- GW190425 [papers/Abbott_2020.pdf]
 # Pin `OBSERVED_GW_EVENTS` to the published low-spin 90% CL ranges and
 # source-frame chirp masses so the plot annotations cannot drift from the
 # discovery papers.
@@ -848,7 +849,7 @@ def test_total_escape_velocity_reduces_to_hernquist_when_halo_off():
 
 # ─────────────────────────────────────────────────────────────────────
 # Fong and Berger (2013) ApJ 776, 18 [papers/Fong_2013.pdf]
-# Fong et al. (2022) hosts I/II [papers/Fong_2022_hosts_I.pdf, II]
+# Fong et al. (2022) hosts I/II [papers/Fong_2022.pdf, papers/Nugent_2022.pdf]
 # Default host R_e and host-type weights.
 # ─────────────────────────────────────────────────────────────────────
 def test_fong_berger_2013_default_R_e_within_observed_sgrb_band():
@@ -894,8 +895,8 @@ def test_fong_berger_2013_host_model_weights_sum_to_one():
 
 # ─────────────────────────────────────────────────────────────────────
 # Leibler and Berger (2010) ApJ 725, 1202 [arXiv:1009.1147]
-# Nugent et al. (2022) ApJ 940, 57 [papers/Fong_2022_hosts_II.pdf]
-# Fong et al. (2022) ApJ 940, 56 [papers/Fong_2022_hosts_I.pdf]
+# Nugent et al. (2022) ApJ 940, 57 [papers/Nugent_2022.pdf]
+# Fong et al. (2022) ApJ 940, 56 [papers/Fong_2022.pdf]
 # sGRB host stellar masses and effective radii per host type.
 # ─────────────────────────────────────────────────────────────────────
 def test_host_models_stellar_masses_within_leibler_berger_2010_bands():
@@ -1041,8 +1042,8 @@ def test_fong_berger_2013_sgrb_offset_array_matches_published_summary():
 # ─────────────────────────────────────────────────────────────────────
 # Long-GRB-with-kilonova projected offsets
 # Della Valle et al. (2006) Nature 444, 1050 [060614];
-# Rastinejad et al. (2022) Nature 612, 223 [papers/...] [211211A];
-# Levan et al. (2024) Nature 626, 737 [papers/Yang_Levan_2024_JWST.pdf]
+# Rastinejad et al. (2022) Nature 612, 223 [papers/Rastinejad_2022.pdf] [211211A];
+# Levan et al. (2024) Nature 626, 737 [papers/Levan_2024.pdf]
 # [230307A].
 # ─────────────────────────────────────────────────────────────────────
 def test_lgrb_kn_offsets_match_skobe_2026_table_2():
@@ -1628,6 +1629,113 @@ def test_kroupa_2001_mean_stellar_mass_in_published_band():
     )
 
 
+def test_broekgaarden_2021_star_forming_mass_per_binary():
+    """One simulated binary stands for 79.11 Msun of star formation.
+
+    Broekgaarden+ 2021 (arXiv:2103.02608) Sec. 2.2 and Table 1 draw primaries
+    from a Kroupa (2001) IMF over [5, 150] Msun with a flat mass ratio,
+    m2 >= 0.1 Msun, and correct to f_bin = 1.  Under the COMPAS
+    ``totalMassEvolvedPerZ.analytical_star_forming_mass_per_binary_using_kroupa_imf``
+    convention that is 79.110 Msun of Universe star formation per simulated
+    binary, and 53 x 1e6 binaries put the run's total at 4.193e9 Msun.
+
+    Pinned because it is the denominator of the Section 5 formation yield.
+    Digitising all 53 model-A points of Broekgaarden+ 2022 Fig. 1 implies
+    77.2 Msun per binary for NSNS and 78.4 for BHNS, so the band below is
+    the published figure's own readback tolerance.
+    """
+    from grb_rates import simulation_star_forming_mass, star_forming_mass_per_binary
+
+    per_binary = star_forming_mass_per_binary()
+    assert per_binary == pytest.approx(79.110, rel=1e-3), (
+        f"star_forming_mass_per_binary = {per_binary:.3f} Msun, expected the "
+        f"COMPAS analytic 79.110 for the Broekgaarden+ 2021 sampling."
+    )
+    assert 75.0 <= per_binary <= 82.0, (
+        f"{per_binary:.2f} Msun per binary is outside the 75 to 82 band read "
+        f"back from Broekgaarden+ 2022 Fig. 1."
+    )
+
+    total = simulation_star_forming_mass()
+    assert total == pytest.approx(53 * 1.0e6 * per_binary, rel=1e-12)
+    assert total == pytest.approx(4.193e9, rel=1e-3)
+
+
+def test_compas_classmssfr_outer_metallicity_bin_edges():
+    """The outer Riemann-cell edges are the COMPAS ClassMSSFR defaults.
+
+    ``ClassMSSFR.__init__`` defaults ``metallicityLowerLimit = 1e-90`` and
+    ``metallicityUpperLimit = 1``, and ``calculateMetallicityBinEdges`` places
+    them at the two ends of the metallicity sum, so the outermost simulated
+    metallicities carry the star formation off the ends of the grid.  Pinned
+    because ``dPdlogZ_binned_to_grid`` is what puts the Model A BNS local rate
+    on the published ``w_000`` anchor.
+    """
+    from grb_rates import MSSFR_Z_LOWER_LIMIT, MSSFR_Z_UPPER_LIMIT
+
+    assert MSSFR_Z_LOWER_LIMIT == 1e-90
+    assert MSSFR_Z_UPPER_LIMIT == 1.0
+
+
+def test_dPdlogZ_binned_to_grid_conserves_the_metallicity_probability():
+    """Re-binning must move the out-of-grid tails in, not create or lose mass.
+
+    Summed over the 53 grid columns with FCI's own ``1 / (N p_draw)`` weight,
+    the re-binned array has to integrate to 1 at every redshift: the bins tile
+    ``[MSSFR_Z_LOWER_LIMIT, MSSFR_Z_UPPER_LIMIT]`` without overlap or gap.  The
+    pointwise array does not, and the shortfall is exactly the star formation
+    outside the simulated range.
+    """
+    from grb_rates import dPdlogZ_binned_to_grid
+
+    n_grid = 53
+    grid = np.geomspace(1e-4, 0.03, n_grid)
+    ln_fine = np.arange(-12.0, 0.0, 0.01)
+    fine = np.exp(ln_fine)
+    p_draw = 1.0 / (np.log(grid[-1]) - np.log(grid[0]))
+
+    # Two log-normals in ln Z, one centred inside the grid and one above its
+    # ceiling, so the tail term is large in the second.
+    dP = np.stack(
+        [
+            np.exp(-0.5 * ((ln_fine - mu) / 0.5) ** 2) / (0.5 * np.sqrt(2 * np.pi))
+            for mu in (np.log(1e-3), np.log(0.05))
+        ]
+    )
+    binned = dPdlogZ_binned_to_grid(dP, fine, grid, p_draw)
+
+    cols = np.digitize(grid, fine)
+    total = binned[:, cols].sum(axis=1) / (n_grid * p_draw)
+    assert np.allclose(total, 1.0, rtol=2e-3), (
+        f"re-binned probability {total} should be 1 at every redshift."
+    )
+
+    pointwise = dP[:, cols].sum(axis=1) / (n_grid * p_draw)
+    assert pointwise[1] < 0.5 * total[1], (
+        "the pointwise convention should lose most of a distribution centred "
+        "above the grid ceiling; if it does not, the test no longer exercises "
+        "the term dPdlogZ_binned_to_grid restores."
+    )
+
+
+def test_verify_mean_mass_evolved_recovers_the_table_1_binary_count():
+    """A run-configuration mass must read back as 1e6 binaries per metallicity.
+
+    ``verify_mean_mass_evolved`` divides by the star-forming mass per binary,
+    so feeding it ``simulation_star_forming_mass()`` has to return the 53e6
+    binaries of Broekgaarden+ 2021 Table 1.  The earlier version divided by
+    ``mean_star_mass / f_primary`` = 52.1 Msun, which counts the primary but
+    not its companion and so passed on a mass a factor 1.5 too small.
+    """
+    from grb_rates import simulation_star_forming_mass, verify_mean_mass_evolved
+
+    out = verify_mean_mass_evolved(mean_mass_evolved=simulation_star_forming_mass())
+    assert out["N_sim_implied"] / 53.0 == pytest.approx(1.0e6, rel=1e-3), (
+        f"{out['N_sim_implied'] / 53.0:.3e} binaries per metallicity, expected "
+        f"the 1e6 of Broekgaarden+ 2021 Table 1."
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Wanderman and Piran (2015) MNRAS 448, 3026 [papers/Wanderman_2015.pdf]
 # Eq. (9): piecewise-exponential R(z), peak at z = 0.9.
@@ -1714,7 +1822,7 @@ def test_wanderman_piran_2015_sfr2_shape_broadens_peak():
 
 # ─────────────────────────────────────────────────────────────────────
 # Pracchia & Salafia (2026) A&A, arXiv:2601.03861
-#   [papers/Pracchia & Salafia (2026).pdf]
+#   [papers/Pracchia_2026.pdf]
 # Eq. 9 numerical convolution of Madau & Fragos 2017 SFR (Eq. 10) with
 # a DTD kernel (Eq. 7 power-law or Eq. 8 log-normal).  Table 2 posteriors.
 # ─────────────────────────────────────────────────────────────────────
@@ -1881,7 +1989,7 @@ def test_pracchia_salafia_2026_Rz_cosmology_drift_under_015_percent():
 
 # ─────────────────────────────────────────────────────────────────────
 # Du et al. (2025) ApJL 987, L13, DOI 10.3847/2041-8213/ade1d0
-#   [papers/Du et al. (2025).pdf]
+#   [papers/Du_2025.pdf]
 # Table 5 observer-frame local rates per detector across five SFR + DTD
 # combinations; Sec. 4.4 beaming.  Eq. 16 coefficients not published.
 # ─────────────────────────────────────────────────────────────────────
@@ -1917,7 +2025,7 @@ def test_du25_swift_bat_table5_rates_match_paper():
 
 # ─────────────────────────────────────────────────────────────────────
 # Chong-Yu Gao (2025) MNRAS 542, 1841, DOI 10.1093/mnras/staf1368
-#   [papers/Chong-Yu Gao 2025.pdf]
+#   [papers/Gao_2025.pdf]
 # Table 2 Gaussian-DTD row (DIC-preferred); Fermi/GBM local rate.
 # ─────────────────────────────────────────────────────────────────────
 def test_gao25_fermi_gbm_gaussian_dtd_local_rate_matches_table2():
@@ -2075,7 +2183,7 @@ def test_kawaguchi_2015_aligned_spin_projection_matches_paper_definition():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Margalit and Metzger (2017) ApJL 850, L19 [papers/Margalit_Metzger_2017.pdf]
+# Margalit and Metzger (2017) ApJL 850, L19 [papers/Margalit_2017.pdf]
 # HMNS supramassive remnant heuristic.
 # ─────────────────────────────────────────────────────────────────────
 def test_margalit_metzger_2017_hmns_factor_in_supramassive_band():
@@ -2797,7 +2905,7 @@ def test_CE_PRESCRIPTION_BROEKGAARDEN21_full_string_schema():
     A future swap to the Hirai+ updated stability prescription would
     trip this exact-string check before the regression manifests in
     the formation-channel rates pinned in
-    `tests/sections/test_section_06d_formation_channels.py`.
+    `tests/sections/test_section_06b_formation_channels.py`.
     """
     from grb_rates import CE_PRESCRIPTION_BROEKGAARDEN21 as CE
 
@@ -3130,7 +3238,7 @@ def test_broekgaarden22_paper_ii_letter_map():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Pais, Piran, Kiuchi and Shibata (2025) [papers/2407.19002v3.pdf]
+# Pais, Piran, Kiuchi and Shibata (2025) [papers/Pais_2025.pdf]
 #   BNS jet breakout, Eq. (3)/(4)/(5), Gottlieb and Nakar (2022) adapted
 # ─────────────────────────────────────────────────────────────────────
 def test_pais25_breakout_coefficient():

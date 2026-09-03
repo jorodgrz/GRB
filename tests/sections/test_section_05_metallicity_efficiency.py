@@ -38,12 +38,19 @@ import numpy as np
 import pytest
 
 from grb_classify import classify_bhns, classify_bns_2024
-from grb_io import METALLICITY_GRID, load_bhns, load_bns
-from grb_physics import remap_ns_marginal, remap_ns_masses_double_gaussian
+from grb_io import METALLICITY_GRID, filter_systems, load_bhns, load_bns
+from grb_physics import (
+    M_TOV,
+    cold_stable_ns_mask,
+    remap_ns_marginal,
+    remap_ns_masses_double_gaussian,
+)
 from grb_rates import (
     LOGZ_MAX_PHYSICAL,
     Z_CE_LAMBDA_BIFURCATION,
     formation_efficiency,
+    formation_efficiency_binned,
+    simulation_star_forming_mass,
 )
 
 Z_SUN = 0.0142
@@ -349,16 +356,22 @@ def test_no_stackplot_segment_crosses_masked_bin():
     assert edge_case_none == []
 
 
-def test_mean_mass_evolved_per_population():
-    """``formation_efficiency`` consumes distinct BNS / BHNS calibration anchors.
+def test_efficiency_scales_inversely_with_the_star_forming_mass():
+    """``formation_efficiency`` is exactly linear in ``1 / mean_mass_evolved``.
 
-    Section 5 calls ``formation_efficiency`` twice (BNS then BHNS) with
-    ``mean_mass_evolved=mean_mass_bns`` and ``mean_mass_evolved=mean_mass_bhns``
-    respectively.  A future refactor that accidentally shared one value
-    across both populations would bias the absolute amplitude by the
-    ratio of the evolved-stellar-mass densities (CLAUDE.md "per-population
-    calibration" mandate).  The test scales the same input data by
-    different anchors and asserts the result scales inversely.
+    This is what makes the denominator separable from the shape: every
+    additivity and partition test in this file can pass an arbitrary
+    constant and still be checking something real, and the absolute scale
+    can be pinned once, separately, by
+    ``test_total_efficiency_absolute_scale_on_modelA`` below.
+
+    Note what this test does *not* say.  An earlier version of it claimed
+    Section 5 feeds a different calibrated mass to each population and
+    that sharing one value would bias the amplitude.  That is backwards
+    now: the denominator is the run-configuration star-forming mass, a
+    property of the sampler rather than of either population, so one
+    number serves BNS, BHNS and all 20 models of the grid.  A per-model or
+    per-population mass would be the regression.
     """
     rng = np.random.default_rng(11)
     n = 1000
@@ -521,4 +534,93 @@ def test_bhns_high_z_collapse_is_compas_not_the_cold_stability_cut(bhns_a_path):
     assert removed == pytest.approx(0.0, abs=1e-12), (
         "the cut now removes weight at the cliff, so the caption's attribution "
         "of the collapse to COMPAS alone no longer holds"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Absolute scale of eta(Z), the quantity Section 5 compares to the
+# published formation-efficiency figures.
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.requires_data
+def test_total_efficiency_absolute_scale_on_modelA(bns_a_path, bhns_a_path):
+    """Peak height and position of the total eta(Z) on the native 53-point grid.
+
+    Every other test in this file is scale-free: they pass
+    ``mean_mass_evolved=1.0`` or ``1e9`` and check partitions, additivity
+    and shape, all of which are invariant under the denominator.  That
+    left the one number the section is actually read for unpinned.  The
+    ordinate of Section 5 is compared point by point against Broekgaarden
+    et al. (2021) Fig. 5 and Broekgaarden et al. (2022) Fig. 1, and that
+    comparison only means anything if the absolute normalisation is right.
+
+    The denominator is ``simulation_star_forming_mass()``: 53 grid points x
+    about 1e6 binaries x 79.11 Msun of Universe star formation per
+    simulated binary, split equally over the grid because Broekgaarden et
+    al. (2021) Table 1 draw the same number of binaries at every Z_i.
+    Nothing is fitted, so the peak height below is a prediction rather
+    than a calibration.
+
+    Two claims are pinned:
+
+    1. The BHNS yield peaks at Z = Zsun/4.7, which is the Z_i ~ Zsun/5
+       peak Broekgaarden et al. (2021) quote in their Sec. 3.3.  The
+       curve is drawn on the native grid, so the peak sits on a simulated
+       metallicity and cannot be displaced by a binning choice.
+    2. The peak heights, 9.5e-6 (BHNS) and 4.1e-6 (BNS) mergers per Msun,
+       which are the values Section 5 states in prose.
+
+    A drift here means the star-forming-mass normalisation, the
+    equal-mass-per-grid-point split, or the cold-stability cut changed,
+    any of which moves the whole panel off the published ordinate.
+    """
+    grid = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
+    m_sf = simulation_star_forming_mass(n_metallicities=grid.size)
+    eta_kw = dict(
+        Z_max=None,
+        Z_cut=Z_CE_LAMBDA_BIFURCATION,
+        n_min=0,
+        ess_min=0.0,
+        n_bins=grid.size,
+    )
+
+    def _total_eta(data, mask):
+        data = filter_systems(data, mask)
+        res = formation_efficiency_binned(
+            grid,
+            data["metallicity"],
+            data["weights"],
+            {"total": np.ones(data["weights"].size, dtype=bool)},
+            mean_mass_evolved=m_sf,
+            **eta_kw,
+        )
+        eta = res["eta"]["total"]
+        j = int(np.nanargmax(eta))
+        return float(eta[j]), float(res["Z"][j])
+
+    bns = load_bns(path=bns_a_path)
+    eta_bns, z_bns = _total_eta(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
+    bhns = load_bhns(path=bhns_a_path)
+    eta_bhns, z_bhns = _total_eta(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
+
+    # Broekgaarden+ 2021 Sec. 3.3: the BHNS formation efficiency peaks near
+    # Z_i ~ Zsun/5.  Accept Zsun/4 to Zsun/6, which spans several native
+    # grid points either side of the quoted value.
+    assert Z_SUN / 6.0 <= z_bhns <= Z_SUN / 4.0, (
+        f"BHNS eta(Z) peaks at Z = {z_bhns:.5g} = Zsun/{Z_SUN / z_bhns:.1f}, "
+        f"outside the Zsun/5 peak Broekgaarden+ 2021 Sec. 3.3 report "
+        f"(accepted Zsun/6 to Zsun/4)."
+    )
+    assert z_bns < z_bhns, (
+        f"BNS eta(Z) should peak at lower metallicity than BHNS; got "
+        f"Z_BNS = {z_bns:.5g} against Z_BHNS = {z_bhns:.5g}."
+    )
+
+    # Peak heights, 5 percent regression band on the values Section 5 quotes.
+    assert eta_bhns == pytest.approx(9.5e-6, rel=0.05), (
+        f"BHNS peak eta = {eta_bhns:.4g} /Msun drifted from the 9.5e-6 "
+        f"Section 5 quotes.  Check simulation_star_forming_mass, the "
+        f"equal-mass-per-grid-point split, and the cold-stability cut."
+    )
+    assert eta_bns == pytest.approx(4.1e-6, rel=0.05), (
+        f"BNS peak eta = {eta_bns:.4g} /Msun drifted from the 4.1e-6 Section 5 quotes."
     )

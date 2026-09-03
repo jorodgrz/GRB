@@ -1,13 +1,15 @@
-"""Section 2b: BNS class-fraction sensitivity to the NS mass function and EOS (grb_main.ipynb).
+"""``compute_eos_sensitivity`` over a grid of NS-mass treatments x EOS.
 
-Section 2b crosses two NS-mass treatments (raw COMPAS fiducial, Alsing+
-2018 remap) with the four ``EOS_MODELS``, each column running
-``compute_eos_sensitivity(..., require_cold_stable=True)``.  These
-smoke tests pin the grid shape and the invariants the figure relies on:
-per (treatment, EOS) the four class fractions are renormalised over the
-cold-stable systems and sum to 1, and the discarded weight fraction is a
-valid probability that vanishes when every component sits below the
-softest EOS's M_TOV.
+Crosses two NS-mass treatments (raw COMPAS masses, and the Alsing+ 2018
+double-Gaussian remap) with the four ``EOS_MODELS``, each cell running
+``compute_eos_sensitivity(..., require_cold_stable=True)``.  Pins the grid
+shape and the invariants a caller depends on: per (treatment, EOS) the four
+class fractions are renormalised over the cold-stable systems and sum to 1,
+and the discarded weight fraction is a valid probability that vanishes when
+every component sits below the softest EOS's M_TOV.
+
+The remap is exercised here as one axis of the grid; no notebook figure
+applies it, and the science path uses the raw COMPAS masses throughout.
 """
 
 from __future__ import annotations

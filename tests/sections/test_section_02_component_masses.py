@@ -3,7 +3,7 @@
 Smoke-level invariants on the Alsing, Silva and Berti (2018) double-Gaussian
 NS-mass remap, including that it preserves the ``m1 >= m2`` invariant.  The
 per-class component-mass histograms of Section 2 are drawn from the raw
-COMPAS masses under the cold-stability cut; the remap feeds the Section 2b
+COMPAS masses under the cold-stability cut; the remap is a labelled
 systematic only, because it inflates the weight across the Fryer 2012
 baryonic-to-gravitational deficit near 1.7 Msun (Eq. 12-13; Broekgaarden+
 2021 footnote 3) rather than recovering it.  That deficit is confined to the

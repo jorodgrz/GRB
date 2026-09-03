@@ -1,14 +1,14 @@
-"""Section 10 of grb_main.ipynb: BNS Jet Breakout Efficiency.
+"""BNS jet breakout efficiency and the observable-rate ladder.
 
-Smoke-level invariants on the breakout chain the figure draws:
-``breakout_fraction_bns_eos`` returns one band per Gottlieb (2024) class,
-and the per-class rate ladder ``R_intrinsic -> apply_bns_jet_breakout ->
-beamed_rate`` is monotonically non-increasing.
+Smoke-level invariants on the breakout chain: ``breakout_fraction_bns_eos``
+returns one band per Gottlieb (2024) class, and the per-class ladder
+``R_intrinsic -> apply_bns_jet_breakout -> beamed_rate`` is monotonically
+non-increasing.
 
 The Pais et al. (2025) constant anchors live in
 ``tests/anchors/test_literature_anchors.py`` and the function-level edge
-cases in ``tests/unit/test_rates.py``; this file pins the section's
-composition on a small synthetic population (no COMPAS data required).
+cases in ``tests/unit/test_rates.py``; this file pins the composition on a
+small synthetic population (no COMPAS data required).
 
 Reference: Pais, Piran, Kiuchi and Shibata (2025), arXiv:2407.19002;
 Gottlieb and Nakar (2022), arXiv:2106.03860.

@@ -125,7 +125,7 @@ LEVINA26_BBH_LOCAL_RATES = {
 # COMPAS modifications from Vinciguerra+ 2020 (MNRAS 498, 4705).  We do
 # NOT adopt the Hirai+ updated stability prescription; switching to that
 # would require a fresh COMPAS run and would trip the regression tests
-# in tests/sections/test_section_06d_formation_channels.py.
+# in tests/sections/test_section_06b_formation_channels.py.
 # alpha_CE per Broekgaarden+ 2021 Sec. 5.2 Table 2.
 CE_PRESCRIPTION_BROEKGAARDEN21 = {
     "energy_formalism": "Webbink 1984",
@@ -134,6 +134,93 @@ CE_PRESCRIPTION_BROEKGAARDEN21 = {
     "double_CE_flag": "both stars in core-He burning at CE onset",
     "alpha_CE": {"A": 1.0, "F": 0.5, "G": 2.0, "J": 1.0, "K": 1.0},
 }
+
+
+MSSFR_Z_LOWER_LIMIT: float = 1e-90
+MSSFR_Z_UPPER_LIMIT: float = 1.0
+"""Outer metallicity bin edges of the upstream cosmic integration.  COMPAS
+``ClassMSSFR.__init__`` defaults ``metallicityLowerLimit = 1e-90`` and
+``metallicityUpperLimit = 1.0``, and ``calculateMetallicityBinEdges`` puts them
+at the two ends of the Riemann sum, so the lowest and highest simulated
+metallicities carry every star-forming galaxy off the ends of the grid."""
+
+
+def dPdlogZ_binned_to_grid(dPdlogZ, metallicities, metallicityGrid, p_draw):
+    """Re-bin a pointwise dP/dlnZ onto the COMPAS grid's own Riemann cells.
+
+    ``FastCosmicIntegration.find_formation_and_merger_rates`` takes the
+    metallicity PDF *pointwise*: it looks up ``dPdlogZ`` at the fine-grid
+    column nearest each system's birth Z (via ``np.digitize``) and multiplies
+    by ``1 / p_draw``.  That implicitly hands every one of the ``N`` simulated
+    metallicities the same cell width ``(ln Z_max - ln Z_min) / N`` and, more
+    importantly, assigns nothing at all to star formation outside
+    ``[Z_min, Z_max]``.
+
+    The cosmic integration that produced the Broekgaarden+ 2021 ``w_000``
+    anchors does neither.  COMPAS ``ClassMSSFR.calculateMetallicityBinEdges``
+    integrates dP/dZ over bins whose interior edges are the log-midpoints
+    between adjacent grid points and whose outer edges are
+    ``MSSFR_Z_LOWER_LIMIT`` and ``MSSFR_Z_UPPER_LIMIT``, so the top and bottom
+    grid points absorb the out-of-range tails.  This function returns a
+    ``dPdlogZ`` array that reproduces that convention when passed through the
+    FCI call: column ``i`` of the grid is set to ``P_i / dcell`` with ``P_i``
+    the bin integral and ``dcell = (ln Z_max - ln Z_min) / N`` the width FCI
+    will implicitly re-multiply by.  Every other column is left alone; no
+    system maps to one, since the grid spacing (0.1097 in ln Z) is ten times
+    the fine-grid step.
+
+    The difference is not cosmetic on a metallicity-loving population.  Under
+    the Neijssel+ 2019 MSSFR the top bin carries 58 per cent of z = 0 star
+    formation, and dropping it puts the Model A BNS R(z = 0) a factor 1.48
+    below the file's own anchor while leaving BHNS, whose yield has collapsed
+    by Z_max, correct to 2 per cent.
+
+    Parameters
+    ----------
+    dPdlogZ : 2-D array, shape (n_z, n_fine)
+        Pointwise PDF from ``find_metallicity_distribution``, per d(ln Z).
+    metallicities : 1-D array
+        The fine grid ``dPdlogZ`` is evaluated on (log-uniform).
+    metallicityGrid : 1-D array
+        The simulated COMPAS metallicities, sorted ascending.
+    p_draw : float
+        ``1 / (ln Z_max - ln Z_min)`` from ``find_metallicity_distribution``.
+
+    Returns
+    -------
+    2-D array, same shape as ``dPdlogZ``.
+
+    Notes
+    -----
+    Absorbing the tails extrapolates the outermost simulated yield to
+    metallicities the run never sampled.  For BNS the top grid point sits
+    inside the common-envelope lambda artefact range, so the extrapolated
+    yield is the artefact-inflated one; the size of that systematic is
+    reported in Section 6 rather than hidden in a normalisation.
+    """
+    dP = np.asarray(dPdlogZ, dtype=float)
+    fine = np.asarray(metallicities, dtype=float)
+    grid = np.asarray(metallicityGrid, dtype=float)
+    if grid.ndim != 1 or grid.size < 2:
+        raise ValueError("metallicityGrid must hold at least two metallicities")
+    if np.any(np.diff(grid) <= 0):
+        raise ValueError("metallicityGrid must be sorted and strictly increasing")
+
+    ln_fine = np.log(fine)
+    step = float(ln_fine[1] - ln_fine[0])
+
+    ln_mid = 0.5 * (np.log(grid[:-1]) + np.log(grid[1:]))
+    edges = np.concatenate(([np.log(MSSFR_Z_LOWER_LIMIT)], ln_mid, [np.log(MSSFR_Z_UPPER_LIMIT)]))
+
+    # FCI evaluates n_formed * dPdlogZ[col] / p_draw * w, and n_formed already
+    # carries 1 / M_SF over the whole run rather than per metallicity, so the
+    # column that reproduces a bin probability P_i is N * P_i * p_draw.
+    out = dP.copy()
+    cols = np.digitize(grid, fine)
+    for i, col in enumerate(cols):
+        in_bin = (ln_fine >= edges[i]) & (ln_fine < edges[i + 1])
+        out[:, col] = grid.size * p_draw * dP[:, in_bin].sum(axis=1) * step
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -436,7 +523,7 @@ def per_system_rate_weights(
     formation redshift required to merge at ``z_target`` given the
     binary's delay time.  Used for weighted-Poisson 1-sigma envelopes
     (sigma_R = sqrt(sum_i w_i^2)) and for the per-class rate-weighted Z
-    and chirp-mass histograms in Section 13.
+    and chirp-mass histograms.
 
     Mirrors the formation-rate column of FCI's
     ``find_formation_and_merger_rates`` (``np.digitize`` lookup against
@@ -510,36 +597,40 @@ def calibrate_mean_mass_evolved(
     expected_local_rate,
     Z_min_COMPAS=None,
     Z_max_COMPAS=None,
+    metallicityGrid=None,
 ):
-    """MSSFR-independent MEAN_MASS_EVOLVED [Msun] back-derived at z = 0.
+    """Back-derive the simulation's star-forming mass [Msun] from the z = 0 anchor.
 
     The COMPAS Broekgaarden+ 2021 files store ``weights_intrinsic/w_000``,
     which is the cosmic-integration weight at the z = 0 slice computed by the
     upstream pipeline with Neijssel+ 2019 MSSFR parameters.  Summed across
     binaries, ``w_000`` gives the published intrinsic local merger rate
-    density, ``expected_local_rate``.
+    density, ``expected_local_rate``.  Re-running that integration here and
+    dividing gives back the mass it was normalised by::
 
-    The simulation's total stellar mass evolved is a property of the
-    sampler (IMF, mass cuts, binary fraction, STROOPWAFEL phases) and is
-    therefore MSSFR-independent.  We recover it by running our own
-    ``compute_merger_rate`` with Neijssel+ 2019 MSSFR (the same parameters
-    the upstream pipeline used) and dividing the unsmoothed R(z = 0) by
-    ``expected_local_rate``::
+        M_SF = R_unnorm(z = 0; Neijssel) / expected_local_rate
 
-        MEAN_MASS_EVOLVED = R_unnorm(z = 0; Neijssel) / expected_local_rate
+    **This is a cross-check, not the science-path normalisation.** The
+    simulation's star-forming mass is known from the run configuration and is
+    what ``simulation_star_forming_mass`` returns (53 grid points, about a
+    million binaries each, 79.11 Msun of star formation per binary;
+    Broekgaarden+ 2021 Table 1 and Sec. 2.2).  Use that.  What this function
+    adds is an independent test that the whole cosmic-integration chain
+    reproduces the upstream anchor at that mass: pass ``metallicityGrid`` and
+    it returns 4.19e9 Msun for both Model A populations, within 0.4 per cent
+    of the configuration value.
 
-    The factor of MEAN_MASS_EVOLVED that comes out is the actual simulation
-    mass and can be plugged into any subsequent ``compute_merger_rate`` call
-    with a different MSSFR (Levina+ 2026 TNG100-1, ...).  The Neijssel
-    parameters are used here only as a calibration tool, not as the
-    science-path MSSFR.
-
-    Note: STROOPWAFEL files do not store the total number of binaries that
-    COMPAS evolved upstream (the file holds only the surviving DCOs, not the
-    full draw count).  An IMF-analytical estimate
-    ``N_drawn * star_forming_mass_per_binary`` therefore cannot be computed
-    from the file alone, which is why this routine back-derives from the
-    Neijssel anchor instead.
+    ``metallicityGrid`` is what makes it agree.  Without it the internal
+    integration uses FCI's pointwise metallicity convention, which assigns
+    nothing to star formation outside the simulated ``[Z_min, Z_max]``, where
+    the upstream pipeline folds those tails into the outermost grid points
+    (see ``dPdlogZ_binned_to_grid``).  On a metallicity-loving population that
+    is not a detail: the pointwise convention returns 2.80e9 Msun for Model A
+    BNS, a factor 1.50 below the configuration mass, against 4.05e9 (3 per
+    cent) for BHNS, whose yield has already collapsed by ``Z_max``.  Adopting
+    the returned number as a normalisation therefore hides a missing term in
+    the integration inside the mass, and propagates it to anything else that
+    mass divides, the Section 5 formation yield included.
 
     Parameters
     ----------
@@ -562,11 +653,19 @@ def calibrate_mean_mass_evolved(
         to ``(min(COMPAS_Z), max(COMPAS_Z))``.  Pass the simulation's
         full range (``METALLICITY_GRID[0]``, ``METALLICITY_GRID[-1]``)
         if a class subset has narrower coverage.
+    metallicityGrid : 1-D array, optional
+        The simulated metallicities, for the upstream bin convention.  Pass
+        the design grid (``grb_io.METALLICITY_GRID``, deduplicated), never
+        ``np.unique(COMPAS_Z)``: models E, F and alpha0p1 leave 6 to 12 of
+        the 53 points with no merging system, and inferring the grid from the
+        sample would move the bin edges with the sample.  Omitting it keeps
+        the FCI pointwise convention and is only correct for a population
+        that produces nothing at the ends of the grid.
 
     Returns
     -------
     mean_mass_evolved : float
-        Total stellar mass [Msun] formed in the simulation.
+        Star-forming mass [Msun] the anchor implies.
     """
     from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
         find_metallicity_distribution,
@@ -584,6 +683,9 @@ def calibrate_mean_mass_evolved(
         min_logZ_COMPAS=np.log(Z_min_COMPAS),
         max_logZ_COMPAS=np.log(Z_max_COMPAS),
     )  # Neijssel+19 default mu0/muz/sigma_0/sigma_z/alpha; matches w_000 anchor.
+
+    if metallicityGrid is not None:
+        dPdlogZ_nei = dPdlogZ_binned_to_grid(dPdlogZ_nei, mets_nei, metallicityGrid, p_draw_nei)
 
     rate_unnorm = compute_merger_rate(
         redshifts,
@@ -1497,10 +1599,96 @@ def kroupa_imf(m):
     return result.item() if result.size == 1 else result
 
 
+BROEKGAARDEN21_SAMPLING = {
+    "m1_min": 5.0,
+    "m1_max": 150.0,
+    "m2_min": 0.1,
+    "f_bin": 1.0,
+    "n_binaries_per_Z": 1.0e6,
+    "n_metallicities": 53,
+}
+"""COMPAS initial-condition sampling of the Broekgaarden+ 2021 grid, their
+Table 1: primary mass drawn from Kroupa (2001) over [5, 150] Msun, flat mass
+ratio with m2 >= 0.1 Msun, binary fraction corrected to f_bin = 1
+(arXiv:2103.02608 Sec. 2.2), about a million binaries at each of the 53
+log-uniform metallicity grid points."""
+
+
+def star_forming_mass_per_binary(
+    m1_min=None, m1_max=None, m2_min=None, f_bin=None, m_lo_full=0.01, m_hi_full=200.0
+):
+    """Universe star-forming mass represented by one COMPAS binary [Msun].
+
+    COMPAS evolves only the sliver of the IMF that makes DCO progenitors, so
+    every simulated binary stands in for a much larger amount of star
+    formation.  Following the COMPAS
+    ``totalMassEvolvedPerZ.analytical_star_forming_mass_per_binary_using_kroupa_imf``
+    convention (a flat mass ratio, so a fraction ``1 - m2_min / m1`` of drawn
+    primaries has an admissible companion)::
+
+        M_SF per binary = (1 + f_bin / 2) <m>  /  [f_bin * P(m1 in range, m2 >= m2_min)]
+
+    The ``1 + f_bin / 2`` is the companion: at f_bin = 1 every system is a
+    binary whose secondary averages half the primary's IMF mass, so the
+    Universe carries 1.5 mean stellar masses per system.  Dropping it, and
+    dividing by the bare primary fraction, is what gives the too-small
+    52.1 Msun instead of 79.1 Msun for the Broekgaarden+ 2021 sampling.
+
+    Defaults are the Broekgaarden+ 2021 values in ``BROEKGAARDEN21_SAMPLING``
+    and return 79.11 Msun.
+    """
+    s = BROEKGAARDEN21_SAMPLING
+    m1_min = s["m1_min"] if m1_min is None else m1_min
+    m1_max = s["m1_max"] if m1_max is None else m1_max
+    m2_min = s["m2_min"] if m2_min is None else m2_min
+    f_bin = s["f_bin"] if f_bin is None else f_bin
+
+    total_mass, _ = quad(lambda m: m * kroupa_imf(m), m_lo_full, m_hi_full)
+    total_number, _ = quad(kroupa_imf, m_lo_full, m_hi_full)
+    mean_star_mass = total_mass / total_number
+
+    n_bin, _ = quad(lambda m: kroupa_imf(m) * (1.0 - m2_min / m), m1_min, m1_max)
+    f_bin_in_compas = f_bin * n_bin / total_number
+
+    return (1.0 + 0.5 * f_bin) * mean_star_mass / f_bin_in_compas
+
+
+def simulation_star_forming_mass(n_binaries_per_Z=None, n_metallicities=None, **kwargs):
+    """Total star-forming mass a Broekgaarden+ 2021 run represents [Msun].
+
+    ``n_binaries_per_Z * n_metallicities * star_forming_mass_per_binary()``,
+    i.e. 53 * 1e6 * 79.11 = 4.193e9 Msun for the fiducial grid.  This is the
+    denominator of the formation yield ``R_form = dN_form / dM_SFR`` that
+    Broekgaarden+ 2021 Fig. 5 and Broekgaarden+ 2022 Fig. 1 plot: digitising
+    all 53 model-A points of their Fig. 1 recovers 77.2 Msun per binary for
+    NSNS and 78.4 for BHNS against the 79.11 here.
+
+    It is a property of the sampler, so it is the same for every model of the
+    grid and the same for the BNS and BHNS runs.  Prefer it over
+    ``calibrate_mean_mass_evolved`` wherever the quantity wanted is a yield
+    rather than a rate; the calibration back-derives a mass from the file's
+    ``w_000`` local-rate anchor and so absorbs any mismatch between this
+    project's cosmic integration and the upstream 2021 pipeline into the
+    normalisation (on Model A that is 3 per cent for BHNS but a factor 1.50
+    for BNS).
+    """
+    s = BROEKGAARDEN21_SAMPLING
+    n_bin = s["n_binaries_per_Z"] if n_binaries_per_Z is None else n_binaries_per_Z
+    n_Z = s["n_metallicities"] if n_metallicities is None else n_metallicities
+    return n_bin * n_Z * star_forming_mass_per_binary(**kwargs)
+
+
 def verify_mean_mass_evolved(
     m_lo_full=0.01, m_hi_full=200.0, m_lo_prim=5.0, m_hi_prim=150.0, mean_mass_evolved=None
 ):
     """Analytically verify a MEAN_MASS_EVOLVED value via Kroupa IMF.
+
+    ``N_sim_implied`` divides by ``star_forming_mass_per_binary`` (79.11 Msun
+    for the Broekgaarden+ 2021 sampling), so a calibrated mass that matches
+    the run configuration returns ``53e6`` binaries.  The earlier version
+    divided by ``mean_star_mass / f_primary`` = 52.1 Msun, which counts the
+    primary but not its companion; that made the BNS calibration read as
+    1.01x the Table 1 value when the mass behind it is a factor 1.50 short.
 
     Parameters
     ----------
@@ -1521,13 +1709,16 @@ def verify_mean_mass_evolved(
     n_primary, _ = quad(kroupa_imf, m_lo_prim, m_hi_prim)
     f_primary = n_primary / total_number
 
-    mass_per_drawn = mean_star_mass / f_primary
+    mass_per_binary = star_forming_mass_per_binary(
+        m1_min=m_lo_prim, m1_max=m_hi_prim, m_lo_full=m_lo_full, m_hi_full=m_hi_full
+    )
 
     return {
         "mean_star_mass": mean_star_mass,
         "f_primary": f_primary,
-        "mass_per_drawn_primary": mass_per_drawn,
-        "N_sim_implied": mean_mass_evolved / mass_per_drawn,
+        "mass_per_drawn_primary": mean_star_mass / f_primary,
+        "star_forming_mass_per_binary": mass_per_binary,
+        "N_sim_implied": mean_mass_evolved / mass_per_binary,
     }
 
 

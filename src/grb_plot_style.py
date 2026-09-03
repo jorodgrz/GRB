@@ -94,9 +94,9 @@ CLASS_LABELS: dict[str, str] = {
     "No GRB": "No GRB",
 }
 
-# Two-line forms for the crowded axes (Section 10 tick labels, Section 11.4
-# tick labels, Section 12 decision-tree boxes) where the full label overruns
-# the width budget.
+# Two-line forms for the crowded axes (the Section 11.4 engine-comparison
+# tick labels, the Section 12 decision-tree boxes) where the full label
+# overruns the width budget.
 CLASS_LABELS_SHORT: dict[str, str] = {
     "sbGRB + blue KN": "sbGRB\n+ blue KN",
     "lbGRB + red KN (HMNS)": "lbGRB\n(HMNS)",

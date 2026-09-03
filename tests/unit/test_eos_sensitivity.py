@@ -1,12 +1,12 @@
-"""EOS sensitivity of the BNS classification, feeding the Section 10 jet-breakout EOS band (grb_main.ipynb).
+"""``compute_eos_sensitivity`` helper contract on a single population.
 
-Smoke-level invariants on ``compute_eos_sensitivity``: returned class
-fractions sum to 1 per EOS row, ``M_thresh`` tracks ``M_TOV`` linearly,
-and the EOS list comes from ``grb_physics.EOS_MODELS`` by default.
+Returned class fractions sum to 1 per EOS row, ``M_thresh`` tracks ``M_TOV``
+linearly, and the EOS list comes from ``grb_physics.EOS_MODELS`` by default.
+The grid form of the same helper, crossed with the NS-mass treatment, is in
+``test_eos_sensitivity_grid.py``.
 
-The literature anchors for ``M_TOV``, ``R_1p4`` and ``M_crit`` per EOS
-live in ``tests/anchors/test_literature_anchors.py``; this section
-file pins the helper contract.
+The literature anchors for ``M_TOV``, ``R_1p4`` and ``M_crit`` per EOS live
+in ``tests/anchors/test_literature_anchors.py``; this file pins the contract.
 
 Reference: Bauswein et al. (2013), arXiv:1302.6530; Read et al.
 (2009), arXiv:0812.2163; Raaijmakers et al. (2021), arXiv:2105.06981.

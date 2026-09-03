@@ -385,6 +385,74 @@ def test_calibrated_R0_matches_w_000_within_1pct(compas_xcheck_pipeline):
 # ─────────────────────────────────────────────────────────────────────
 # Kroupa (2001) IMF agreement: project vs upstream COMPAS.
 # ─────────────────────────────────────────────────────────────────────
+@pytest.mark.requires_data
+@pytest.mark.requires_compas
+@pytest.mark.slow
+@pytest.mark.parametrize("kind", ["BNS", "BHNS"])
+def test_run_configuration_mass_reproduces_the_w000_anchor(kind, request):
+    """R(z=0) from the run configuration must land on the file's own anchor.
+
+    With ``simulation_star_forming_mass`` as the normalisation and the COMPAS
+    ``ClassMSSFR`` metallicity binning (``dPdlogZ_binned_to_grid``), the rate
+    integration carries no free parameter, so the published ``w_000`` sum
+    becomes a test rather than an input.  Both Model A populations land within
+    2 per cent under the WMAP9 cosmology the upstream pipeline used.
+
+    This is the regression that would catch a return to FCI's pointwise
+    metallicity convention, which drops star formation above the Z = 0.03 grid
+    ceiling and puts BNS a factor 1.48 low while leaving BHNS within 2 per cent.
+    """
+    fci = pytest.importorskip(
+        "compas_python_utils.cosmic_integration.FastCosmicIntegration",
+        reason="compas_python_utils not installed",
+    )
+    from astropy.cosmology import WMAP9
+
+    from grb_io import METALLICITY_GRID, load_bhns, load_bns, read_expected_local_rate
+    from grb_rates import (
+        compute_merger_rate,
+        dPdlogZ_binned_to_grid,
+        simulation_star_forming_mass,
+    )
+
+    path = request.getfixturevalue("bns_a_path" if kind == "BNS" else "bhns_a_path")
+    data = (load_bns if kind == "BNS" else load_bhns)(path=path)
+
+    grid = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
+    redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
+        max_redshift=10.0, redshift_step=0.01, cosmology=WMAP9
+    )
+    sfr = fci.find_sfr(redshifts)  # Neijssel+ 2019 defaults, the w_000 MSSFR
+    dPdlogZ, metallicities, p_draw = fci.find_metallicity_distribution(
+        redshifts,
+        min_logZ_COMPAS=np.log(grid[0]),
+        max_logZ_COMPAS=np.log(grid[-1]),
+    )
+    dPdlogZ = dPdlogZ_binned_to_grid(dPdlogZ, metallicities, grid, p_draw)
+
+    M_SF = simulation_star_forming_mass(n_metallicities=grid.size)
+    R0 = compute_merger_rate(
+        redshifts,
+        times,
+        time_first_SF,
+        sfr / M_SF,
+        p_draw,
+        dPdlogZ,
+        metallicities,
+        data["metallicity"],
+        data["delay_time"],
+        data["weights"],
+        smooth_sigma=0,
+    )[0]
+
+    anchor = read_expected_local_rate(path)
+    assert R0 == pytest.approx(anchor, rel=0.02), (
+        f"{kind} R(z=0) = {R0:.3f} against the file's w_000 anchor {anchor:.3f} "
+        f"(ratio {R0 / anchor:.4f}); the run-configuration mass plus the "
+        f"ClassMSSFR binning should reproduce it to 2 percent."
+    )
+
+
 @pytest.mark.requires_compas
 def test_compas_kroupa_mean_stellar_mass_matches_grb_rates():
     """``grb_rates.kroupa_imf`` and ``totalMassEvolvedPerZ.IMF`` give the same <m>.
