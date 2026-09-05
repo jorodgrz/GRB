@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 
 from grb_physics import (
+    A_BH_FID,
     HMNS_FACTOR_DEFAULT,
     M_THRESH,
     M_TOV,
@@ -166,7 +167,9 @@ def bns_boundary_lines(
 # ═══════════════════════════════════════════════════════════════════════════
 # BHNS classification from disk mass
 # ═══════════════════════════════════════════════════════════════════════════
-def classify_bhns(M_BH, M_NS, a_BH=0.5, md_short=MDISK_SHORT, md_long=MDISK_LONG, **foucart_kw):
+def classify_bhns(
+    M_BH, M_NS, a_BH=A_BH_FID, md_short=MDISK_SHORT, md_long=MDISK_LONG, **foucart_kw
+):
     """Classify BHNS mergers by Foucart disk mass under the Gottlieb 2024 hybrid.
 
     Disk-mass thresholds (0.01, 0.1 Msun) are Gottlieb (2023) Sec. 4 / Fig. 6;
@@ -203,7 +206,7 @@ def classify_bhns_spins(M_BH, M_NS, spins=(0.0, 0.3, 0.5, 0.7, 0.9), **kw):
 GRID_CLASS_LABELS = {
     1: "Faint lbGRB (BNS)",
     2: "lbGRB + red KN (HMNS)",
-    3: "sbGRB + blue KN",
+    3: "sbGRB + blue KN (HMNS)",
     4: "lbGRB + red KN (BNS disk)",
     5: "Faint lbGRB (BHNS)",
     6: "lbGRB + red KN (BHNS disk)",

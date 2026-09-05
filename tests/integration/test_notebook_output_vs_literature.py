@@ -12,7 +12,6 @@ the resulting numbers to published values from:
   posteriors);
 - Wanderman and Piran (2015) MNRAS 448, 3026 (observed sGRB R(z));
 - Ghirlanda et al. (2016) A&A 594, A84 (observed sGRB local rate);
-- Colombo et al. (2022) ApJ 937, 79 (observed sGRB local rate);
 - Fong and Berger (2013) ApJ 776, 18 (observed sGRB host offsets);
 - Gottlieb et al. (2023) arXiv:2309.00038, (2024) arXiv:2411.13657
   (BHNS disk-mass thresholds, BNS classification fractions);
@@ -359,22 +358,34 @@ def test_bhns_modelA_R0_within_LIGO_O4_BHNS_band(notebook_pipeline):
 
 # ─────────────────────────────────────────────────────────────────────
 # Beamed-rate observed comparison (Fong 2015, Beniamini-Nakar 2019,
-# Wanderman-Piran 2015, Ghirlanda 2016, Colombo 2022).
+# Wanderman-Piran 2015, Ghirlanda 2016).
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
     """Beamed sbGRB + blue KN local rate sits in the observed sGRB band.
 
-    Three independent observational handles for the local sGRB rate
-    (each beaming-limited):
+    The observational handles on the local, beaming-limited sGRB rate,
+    as the papers actually report them:
 
-      Wanderman and Piran (2015) MNRAS 448, 3026: R0 = 4.1 +2.3/-1.9 Gpc^-3 yr^-1
-      Ghirlanda et al. (2016) A&A 594, A84: 1.3 (0.5-3.0)
-      Colombo et al. (2022) ApJ 937, 79: 3.6 (1.8-6.5)
+      Wanderman and Piran (2015) MNRAS 448, 3026: R0 = 4.1 +2.3/-1.9,
+        so [2.2, 6.4] Gpc^-3 yr^-1.
+      Ghirlanda et al. (2016) A&A 594, A84 Sec. 7: rho_0 = 0.20 +0.04/-0.07
+        for their model (a) and 0.8 +0.3/-0.15 for model (c), so
+        [0.13, 1.1] across both.
 
-    Combined envelope: ~[0.3, 6.5] Gpc^-3 yr^-1 (taking the widest
-    union of the lower / upper edges).
+    Union: [0.13, 6.4] Gpc^-3 yr^-1.  That is wide because the two papers
+    disagree by more than an order of magnitude on the same quantity, not
+    because the band has been padded; Model A's 0.83 lands in the gap
+    between them.
+
+    Colombo et al. (2022) used to be a third handle here at 3.6 (1.8-6.5).
+    Those numbers came from their Table 1, "Assumed Detection Limits and
+    Predicted Detection Rates in Our Observing Scenarios", whose "Rate" row
+    is predicted detections per year for an instrument, not a rate density.
+    Their actual local rate density is 347 +536/-256 Gpc^-3 yr^-1 and is an
+    intrinsic NSNS merger rate, so it cannot be compared against a beamed
+    sGRB rate at all.  It is now ``grb_rates.COLOMBO22_NSNS_LOCAL_RATE``.
 
     The intrinsic BNS sbGRB rate from Section 6 multiplied by f_beam =
     1 - cos(theta_j_fid) at theta_j_fid = 13 deg (Fong 2015 / Beniamini
@@ -393,17 +404,16 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     R_sb_beamed = float(beamed_rate(R_sb_int, theta_fid))
 
-    # The union envelope the docstring cites, used as cited.  An earlier
-    # form widened it to [0.10, 10.0] "to account for the upper-bound
-    # caveat", which is a reason to expect the model at or below the top
-    # of the band, not a reason to move the band; the widened version had
-    # roughly eight times the slack in each direction and could not fail.
-    # Model A lands at about 0.83, comfortably inside as cited.
-    lo, hi = 0.30, 6.5
+    # The union of the two papers' published intervals, used as published.
+    # Two earlier forms of this were wrong in opposite directions: the band
+    # had been widened to [0.10, 10.0] "to account for the upper-bound
+    # caveat", and its lower edge rested on a Ghirlanda value of 0.5 that
+    # the paper does not report.
+    lo, hi = 0.13, 6.4
     assert lo <= R_sb_beamed <= hi, (
         f"Beamed sbGRB R(z=0) = {R_sb_beamed:.4f} Gpc^-3 yr^-1 (theta_j "
         f"= {theta_fid} deg) is outside the observed sGRB envelope "
-        f"[{lo}, {hi}] from WP15 / Ghirlanda 2016 / Colombo 2022.  "
+        f"[{lo}, {hi}] from WP15 / Ghirlanda 2016.  "
         f"Either the intrinsic sbGRB rate broke or the beaming "
         f"convention drifted from f_beam = 1 - cos(theta_j)."
     )

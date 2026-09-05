@@ -2063,18 +2063,47 @@ OBSERVED_SGRB_RATES = {
         "R_obs_hi": 6.4,
         "note": "MNRAS 448, 3026; intrinsic ~270 at theta_j ~10 deg",
     },
-    "Ghirlanda+ 2016": {
-        "R_obs": 1.3,
-        "R_obs_lo": 0.5,
-        "R_obs_hi": 3.0,
-        "note": "A&A 594, A84; Fermi/GBM, intrinsic ~200-700 after beaming",
+    "Ghirlanda+ 2016 (model a)": {
+        "R_obs": 0.20,
+        "R_obs_lo": 0.13,
+        "R_obs_hi": 0.24,
+        "note": (
+            "A&A 594, A84 Sec. 7: rho_0,a = 0.20 +0.04/-0.07 Gpc^-3 yr^-1 for "
+            "their model (a).  Their alternative model (c) gives "
+            "rho_0,c = 0.8 +0.3/-0.15, so the two together span 0.13 to 1.1; "
+            "model (a) is recorded here and (c) is the spread to quote with it."
+        ),
     },
-    "Colombo+ 2022": {
-        "R_obs": 3.6,
-        "R_obs_lo": 1.8,
-        "R_obs_hi": 6.5,
-        "note": "ApJ 937, 79; Fermi/GBM update",
+    "Ghirlanda+ 2016 (model c)": {
+        "R_obs": 0.8,
+        "R_obs_lo": 0.65,
+        "R_obs_hi": 1.1,
+        "note": "A&A 594, A84 Sec. 7: rho_0,c = 0.8 +0.3/-0.15 Gpc^-3 yr^-1.",
     },
+}
+
+# Colombo et al. (2022) ApJ 937, 79 is deliberately NOT in the dict above.
+# It was previously entered as an observed sGRB rate of 3.6 [1.8, 6.5]
+# Gpc^-3 yr^-1.  Those numbers are from their Table 1, "Assumed Detection
+# Limits and Predicted Detection Rates in Our Observing Scenarios", whose
+# "Rate" row is predicted *detections per year* for a given instrument and
+# observing scenario, not a local rate density: wrong quantity and wrong
+# units.  The local rate density Colombo et al. actually normalise to is
+# R_0 = 347 +536/-256 Gpc^-3 yr^-1 (their Appendix A.3), and that is an
+# *intrinsic NSNS merger* rate, so it does not belong in a dict of
+# beaming-limited observed sGRB rates either.  It is kept here as a
+# reference constant instead.
+COLOMBO22_NSNS_LOCAL_RATE = {
+    "R": 347.0,
+    "R_lo": 91.0,
+    "R_hi": 883.0,
+    "note": (
+        "ApJ 937, 79 Appendix A.3: intrinsic NSNS local merger-rate density "
+        "R_0 = 347 +536/-256 Gpc^-3 yr^-1, normalised to reproduce the "
+        "observed number of significant NSNS detections.  Intrinsic, not "
+        "beaming-limited: compare against compute_merger_rate directly, the "
+        "same convention as LVK_GWTC5_LOCAL_RATES."
+    ),
 }
 
 
@@ -2084,16 +2113,19 @@ OBSERVED_SGRB_RATES = {
 # 'caveat' field documents the mapping choice.
 OBSERVED_RATES_BY_CLASS = {
     "sbGRB + blue KN": {
-        "R_obs": OBSERVED_SGRB_RATES["Colombo+ 2022"]["R_obs"],
-        "R_obs_lo": OBSERVED_SGRB_RATES["Colombo+ 2022"]["R_obs_lo"],
-        "R_obs_hi": OBSERVED_SGRB_RATES["Colombo+ 2022"]["R_obs_hi"],
-        "reference": "Colombo+ 2022, ApJ 937, 79",
-        "caveat": "Observed sGRB rate; sbGRBs dominate the local-volume short-GRB population.",
+        "R_obs": OBSERVED_SGRB_RATES["Wanderman & Piran 2015"]["R_obs"],
+        "R_obs_lo": OBSERVED_SGRB_RATES["Wanderman & Piran 2015"]["R_obs_lo"],
+        "R_obs_hi": OBSERVED_SGRB_RATES["Wanderman & Piran 2015"]["R_obs_hi"],
+        "reference": "Wanderman and Piran 2015, MNRAS 448, 3026",
+        "caveat": "Observed, beaming-limited sGRB rate; sbGRBs dominate the "
+        "local-volume short-GRB population.  Previously mapped to Colombo+ "
+        "2022, whose entry was a predicted detection count rather than a "
+        "rate density.",
     },
     "lbGRB + red KN (HMNS)": {
-        "R_obs": OBSERVED_SGRB_RATES["Ghirlanda+ 2016"]["R_obs"],
-        "R_obs_lo": OBSERVED_SGRB_RATES["Ghirlanda+ 2016"]["R_obs_lo"],
-        "R_obs_hi": OBSERVED_SGRB_RATES["Ghirlanda+ 2016"]["R_obs_hi"],
+        "R_obs": OBSERVED_SGRB_RATES["Ghirlanda+ 2016 (model a)"]["R_obs"],
+        "R_obs_lo": OBSERVED_SGRB_RATES["Ghirlanda+ 2016 (model a)"]["R_obs_lo"],
+        "R_obs_hi": OBSERVED_SGRB_RATES["Ghirlanda+ 2016 (model a)"]["R_obs_hi"],
         "reference": "Ghirlanda+ 2016, A&A 594, A84",
         "caveat": "No dedicated observed lbGRB+HMNS rate in the literature; "
         "mapped to the lower-luminosity end of the observed sGRB "

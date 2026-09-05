@@ -37,64 +37,67 @@ import pytest
 # Bauswein, Bastian, Blaschke et al. (2020) [papers/Bauswein_2020.pdf]
 # Koppel, Bovard and Rezzolla (2019) ApJL 872, L16 [papers/Koppel_2019.pdf]
 # ─────────────────────────────────────────────────────────────────────
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "K_THRESH_DEFAULT = 1.27 is the Gottlieb (2023) fiducial chosen so "
-        "that K * M_TOV ~ 2.8 Msun = M_CRIT_BNS; Bauswein (2013) PRL 111, "
-        "131101 reports k in [1.30, 1.70] for surveyed EOSs.  Reconciliation "
-        "is tracked as a separate science change.  Test will XPASS (and the "
-        "xfail can be lifted) if K_THRESH_DEFAULT is moved into the band."
-    ),
-)
-def test_bauswein_2013_prompt_collapse_k_ratio_in_published_band():
-    """`K_THRESH_DEFAULT` must lie in Bauswein (2013) k = M_thresh / M_TOV in [1.30, 1.70].
+def test_prompt_collapse_k_ratio_in_bauswein_2020_surveyed_range():
+    """`K_THRESH_DEFAULT` lies inside the k = M_thres / M_max range Bauswein (2020) surveys.
 
-    Bauswein, Baumgarte and Janka (2013) PRL 111, 131101 (Sec. III and
-    Table I) report that the prompt-collapse threshold satisfies
-    ``M_thresh / M_TOV in [1.30, 1.70]`` across the EOSs they survey,
-    with the soft (compact) EOSs at the lower edge and stiff EOSs at
-    the upper edge.  Bauswein et al. (2020, arXiv:2004.00846) and
-    Koppel, Bovard and Rezzolla (2019, ApJL 872, L16, eq. 4 fit
-    ``b = 1.01, c = 1.34``) confirm the same band.
+    This test used to be a strict xfail against the [1.30, 1.70] band quoted
+    in the Bauswein, Baumgarte and Janka (2013) PRL 111, 131101 abstract,
+    with the 1.27 fiducial recorded as an unreconciled "Gottlieb-vs-Bauswein
+    numerical gap" needing a science change to close.  It does not need one.
+    That band came from a survey of 12 equations of state.  Bauswein et al.
+    (2020, arXiv:2004.00846) Table I extends the same measurement to 40, and
+    its 23-EOS base sample spans k in [1.259, 1.514]: five of those 23 sit
+    below 1.30 (eosAU 1.259, WFF1 1.263, eosUU 1.291, APR 1.292, WFF2 1.292).
 
-    The project's `K_THRESH_DEFAULT = 1.27` sits 0.03 below the Bauswein
-    lower edge.  The value is documented in `grb_physics.py` as a
-    Gottlieb (2023) fiducial chosen so that ``K * M_TOV ~ 2.8 Msun =
-    M_CRIT_BNS``.  The xfail above pins this Gottlieb-vs-Bauswein
-    numerical gap; lifting it requires bumping the constant into the
-    Bauswein band, which propagates through every prompt-collapse
-    fraction and is therefore handled as a separate science change.
+    ``K_THRESH_DEFAULT = 1.27`` therefore sits inside the modern surveyed
+    range, between WFF1 and eosUU, at the soft end where Gottlieb (2023)
+    intends it: the fiducial is chosen so that ``K * M_TOV ~ 2.8 Msun =
+    M_CRIT_BNS``.  The constant is unchanged; only the band it is tested
+    against was stale.
+
+    The upper edge is the base-sample maximum rounded out to 1.60, which also
+    admits the excluded-hadronic models (up to 1.581).  Same band as
+    ``test_eos_models_M_crit_over_M_TOV_in_bauswein_band``, and for the same
+    reason: it comes from the table the values come from.
     """
     from grb_physics import K_THRESH_DEFAULT
 
-    assert 1.30 <= K_THRESH_DEFAULT <= 1.70, (
-        f"K_THRESH_DEFAULT = {K_THRESH_DEFAULT} is outside the Bauswein "
-        f"(2013) PRL 111, 131101 prompt-collapse band [1.30, 1.70]."
+    assert 1.25 <= K_THRESH_DEFAULT <= 1.60, (
+        f"K_THRESH_DEFAULT = {K_THRESH_DEFAULT} is outside the k range "
+        f"Bauswein et al. (2020) Table I surveys, [1.259, 1.514] for the "
+        f"base sample, rounded to [1.25, 1.60]."
     )
 
 
 @pytest.mark.parametrize(
     "eos_name, k_min, k_max",
     [
-        # Bauswein (2013) Table I quotes EOS-dependent k = M_thresh / M_TOV.
-        # APR4 (soft):  k ~ 1.31; SFHo:  k ~ 1.26; LS220: k ~ 1.33; DD2 (stiff): k ~ 1.38.
-        # Wider Bauswein (2013) survey band [1.30, 1.70]; we use [1.20, 1.70] here
-        # because SFHo sits at the lower edge per Bauswein et al. (2020) re-analysis.
-        ("APR4", 1.20, 1.70),
-        ("SFHo", 1.20, 1.70),
-        ("LS220", 1.20, 1.70),
-        ("DD2", 1.20, 1.70),
+        # k = M_thres(q = 1) / M_max per EOS, Bauswein et al. (2020) Table I:
+        # APR 1.292, SFHO 1.398, LS220 1.458, DD2 1.375.  Computed on the
+        # project's own M_TOV these become 1.284, 1.396, 1.458, 1.374.
+        ("APR4", 1.25, 1.60),
+        ("SFHo", 1.25, 1.60),
+        ("LS220", 1.25, 1.60),
+        ("DD2", 1.25, 1.60),
     ],
 )
 def test_eos_models_M_crit_over_M_TOV_in_bauswein_band(eos_name, k_min, k_max):
-    """`EOS_MODELS[eos]['M_crit'] / M_TOV` must satisfy Bauswein (2013) k in [1.20, 1.70].
+    """`EOS_MODELS[eos]['M_crit'] / M_TOV` lies in the Bauswein (2020) k range.
 
-    Per-EOS pin of the prompt-collapse k-ratio against the Bauswein
-    (2013) Table I survey.  The lower edge is loosened to 1.20 (from
-    the canonical 1.30) to absorb the SFHo borderline value as
-    documented in Bauswein et al. (2020); a hard 1.30 cut would surface
-    SFHo as a false positive.
+    The band is the range k spans across the 23 EOS of the Bauswein et al.
+    (2020) Table I base sample, [1.259, 1.514], rounded outward to
+    [1.25, 1.60] so that the excluded-hadronic models (up to 1.581) also fit.
+    It is taken from the same table the ``M_crit`` values are, which is the
+    point: a band and the values it brackets should come from one source.
+
+    An earlier version of this test quoted the Bauswein (2013) Table I k
+    values as 1.26 for SFHo and 1.33 for LS220.  Table I gives 1.432 and
+    1.495; the project constants had been transcribed with M_crit low by
+    0.35 Msun, and the acceptance band had then been widened from the
+    canonical [1.30, 1.70] to [1.20, 1.70] to admit them, attributed to a
+    Bauswein (2020) re-analysis that does not support it (its M_thres range
+    starts near 2.7 Msun).  Both the constants and the band now come from
+    Bauswein (2020) Table I directly.
     """
     from grb_physics import EOS_MODELS
 
@@ -114,40 +117,45 @@ def test_eos_models_M_crit_over_M_TOV_in_bauswein_band(eos_name, k_min, k_max):
 @pytest.mark.parametrize(
     "eos_name, R14_central, R14_tol_km, MTOV_central, MTOV_tol_Msun",
     [
-        # APR4 (Akmal-Pandharipande-Ravenhall): Read (2009) Table III gives
-        # R_1.4 ~ 11.4 km, M_TOV ~ 2.20 Msun.  Project value 11.1 km, M_TOV
-        # 2.20 Msun; allow 0.5 km / 0.1 Msun band.
+        # Per-EOS published values.  Only APR4 comes from Read (2009); the
+        # other three postdate it or were never in it, which is why the test
+        # is named for the quantity rather than for one paper.
+        # APR4 (Akmal, Pandharipande and Ravenhall): Read (2009) Table III,
+        # R_1.4 ~ 11.4 km, M_TOV ~ 2.20 Msun.  Project value 11.1 km.
         ("APR4", 11.30, 0.50, 2.20, 0.10),
-        # SFHo (Steiner, Hempel, Fischer 2013): Bauswein (2013) Table I and
-        # Koppel (2019) Table 1 give R_max ~ 10.34 km but R_1.4 ~ 11.9 km
-        # (less compact than R at the maximum mass); M_TOV ~ 2.06.
+        # SFHo (Steiner, Hempel and Fischer 2013): R_1.4 ~ 11.9 km,
+        # M_TOV ~ 2.06 Msun.  Bauswein (2020) Table I gives M_max = 2.056 and
+        # R_1.6 = 11.751 km, consistent with a slightly larger R_1.4.
         ("SFHo", 11.90, 0.50, 2.06, 0.10),
-        # LS220 (Lattimer-Swesty 220): Bauswein (2013) Table I; widely
-        # tabulated R_1.4 ~ 12.7, M_TOV ~ 2.04.
+        # LS220 (Lattimer and Swesty 1991): widely tabulated R_1.4 ~ 12.7 km,
+        # M_TOV ~ 2.04.  Bauswein (2020) Table I: M_max = 2.041, R_1.6 = 12.478.
         ("LS220", 12.70, 0.60, 2.04, 0.10),
-        # DD2 (Typel et al. 2010): Bauswein (2013), Bauswein (2019/2020)
-        # give R_1.4 ~ 13.2 km, M_TOV ~ 2.42 Msun.
+        # DD2 (Typel et al. 2010): R_1.4 ~ 13.2 km, M_TOV ~ 2.42 Msun.
+        # Bauswein (2020) Table I: M_max = 2.419, R_1.6 = 13.247.
         ("DD2", 13.20, 0.50, 2.42, 0.10),
     ],
 )
-def test_eos_models_R14_and_MTOV_against_read_2009_table_III(
+def test_eos_models_R14_and_MTOV_match_published_values(
     eos_name, R14_central, R14_tol_km, MTOV_central, MTOV_tol_Msun
 ):
-    """Strict pin of `EOS_MODELS[eos]` to the Read (2009) Table III ranges.
+    """Pin of ``EOS_MODELS[eos]`` ``R_1.4`` and ``M_TOV`` to published values.
 
-    Read, Lackey, Owen and Friedman (2009) PRD 79, 124032 Table III
-    gives ``R_1.4`` and ``M_TOV`` per EOS.  For SFHo, LS220, DD2 (not
-    in Read 2009) we use Bauswein (2013) PRL Table I and Bauswein
-    (2019/2020) re-analyses, which are the references cited in
-    `grb_physics.EOS_MODELS`.
+    One EOS per parametrisation, each from its own source, because no
+    single paper covers all four: APR4 from Read, Lackey, Owen and
+    Friedman (2009) PRD 79, 124032 Table III; SFHo from Steiner, Hempel
+    and Fischer (2013); LS220 from Lattimer and Swesty (1991); DD2 from
+    Typel et al. (2010).  Only APR4 is in Read (2009) at all, which is why
+    this test is no longer named for that paper.
 
-    The test ranges include (a) the paper-quoted central plus its
-    nuclear-physics 1-sigma uncertainty (`~0.5 km` for ``R_1.4``,
-    `~0.1 Msun` for ``M_TOV``) and (b) headroom for the small
-    differences between the Read 2009 cold-EOS values and the
-    finite-temperature Bauswein/Hempel-Schaffner-Bielich follow-up
-    fits.  Drift outside this band signals either a transcription
-    error in `EOS_MODELS` or a change in the canonical reference.
+    Bauswein et al. (2020) Table I is a useful cross-check on ``M_TOV``
+    since it reports ``M_max`` for all four from one set of simulations
+    (2.187, 2.056, 2.041, 2.419); the project values agree to under one
+    percent.  It is not used for ``R_1.4``, because it tabulates R_1.6.
+
+    The test ranges are the published central value plus its
+    nuclear-physics 1-sigma uncertainty (~0.5 km for ``R_1.4``, ~0.1 Msun
+    for ``M_TOV``).  Drift outside them signals either a transcription
+    error in ``EOS_MODELS`` or a change of canonical reference.
     """
     from grb_physics import EOS_MODELS
 
@@ -2053,15 +2061,27 @@ def test_gao25_fermi_gbm_gaussian_dtd_local_rate_matches_table2():
 # Jet half-opening angle bands per class.
 # ─────────────────────────────────────────────────────────────────────
 def test_class_theta_j_sbgrb_band_matches_fong_beniamini_nakar():
-    """`CLASS_THETA_J['sbGRB']` must be a 10 to 16 deg fiducial band.
+    """`CLASS_THETA_J['sbGRB']` is the project's 10 to 16 deg fiducial band.
 
-    Fong et al. (2015) ApJ 815, 102 measure a median sGRB jet half-
-    opening angle theta_j = 16 +/- 10 deg (their Table 1, 11 sGRB
-    sample).  Beniamini and Nakar (2019) MNRAS 482, 5430 reanalyse
-    the GW170817 + GRB structured-jet population and prefer typical
-    core opening angles closer to 10 deg.  The project compromises on
-    [10, 16] deg as the fiducial sbGRB band; this test pins the
-    bounds.
+    What the two cited papers report:
+
+    - Fong et al. (2015) ApJ 815, 102: "a median jet opening angle of
+      16 +/- 10 deg" from 11 short GRBs with opening-angle measurements
+      and lower limits, capped at 30 deg.  So 16 deg is their median and
+      their 1-sigma range is roughly [6, 26] deg.
+    - Beniamini and Nakar (2019) MNRAS 482, 5430: a typical structured-jet
+      core angle theta_0 = 0.1 rad, log-normal with median 0.1 rad and
+      spread ~0.5 dex, with 0.2 rad used as a comparison case.  0.1 rad is
+      5.7 deg, not 10 deg.
+
+    The [10, 16] band is therefore narrower than Fong's 1-sigma range and
+    its lower edge is the project's own choice, not a value either paper
+    quotes.  An earlier version of this docstring justified the 10 deg edge
+    by saying Beniamini and Nakar "prefer typical core opening angles
+    closer to 10 deg", which reads their 0.1 rad as degrees.  The band is
+    left as it is, because it is a declared fiducial that sets the width of
+    the Section 6c beaming envelope, but it is a choice and is labelled as
+    one here.
     """
     from grb_rates import CLASS_THETA_J
 
@@ -2073,12 +2093,21 @@ def test_class_theta_j_sbgrb_band_matches_fong_beniamini_nakar():
 
 
 def test_class_theta_j_lbgrb_band_matches_gottlieb_2023_mad_jets():
-    """`CLASS_THETA_J['lbGRB']` must be a 5 to 8 deg band (narrower MAD jets).
+    """`CLASS_THETA_J['lbGRB']` is the project's 5 to 8 deg band for MAD jets.
 
-    Gottlieb (2023) Sec. 4 argues MAD-powered (BH-engine) lbGRB jets
-    have narrower collimation than HMNS-engine sbGRB jets, with
-    typical theta_j ~ 5 to 8 deg.  The project's fiducial 6.5 deg
-    matches the Gottlieb (2023) lbGRB jet half-opening angle.
+    The physical argument is Gottlieb (2023): MAD-powered BH-engine lbGRB
+    jets are more strongly collimated than HMNS-engine sbGRB jets, so their
+    half-opening angle is smaller.  The band's ordering relative to the
+    sbGRB band is what the classification depends on, and that is what this
+    test pins.
+
+    CODE FIDUCIAL for the numbers.  The specific 5 to 8 deg range could not
+    be located in the text of ``papers/Gottlieb_2023.pdf``, which never uses
+    the words "opening" or "collimation" in its extractable text, so treat
+    the bounds as a project choice pending a page-and-equation citation
+    rather than as a quantity that paper tabulates.  For scale, Beniamini
+    and Nakar (2019) put a typical structured-jet core at 0.1 rad = 5.7 deg,
+    which this band brackets.
     """
     from grb_rates import CLASS_THETA_J
 
@@ -2724,7 +2753,7 @@ def test_grid_class_labels_match_gottlieb_2024_hybrid_taxonomy():
     expected = {
         1: "Faint lbGRB (BNS)",
         2: "lbGRB + red KN (HMNS)",
-        3: "sbGRB + blue KN",
+        3: "sbGRB + blue KN (HMNS)",
         4: "lbGRB + red KN (BNS disk)",
         5: "Faint lbGRB (BHNS)",
         6: "lbGRB + red KN (BHNS disk)",
@@ -3482,3 +3511,91 @@ def test_ce_lambda_bifurcation_is_visible_in_the_compas_lambda_column(bns_a_path
     assert be_below == pytest.approx(1.10e48, rel=0.02)
     assert be_above == pytest.approx(4.31e48, rel=0.02)
     assert be_above / be_below > 2.0
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Observed local sGRB rates: Wanderman and Piran (2015) MNRAS 448, 3026
+# [papers/Wanderman_2015.pdf]; Ghirlanda et al. (2016) A&A 594, A84
+# [papers/Ghirlanda_2016.pdf]; Colombo et al. (2022) ApJ 937, 79
+# [papers/Colombo_2022.pdf].
+# ─────────────────────────────────────────────────────────────────────
+def test_observed_sgrb_rates_match_the_published_local_rates():
+    """Every ``OBSERVED_SGRB_RATES`` entry is the rate density its paper reports.
+
+    The dict is documented as observed, beaming-limited local rates in
+    Gpc^-3 yr^-1, so an entry has to be that quantity, in those units, with
+    the paper's own interval.
+
+    - Wanderman and Piran (2015) Sec. 5: R_0 = 4.1 +2.3/-1.9, so [2.2, 6.4].
+    - Ghirlanda et al. (2016) Sec. 7: rho_0,a = 0.20 +0.04/-0.07 and
+      rho_0,c = 0.8 +0.3/-0.15 for their two models, carried as two entries
+      because the paper does not prefer one.
+
+    This test exists because the dict previously carried a Ghirlanda entry of
+    1.3 [0.5, 3.0], a value that appears nowhere in that paper, and a Colombo
+    et al. (2022) entry of 3.6 [1.8, 6.5] taken from their Table 1 row of
+    predicted *detections per year* per instrument.  Nothing pinned either
+    against its source, so both propagated into the Section 6c comparison
+    envelope unchallenged.
+    """
+    from grb_rates import COLOMBO22_NSNS_LOCAL_RATE, OBSERVED_SGRB_RATES
+
+    wp = OBSERVED_SGRB_RATES["Wanderman & Piran 2015"]
+    assert (wp["R_obs"], wp["R_obs_lo"], wp["R_obs_hi"]) == pytest.approx(
+        (4.1, 2.2, 6.4), abs=0.05
+    ), "WP15 local rate drifted from R_0 = 4.1 +2.3/-1.9 Gpc^-3 yr^-1."
+
+    ga = OBSERVED_SGRB_RATES["Ghirlanda+ 2016 (model a)"]
+    assert (ga["R_obs"], ga["R_obs_lo"], ga["R_obs_hi"]) == pytest.approx(
+        (0.20, 0.13, 0.24), abs=0.01
+    ), "Ghirlanda model (a) drifted from rho_0 = 0.20 +0.04/-0.07 Gpc^-3 yr^-1."
+
+    gc = OBSERVED_SGRB_RATES["Ghirlanda+ 2016 (model c)"]
+    assert (gc["R_obs"], gc["R_obs_lo"], gc["R_obs_hi"]) == pytest.approx(
+        (0.8, 0.65, 1.1), abs=0.01
+    ), "Ghirlanda model (c) drifted from rho_0 = 0.8 +0.3/-0.15 Gpc^-3 yr^-1."
+
+    # Colombo et al. report an intrinsic NSNS merger rate, not a beamed sGRB
+    # rate, so it must stay out of this dict however tempting the number is.
+    assert not any("Colombo" in k for k in OBSERVED_SGRB_RATES), (
+        "Colombo et al. (2022) is an intrinsic NSNS local merger rate "
+        "(347 +536/-256 Gpc^-3 yr^-1), not a beaming-limited observed sGRB "
+        "rate; it belongs in COLOMBO22_NSNS_LOCAL_RATE."
+    )
+    assert COLOMBO22_NSNS_LOCAL_RATE["R"] == pytest.approx(347.0, abs=1.0)
+
+    # Every surviving entry is a beamed rate, so all must sit far below the
+    # LVK intrinsic BNS band: beaming suppresses by 1 - cos(theta_j) ~ 0.03.
+    from grb_rates import LVK_GWTC5_LOCAL_RATES
+
+    for name, entry in OBSERVED_SGRB_RATES.items():
+        assert entry["R_obs"] < LVK_GWTC5_LOCAL_RATES["BNS"]["R_lo"], (
+            f"{name} R_obs = {entry['R_obs']} is not below the LVK intrinsic "
+            f"BNS lower edge; a beamed rate must be, or it is not beamed."
+        )
+
+
+def test_a_bh_fid_is_a_declared_fiducial_inside_the_foucart_calibration_range():
+    """``A_BH_FID`` is a project choice, and every consumer must share it.
+
+    No paper prefers chi_BH = 0.5.  What can be checked is that it sits inside
+    the Foucart et al. (2018) calibration interval chi_BH in [-0.5, 0.9]
+    (arXiv:1807.00011 Eq. 4), that it is the centre of the standard sweep, and
+    that it lives in ``grb_physics`` rather than being retyped per notebook
+    cell, which is how it drifted before: ``classify_bhns`` carried a literal
+    0.5 default while the notebook defined its own copy twice.
+    """
+    import inspect
+
+    from grb_classify import classify_bhns
+    from grb_physics import A_BH_FID
+
+    assert A_BH_FID == 0.5
+    assert -0.5 <= A_BH_FID <= 0.9, "outside the Foucart 2018 calibrated chi range"
+    assert A_BH_FID in (0.0, 0.3, 0.5, 0.7, 0.9)
+
+    default = inspect.signature(classify_bhns).parameters["a_BH"].default
+    assert default is A_BH_FID, (
+        "classify_bhns no longer defaults to grb_physics.A_BH_FID; the fiducial "
+        "spin has forked again."
+    )

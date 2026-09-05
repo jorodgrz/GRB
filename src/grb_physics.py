@@ -90,6 +90,16 @@ Q_THRESH_BNS = 1.2  # BNS mass ratio q = M_max / M_min >= 1 (Gottlieb 2023, Sec.
 MDISK_SHORT = 0.01  # BHNS Faint-lbGRB / lbGRB-disk split [Msun] (Gottlieb 2023 Fig. 6)
 MDISK_LONG = 0.1  # BHNS lbGRB + red KN (BHNS disk) [Msun] (Gottlieb 2023 Fig. 6)
 
+A_BH_FID = 0.5
+"""Fiducial dimensionless BH spin for the BHNS classification.
+
+A project choice, not a measured or published value: it sits mid-range in the
+Foucart et al. (2018) calibration interval chi_BH in [-0.5, 0.9] and is the
+central point of the standard sweep {0.0, 0.3, 0.5, 0.7, 0.9}.  Every BHNS
+result quoted at a single spin uses it, and Section 7 marginalises over the
+sweep rather than relying on it.  Nothing in the literature prefers 0.5; treat
+a result that changes qualitatively across the sweep as spin-limited."""
+
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2024) additions
 # ---------------------------------------------------------------------------
@@ -142,15 +152,26 @@ _MEAN_MASS_EVOLVED_VALUE = 77708655
 # ---------------------------------------------------------------------------
 # EOS reference models
 # ---------------------------------------------------------------------------
-# M_crit : BNS prompt-collapse total-mass threshold [Msun]
-#          Bauswein et al. (2013, arXiv:1307.5191) Table I
-# R_1p4  : NS radius at 1.4 Msun [km]  (Read et al. 2009, Table III)
-# M_TOV  : maximum non-rotating NS mass [Msun]  (Read et al. 2009)
+# M_crit : BNS prompt-collapse threshold binary mass [Msun].  Bauswein et al.
+#          (2020, arXiv:2004.00846) Table I, M_thres(q = 1).  That table is the
+#          right source rather than the earlier Bauswein et al. (2013) Table I:
+#          it is one self-consistent study covering all four EOS used here
+#          (APR4 appears there as "APR"), it surveys 40 EOS rather than 12, and
+#          it resolves asymmetric binaries.  The 2013 table does not contain
+#          APR at all, so it cannot source a value for it.
+# R_1p4  : NS radius at 1.4 Msun [km].  Standard published values per EOS:
+#          APR4 from Read et al. (2009); SFHo from Steiner, Hempel and Fischer
+#          (2013); LS220 from Lattimer and Swesty (1991); DD2 from Typel et al.
+#          (2010).  Bauswein tabulates R_1.6, not R_1.4, so it is not the
+#          source for this column.
+# M_TOV  : maximum non-rotating NS mass [Msun], same per-EOS sources, and
+#          consistent with the Bauswein (2020) Table I M_max column to under
+#          one percent for all four (2.187, 2.056, 2.041, 2.419).
 EOS_MODELS = {
-    "APR4": {"M_crit": 2.88, "R_1p4": 11.1, "M_TOV": 2.20},
-    "SFHo": {"M_crit": 2.60, "R_1p4": 11.9, "M_TOV": 2.06},
-    "LS220": {"M_crit": 2.72, "R_1p4": 12.7, "M_TOV": 2.04},
-    "DD2": {"M_crit": 3.35, "R_1p4": 13.2, "M_TOV": 2.42},
+    "APR4": {"M_crit": 2.825, "R_1p4": 11.1, "M_TOV": 2.20},
+    "SFHo": {"M_crit": 2.875, "R_1p4": 11.9, "M_TOV": 2.06},
+    "LS220": {"M_crit": 2.975, "R_1p4": 12.7, "M_TOV": 2.04},
+    "DD2": {"M_crit": 3.325, "R_1p4": 13.2, "M_TOV": 2.42},
 }
 
 
@@ -276,9 +297,10 @@ def ns_radius_from_eos(M_NS, eos_name):
 def mcrit_to_r14(mc):
     """Linear interpolation from M_crit [Msun] to R_{1.4} [km].
 
-    Anchored at APR4 (M_crit=2.88, R_{1.4}=11.1 km) and
-    DD2 (M_crit=3.35, R_{1.4}=13.2 km), matching ``EOS_MODELS``
-    (M_crit from Bauswein et al. 2013; R_{1.4} from Read et al. 2009).
+    Anchored at APR4 (M_crit=2.825, R_{1.4}=11.1 km) and DD2
+    (M_crit=3.325, R_{1.4}=13.2 km), read off ``EOS_MODELS`` so the two
+    move together (M_crit from Bauswein et al. 2020 Table I; R_{1.4} from
+    the per-EOS sources listed with that table).
     """
     apr4 = EOS_MODELS["APR4"]
     dd2 = EOS_MODELS["DD2"]

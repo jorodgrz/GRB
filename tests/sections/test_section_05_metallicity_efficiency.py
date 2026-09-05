@@ -56,7 +56,7 @@ from grb_rates import (
 Z_SUN = 0.0142
 N_MIN = 50
 ESS_MIN = 10.0
-A_BH_FID = 0.5  # mirrors the notebook cell-1 fiducial.
+from grb_physics import A_BH_FID  # noqa: E402  (single source of truth)
 
 
 # ─────────────────────────────────────────────────────────────────────

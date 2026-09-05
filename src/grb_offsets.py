@@ -697,10 +697,7 @@ def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng, n_steps=400, newton_iter=30):
     if N == 0:
         return np.zeros(0)
 
-    # Vectorized Hernquist birth radius via inverse CDF (line 85-115).
-    u = rng.uniform(0, 1, size=N)
-    su = np.sqrt(u)
-    r0 = np.minimum(a * su / (1.0 - su), r_cap)
+    r0 = hernquist_birth_radius(a, rng=rng, size=N)
 
     # Isotropic kick angle (Bloom+ 1999); cos drawn flat in [-1, 1].
     cos_kick = rng.uniform(-1, 1, size=N)
@@ -879,9 +876,7 @@ def _vectorized_orbit_composite(v_cm, t_s, host, rng, sigma_interp=None):
         return np.zeros(0)
 
     # Birth radii trace the stellar light regardless of the halo.
-    u = rng.uniform(0, 1, size=N)
-    su = np.sqrt(u)
-    r0 = np.minimum(a * su / (1.0 - su), r_cap)
+    r0 = hernquist_birth_radius(a, rng=rng, size=N)
 
     # Isotropic kick as a 3-vector; take r-hat = z-hat without loss of
     # generality for a spherical potential.
@@ -1064,9 +1059,7 @@ def _vectorized_orbit_composite_two_leg(v1_cm, v2_cm, t1_s, t2_s, host, rng, sig
         return np.zeros(0)
 
     # Birth radii trace the stellar light regardless of the halo.
-    u = rng.uniform(0, 1, size=N)
-    su = np.sqrt(u)
-    r0 = np.minimum(a * su / (1.0 - su), r_cap)
+    r0 = hernquist_birth_radius(a, rng=rng, size=N)
 
     # Leg-1 launch velocity: isotropic kick of magnitude v1 plus the pre-kick
     # Jeans dispersion.  r-hat = z-hat without loss of generality.

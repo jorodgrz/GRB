@@ -85,7 +85,7 @@ CLASS_PALETTE: dict[str, str] = {
 # following MODEL_GRID_FAMILY_ORDER.  Drift is caught by
 # tests/unit/test_palette_and_rcparams.py.
 CLASS_LABELS: dict[str, str] = {
-    "sbGRB + blue KN": "sbGRB + blue KN",
+    "sbGRB + blue KN": "sbGRB + blue KN (HMNS)",
     "lbGRB + red KN (HMNS)": "lbGRB + red KN (HMNS)",
     "lbGRB + red KN (disk)": "lbGRB + red KN (BNS disk)",
     "Faint lbGRB": "Faint lbGRB (BNS)",

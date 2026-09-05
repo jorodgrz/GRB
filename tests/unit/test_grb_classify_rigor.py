@@ -728,7 +728,7 @@ def test_GRID_CLASS_LABELS_covers_classify_grid_outputs():
     expected_bns = {
         "Faint lbGRB (BNS)",
         "lbGRB + red KN (HMNS)",
-        "sbGRB + blue KN",
+        "sbGRB + blue KN (HMNS)",
         "lbGRB + red KN (BNS disk)",
     }
     assert bns_labels == expected_bns, (bns_labels, expected_bns)

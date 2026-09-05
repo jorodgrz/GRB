@@ -329,3 +329,122 @@ def test_bns_mass_histogram_diagonal_half_area_gives_flat_density():
         f"a uniform triangular sample; expected ~1.  A missing half-area "
         f"correction would drive the diagonal to ~0.5."
     )
+
+
+# ---------------------------------------------------------------------------
+# Region labels on the Section 1 panels
+# ---------------------------------------------------------------------------
+# Both panels carry italic class names placed at hand-chosen data
+# coordinates.  Nothing in the figure derives them from the classifier, so a
+# change to K_THRESH_DEFAULT, HMNS_FACTOR_DEFAULT, A_BH_FID or either disk
+# threshold moves the boundaries out from under the labels and the figure
+# asserts something false without failing.  The notebook keeps the anchors in
+# BNS_REGION_ANCHORS / BHNS_REGION_ANCHORS, keyed by the classifier's own
+# output key; the tests below re-classify every anchor.
+def _notebook_literal(repo_root, name):
+    """The literal assigned to ``name`` in a grb_main.ipynb code cell."""
+    import ast
+    import json
+    import os
+
+    with open(os.path.join(repo_root, "grb_main.ipynb")) as fh:
+        nb = json.load(fh)
+    for cell in nb["cells"]:
+        if cell["cell_type"] != "code":
+            continue
+        src = "".join(cell["source"])
+        if f"{name} = " not in src:
+            continue
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:  # IPython magics, not a cell we care about
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets
+            ):
+                return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} is not assigned in any grb_main.ipynb code cell")
+
+
+def test_bns_region_labels_land_in_the_class_they_name(repo_root):
+    """Every BNS panel label sits in the region it names, with margin.
+
+    The anchor is checked at its own coordinates and over a +/- 0.01 Msun
+    halo, so a label that has drifted onto a boundary fails here rather
+    than becoming ambiguous at the next threshold edit.
+    """
+    anchors = _notebook_literal(repo_root, "BNS_REGION_ANCHORS")
+    keys = set(classify_bns_2024(np.array([1.4]), np.array([1.3])))
+    assert set(anchors) == keys, (
+        f"BNS_REGION_ANCHORS keys {sorted(anchors)} are not the four "
+        f"classify_bns_2024 keys {sorted(keys)}"
+    )
+
+    halo = np.array([-0.01, 0.0, 0.01])
+    d1, d2 = np.meshgrid(halo, halo)
+    for key, ((m2, m1), text) in anchors.items():
+        assert m1 >= m2, f"{text!r} anchor is on the empty m1 < m2 half"
+        assert 1.25 <= m2 <= 2.2 and 1.25 <= m1 <= 2.2, (
+            f"{text!r} anchor is outside the [1.25, 2.2] panel"
+        )
+        m1h = np.maximum(m1 + d1.ravel(), m2 + d2.ravel())
+        m2h = np.minimum(m1 + d1.ravel(), m2 + d2.ravel())
+        cls = classify_bns_2024(m1h, m2h)
+        assert cls[key].all(), (
+            f"BNS label {text!r} is filed under {key!r} but its anchor "
+            f"(M2={m2}, M1={m1}) classifies as "
+            f"{[k for k, v in cls.items() if v[0]]}"
+        )
+
+
+def test_bhns_region_labels_land_in_the_class_they_name(repo_root):
+    """Every BHNS panel label sits in the region it names, at ``A_BH_FID``.
+
+    The halo is wider on the BH axis (+/- 0.05 Msun) because the panel bins
+    M_BH at 0.25 Msun, so a 0.01 Msun tolerance there would be far below the
+    resolution a reader can judge the placement at.
+    """
+    from grb_physics import A_BH_FID
+
+    anchors = _notebook_literal(repo_root, "BHNS_REGION_ANCHORS")
+    keys = set(classify_bhns(np.array([8.0]), np.array([1.4]))) - {"M_disk"}
+    assert set(anchors) == keys, (
+        f"BHNS_REGION_ANCHORS keys {sorted(anchors)} are not the three "
+        f"classify_bhns class keys {sorted(keys)}"
+    )
+
+    d_ns, d_bh = np.meshgrid(np.array([-0.01, 0.0, 0.01]), np.array([-0.05, 0.0, 0.05]))
+    for key, ((m_ns, m_bh), text) in anchors.items():
+        assert 1.25 <= m_ns <= 2.2, f"{text!r} anchor is off the M_NS axis"
+        assert 2.5 <= m_bh <= 18.0, f"{text!r} anchor is off the M_BH axis"
+        cls = classify_bhns(m_bh + d_bh.ravel(), m_ns + d_ns.ravel(), a_BH=A_BH_FID)
+        assert cls[key].all(), (
+            f"BHNS label {text!r} is filed under {key!r} but its anchor "
+            f"(M_NS={m_ns}, M_BH={m_bh}) gives M_disk="
+            f"{cls['M_disk'][4]:.4g} and classifies as "
+            f"{[k for k, v in cls.items() if k != 'M_disk' and v[4]]}"
+        )
+
+
+def test_tidal_disruption_locus_is_not_the_bhns_class_boundary():
+    """The dashed M_disk > 0 curve sits above the No GRB / Faint boundary.
+
+    The BHNS panel draws three curves and only the lower two are class
+    edges.  A reader who takes the topmost curve as the edge of the
+    classified region overstates the Faint lbGRB area, so the ordering is
+    pinned here and stated in the legend and the caption.
+    """
+    m_bh = np.linspace(2.5, 18.0, 20_000)
+    for m_ns in (1.3, 1.5, 1.8):
+        disk = foucart_disk_mass(m_bh, np.full_like(m_bh, m_ns), a_BH=0.5)
+
+        def _highest(threshold, disk=disk):
+            hit = np.where(disk > threshold)[0]
+            return m_bh[hit.max()] if hit.size else np.nan
+
+        onset, faint = _highest(0.0), _highest(MDISK_SHORT)
+        assert onset > faint, (
+            f"At M_NS={m_ns} the M_disk > 0 locus ({onset:.2f}) does not sit "
+            f"above the M_disk = {MDISK_SHORT} boundary ({faint:.2f})"
+        )

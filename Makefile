@@ -35,6 +35,11 @@ test:
 	python -m pytest
 
 clean:
-	find tests -type d -name __pycache__ -exec rm -rf {} +
+# src/ and tools/ are cleared too, not just tests/.  CPython validates a .pyc
+# on (source mtime in whole seconds, source size), so editing a constant back
+# to its previous value within the same second leaves a stale .pyc that still
+# imports the intermediate value.  The grb_*.py constants are exactly what
+# gets edited that way during a threshold sweep.
+	find tests src tools -type d -name __pycache__ -exec rm -rf {} +
 	find . -maxdepth 2 -type d -name .pytest_cache -exec rm -rf {} +
 	rm -rf .ruff_cache .mypy_cache .coverage htmlcov
