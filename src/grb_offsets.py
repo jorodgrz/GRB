@@ -146,10 +146,25 @@ VERLET_MAX_ORBITS = 40
 VERLET_MIN_STEPS = 256
 VERLET_MAX_STEPS = 32768
 
+# Birth-radius cut for the compact edge of the Section 8 band, in units of the
+# host's projected half-light radius.  CODE HEURISTIC; no paper prescribes it.
+# It stands for "compact binaries form in the star-forming body rather than
+# along the full stellar light", and 5 R_e encloses 81.1 percent of a Hernquist
+# profile, so it is a deliberately generous version of that statement.  The
+# fiducial (``r_birth_max_re=None``) applies no cut at all.
+R_BIRTH_MAX_RE_COMPACT = 5.0
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Hernquist potential
 # ═══════════════════════════════════════════════════════════════════════════
+# Projected half-light radius in units of the Hernquist scale radius: the
+# numerical solution of the Abel-transformed surface-brightness integral
+# (Hernquist 1990, Table 1).  Named because the birth-radius truncation below
+# expresses its cut in R_e and has to convert.
+HERNQUIST_RE_OVER_A = 1.8153
+
+
 def hernquist_scale_radius(R_e):
     """Convert projected half-light radius to Hernquist scale radius.
 
@@ -161,7 +176,7 @@ def hernquist_scale_radius(R_e):
     Fong & Berger 2013 HST data) are projected half-light radii, so
     the projected relation is the correct one to use here.
     """
-    return R_e / 1.8153
+    return R_e / HERNQUIST_RE_OVER_A
 
 
 _R_CAP_FACTOR = 1000.0
@@ -178,7 +193,7 @@ pile-up of (1/1001)^2 ~ 1e-6, which is negligible for the offset CDF
 """
 
 
-def hernquist_birth_radius(a, rng=None, size=1, r_cap_factor=_R_CAP_FACTOR):
+def hernquist_birth_radius(a, rng=None, size=1, r_cap_factor=_R_CAP_FACTOR, r_max_re=None):
     """Draw birth radii from the Hernquist stellar density profile.
 
     The enclosed mass fraction is M(<r)/M_tot = (r/(r+a))^2, so the
@@ -205,7 +220,15 @@ def hernquist_birth_radius(a, rng=None, size=1, r_cap_factor=_R_CAP_FACTOR):
     """
     if rng is None:
         rng = np.random.default_rng()
-    u = rng.uniform(0, 1, size=size)
+    u_max = 1.0
+    if r_max_re is not None:
+        # Truncate rather than clip.  M(<r)/M = (r/(r+a))^2, so drawing u
+        # uniform on [0, F(r_max)) and inverting renormalises the profile
+        # inside r_max; np.minimum would instead pile every rejected draw onto
+        # the cap, which is 19 percent of the population at r_max = 5 R_e.
+        r_max = r_max_re * HERNQUIST_RE_OVER_A * a
+        u_max = (r_max / (r_max + a)) ** 2
+    u = rng.uniform(0, u_max, size=size)
     su = np.sqrt(u)
     r = a * su / (1.0 - su)
     return np.minimum(r, r_cap_factor * a)
@@ -522,6 +545,40 @@ def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None, theta_launch=None, r
         return r_init
 
 
+def ballistic_offset(v_sys_km, t_delay_myr, v_sys_1_km=None, t_leg1_myr=None):
+    """Free-drift distance at constant velocity, with no host potential [kpc].
+
+    The Bloom et al. (1999) ballistic estimate v_sys * t, kept as the reference
+    the orbit integration is read against: it carries the natal kick and the
+    time the binary drifts under it, and nothing else.
+
+    With the two-leg arguments the binary drifts at ``v_sys_1_km`` for
+    ``t_leg1_myr`` (first supernova to second) and then at ``v_sys_km`` for
+    ``t_delay_myr`` (the inspiral).  The two legs point in uncorrelated
+    directions, so the path lengths are summed rather than the displacements:
+    that is the collinear limit, an upper bound on the separation the pair of
+    legs actually reaches.
+
+    This is a displacement from the binary's position at the first supernova,
+    not a galactocentric radius, and it is emphatically NOT an upper bound on
+    the integrated offset: the integrated model starts from a birth radius
+    drawn from the host stellar profile and adds the progenitor's pre-kick
+    Jeans motion, neither of which appears here, so 38 to 47 percent of the
+    sbGRB weight integrates further out than its own free-drift distance
+    (``tests/sections/test_section_08a_free_drift.py``).  No projection is
+    applied; Section 8a projects the result before plotting it against
+    galactocentric references.
+    """
+    v2 = np.asarray(v_sys_km, dtype=float)
+    t2 = np.asarray(t_delay_myr, dtype=float)
+    d_cm = v2 * KM_CM * t2 * MYR_S
+    if v_sys_1_km is not None and t_leg1_myr is not None:
+        v1 = np.asarray(v_sys_1_km, dtype=float)
+        t1 = np.asarray(t_leg1_myr, dtype=float)
+        d_cm = d_cm + v1 * KM_CM * t1 * MYR_S
+    return d_cm / KPC_CM
+
+
 def compute_offset_single(
     v_sys_km, t_delay_myr, M_gal=DEFAULT_M_GAL, R_e=DEFAULT_R_E, n_angles=8, rng=None
 ):
@@ -651,7 +708,9 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
 # ═══════════════════════════════════════════════════════════════════════════
 # Vectorized population computation
 # ═══════════════════════════════════════════════════════════════════════════
-def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng, n_steps=400, newton_iter=30):
+def _vectorized_orbit_3d(
+    v_cm, t_s, M_gal, a, rng, n_steps=400, newton_iter=30, r_birth_max_re=None
+):
     """Batch orbit integrator: scalar in, array out for N systems.
 
     Reproduces ``_analytic_offset`` (line 275) for the whole population at
@@ -697,7 +756,7 @@ def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng, n_steps=400, newton_iter=30):
     if N == 0:
         return np.zeros(0)
 
-    r0 = hernquist_birth_radius(a, rng=rng, size=N)
+    r0 = hernquist_birth_radius(a, rng=rng, size=N, r_max_re=r_birth_max_re)
 
     # Isotropic kick angle (Bloom+ 1999); cos drawn flat in [-1, 1].
     cos_kick = rng.uniform(-1, 1, size=N)
@@ -811,7 +870,7 @@ def _apocenter_composite(E, L, r0, host, r_cap, n_iter=64):
     return 0.5 * (lo + hi)
 
 
-def _vectorized_orbit_composite(v_cm, t_s, host, rng, sigma_interp=None):
+def _vectorized_orbit_composite(v_cm, t_s, host, rng, sigma_interp=None, r_birth_max_re=None):
     """Batch orbit integrator for the composite potential (velocity-Verlet).
 
     Symplectic replacement for the RK4 branch of ``_vectorized_orbit_3d`` used
@@ -876,7 +935,7 @@ def _vectorized_orbit_composite(v_cm, t_s, host, rng, sigma_interp=None):
         return np.zeros(0)
 
     # Birth radii trace the stellar light regardless of the halo.
-    r0 = hernquist_birth_radius(a, rng=rng, size=N)
+    r0 = hernquist_birth_radius(a, rng=rng, size=N, r_max_re=r_birth_max_re)
 
     # Isotropic kick as a 3-vector; take r-hat = z-hat without loss of
     # generality for a spherical potential.
@@ -979,7 +1038,6 @@ def _advance_planar_composite(r_init, vr_init, vt_init, t_s, host, rng, phase_ca
     ceiling = n_full > VERLET_MAX_STEPS
     n_steps_arr = np.clip(n_full, VERLET_MIN_STEPS, VERLET_MAX_STEPS)
     t_step = np.where(ceiling, n_steps_arr * dt_fine, t_eff)
-    dt_arr = t_step / n_steps_arr
     t_ball = np.maximum(t_eff - t_step, 0.0)
 
     def accel(xx, yy):
@@ -996,7 +1054,11 @@ def _advance_planar_composite(r_init, vr_init, vt_init, t_s, host, rng, phase_ca
         y = np.zeros_like(x)
         vx = vr0_i[bucket].copy()
         vy = vt0_i[bucket].copy()
-        dt = dt_arr[bucket]  # per-system step [s]
+        # The bucket runs 2**k steps, so the step has to divide t_step by that
+        # same count.  Sizing it by the unrounded n_steps_arr instead marches
+        # every system whose step count is not a power of two past its own
+        # merger time, by up to a factor of two.
+        dt = t_step[bucket] / n_steps_b  # per-system step [s]
 
         ax, ay = accel(x, y)
         for _ in range(n_steps_b):
@@ -1017,7 +1079,9 @@ def _advance_planar_composite(r_init, vr_init, vt_init, t_s, host, rng, phase_ca
     return np.minimum(r_out, r_cap)
 
 
-def _vectorized_orbit_composite_two_leg(v1_cm, v2_cm, t1_s, t2_s, host, rng, sigma_interp=None):
+def _vectorized_orbit_composite_two_leg(
+    v1_cm, v2_cm, t1_s, t2_s, host, rng, sigma_interp=None, r_birth_max_re=None
+):
     """Two-leg composite-potential orbit integrator returning final |r| [cm].
 
     The systemic velocity COMPAS reports is the post-supernova center-of-mass
@@ -1059,7 +1123,7 @@ def _vectorized_orbit_composite_two_leg(v1_cm, v2_cm, t1_s, t2_s, host, rng, sig
         return np.zeros(0)
 
     # Birth radii trace the stellar light regardless of the halo.
-    r0 = hernquist_birth_radius(a, rng=rng, size=N)
+    r0 = hernquist_birth_radius(a, rng=rng, size=N, r_max_re=r_birth_max_re)
 
     # Leg-1 launch velocity: isotropic kick of magnitude v1 plus the pre-kick
     # Jeans dispersion.  r-hat = z-hat without loss of generality.
@@ -1143,6 +1207,7 @@ def compute_offsets_population_vectorized(
     integrator="auto",
     v_sys_1_km=None,
     t_leg1_myr=None,
+    r_birth_max_re=None,
 ):
     """Vectorized drop-in replacement for ``compute_offsets_population``.
 
@@ -1274,11 +1339,16 @@ def compute_offsets_population_vectorized(
                 host,
                 rng,
                 sigma_interp=sigma_interp,
+                r_birth_max_re=r_birth_max_re,
             )
         else:
-            r_3d = _vectorized_orbit_composite(v_cm, t_s, host, rng, sigma_interp=sigma_interp)
+            r_3d = _vectorized_orbit_composite(
+                v_cm, t_s, host, rng, sigma_interp=sigma_interp, r_birth_max_re=r_birth_max_re
+            )
     else:
-        r_3d = _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng, n_steps=n_steps)
+        r_3d = _vectorized_orbit_3d(
+            v_cm, t_s, M_gal, a, rng, n_steps=n_steps, r_birth_max_re=r_birth_max_re
+        )
 
     # One isotropic viewing angle per system, so each offset is a genuine
     # projection realization (Bloom+ 1999): mu ~ U(-1, 1), R_off = r sqrt(1-mu^2).
@@ -1307,6 +1377,7 @@ def compute_offsets_population(
     integrator="auto",
     v_sys_1_km=None,
     t_leg1_myr=None,
+    r_birth_max_re=None,
 ):
     """Compute projected offsets for a population of merging binaries.
 
@@ -1369,6 +1440,7 @@ def compute_offsets_population(
             integrator=integrator,
             v_sys_1_km=v_sys_1_km,
             t_leg1_myr=t_leg1_myr,
+            r_birth_max_re=r_birth_max_re,
         )
 
     if v_sys_1_km is not None or t_leg1_myr is not None:
@@ -1431,6 +1503,9 @@ def compute_offsets_mixed_hosts(
     halo_z=None,
     v_sys_1_km=None,
     t_leg1_myr=None,
+    r_birth_max_re=None,
+    t_host_myr=None,
+    t_sf_max=SF_HOST_TRANSITION_T_MYR,
     **kw,
 ):
     """Compute offsets for a population using a mixture of host galaxy types.
@@ -1463,6 +1538,16 @@ def compute_offsets_mixed_hosts(
         two-leg composite integrator: ``v_sys_km`` / ``t_delay_myr`` are then
         the post-SN2 velocity and inspiral time.  Subsampled with the same
         shared indices as the other columns.
+    t_host_myr : array-like or None, optional
+        Delay time [Myr] used to route each system to a host type.  ``None``
+        (default) gives every system the static ``HOST_MODELS`` mixture
+        fractions.  Supplying it switches to the delay-time routing of
+        ``host_weight_by_delay``, so a binary merging within *t_sf_max* is
+        weighted into the star-forming templates and a later one into the
+        elliptical.  This is the full delay time from ZAMS, not the two-leg
+        drift baseline that ``t_delay_myr`` carries in two-leg mode.
+    t_sf_max : float, optional
+        Star-forming / elliptical boundary [Myr] for that routing.
     **kw :
         Extra keywords forwarded to ``compute_offsets_population``; in
         particular ``integrator={'auto','composite','legacy'}`` selects the
@@ -1491,6 +1576,10 @@ def compute_offsets_mixed_hosts(
         tl1 = np.asarray(t_leg1_myr, dtype=float)
         valid &= np.isfinite(v1) & np.isfinite(tl1) & (v1 >= 0) & (tl1 >= 0)
 
+    if t_host_myr is not None:
+        t_host = np.asarray(t_host_myr, dtype=float)
+        valid &= np.isfinite(t_host) & (t_host > 0)
+
     valid_idx = np.where(valid)[0]
     if weights is not None:
         w_valid = np.asarray(weights, dtype=float)[valid_idx]
@@ -1508,6 +1597,15 @@ def compute_offsets_mixed_hosts(
     if two_leg:
         leg_kw = {"v_sys_1_km": v1[valid_idx], "t_leg1_myr": tl1[valid_idx]}
 
+    # Either every system carries the same host mixture fractions, or its own
+    # delay time decides which templates it can be in.  Both are applied as
+    # weights on the same set of integrated orbits, so the routing costs no
+    # extra integration and adds no draw of its own.
+    if t_host_myr is None:
+        host_w = {name: hp["weight"] for name, hp in host_models.items()}
+    else:
+        host_w = host_weight_by_delay(t_host[valid_idx], host_models=host_models, t_sf_max=t_sf_max)
+
     per_host = {}
     all_off, all_w = [], []
     for name, hp in host_models.items():
@@ -1522,12 +1620,16 @@ def compute_offsets_mixed_hosts(
             with_halo=with_halo,
             with_dispersion=with_dispersion,
             halo_z=halo_z,
+            r_birth_max_re=r_birth_max_re,
             **leg_kw,
             **kw,
         )
         per_host[name] = res
         all_off.append(res["offsets_kpc"])
-        all_w.append(res["weights_sub"] * hp["weight"])
+        w_host = host_w[name]
+        if np.ndim(w_host):
+            w_host = w_host[res["indices"]]
+        all_w.append(res["weights_sub"] * w_host)
 
     return {
         "per_host": per_host,
@@ -1574,6 +1676,36 @@ def assign_host_by_delay(t_delay_myr, t_sf_max=SF_HOST_TRANSITION_T_MYR, rng=Non
     return out
 
 
+def host_weight_by_delay(t_delay_myr, host_models=None, t_sf_max=SF_HOST_TRANSITION_T_MYR):
+    """Host membership probability per system, from its delay time.
+
+    The expectation of ``assign_host_by_delay`` rather than one realisation of
+    it: a binary merging before *t_sf_max* is in a star-forming host, split
+    between the two SF templates by ``SF_DISK_FRAC_OF_SF_HOSTS``, and one
+    merging later is in an elliptical.  Returning the probability lets
+    ``compute_offsets_mixed_hosts`` reweight orbits it has already integrated
+    in every host, so the routing carries no Monte-Carlo noise of its own and
+    the comparison against the static mixture moves one variable.
+
+    Returns
+    -------
+    dict {host name: array of P(host | t_delay)}, summing to one per system.
+    """
+    if host_models is None:
+        host_models = HOST_MODELS
+    if set(host_models) != {"SF_disk", "SF_massive", "Elliptical"}:
+        raise ValueError(
+            "delay-time routing is defined for the SF_disk / SF_massive / "
+            f"Elliptical templates; got {sorted(host_models)}"
+        )
+    sf = np.asarray(t_delay_myr, dtype=float) < t_sf_max
+    return {
+        "SF_disk": sf * SF_DISK_FRAC_OF_SF_HOSTS,
+        "SF_massive": sf * (1.0 - SF_DISK_FRAC_OF_SF_HOSTS),
+        "Elliptical": (~sf).astype(float),
+    }
+
+
 def compute_offsets_delay_hosts(
     v_sys_km,
     t_delay_myr,
@@ -1586,6 +1718,12 @@ def compute_offsets_delay_hosts(
 
     Each system is assigned a host type via ``assign_host_by_delay``,
     then its offset is computed in the corresponding galaxy potential.
+
+    This is the single-leg, stellar-only router and it predates the two-leg
+    kinematics, the dark-matter halo and the birth-radius cut, none of which it
+    accepts.  For the Section 8 fiducial pass ``t_host_myr`` to
+    ``compute_offsets_mixed_hosts`` instead, which applies the same routing
+    rule through ``host_weight_by_delay`` on top of the full model.
 
     Vectorization: each unique host appears
     exactly once in ``host_models``, so we gather the indices of systems

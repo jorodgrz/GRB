@@ -53,6 +53,7 @@ from grb_offsets import (
     hernquist_acceleration,
     hernquist_potential,
     hernquist_scale_radius,
+    host_weight_by_delay,
     integrate_orbit,
     kpc_per_arcsec,
     rice_resample_offsets,
@@ -699,6 +700,71 @@ def test_assign_host_by_delay_rng_determinism():
 
 
 # ---------------------------------------------------------------------------
+# host_weight_by_delay
+# ---------------------------------------------------------------------------
+def test_host_weight_by_delay_is_a_normalised_membership_probability():
+    """Each system's three host probabilities sum to one."""
+    t = np.array([10.0, 1500.0, SF_HOST_TRANSITION_T_MYR, 9000.0])
+    p = host_weight_by_delay(t)
+    total = sum(p[name] for name in ("SF_disk", "SF_massive", "Elliptical"))
+    np.testing.assert_allclose(total, 1.0)
+
+
+def test_host_weight_by_delay_reproduces_the_assignment_it_replaces():
+    """The probabilities are the expectation of ``assign_host_by_delay``.
+
+    Drawing labels and averaging them has to converge on the weights, since
+    the offset figure swapped one for the other to drop a source of noise.
+    """
+    rng = np.random.default_rng(7)
+    t = rng.uniform(10.0, 9000.0, size=40000)
+    p = host_weight_by_delay(t)
+    labels = assign_host_by_delay(t, rng=np.random.default_rng(8))
+    for name in ("SF_disk", "SF_massive", "Elliptical"):
+        drawn = (labels == name).mean()
+        assert drawn == pytest.approx(p[name].mean(), abs=0.01), name
+
+
+def test_host_weight_by_delay_boundary_matches_the_assignment_convention():
+    """``t == t_sf_max`` is elliptical, the same ``<`` convention."""
+    p = host_weight_by_delay(np.array([SF_HOST_TRANSITION_T_MYR]))
+    assert p["Elliptical"][0] == 1.0
+
+
+def test_host_weight_by_delay_rejects_templates_it_cannot_route():
+    """A host set the rule says nothing about raises instead of returning zeros."""
+    with pytest.raises(ValueError, match="SF_disk"):
+        host_weight_by_delay(np.array([100.0]), host_models={"Dwarf": {}})
+
+
+def test_delay_routing_moves_weight_without_changing_the_total():
+    """Routing reweights the same orbits; it does not gain or lose systems."""
+    rng = np.random.default_rng(3)
+    v = rng.uniform(50.0, 250.0, size=300)
+    t = np.logspace(1.0, 4.0, 300)
+    kw = dict(max_systems=300, weights=np.full(300, 2.0))
+    mix = compute_offsets_mixed_hosts(v, t, rng=np.random.default_rng(5), **kw)
+    dly = compute_offsets_mixed_hosts(v, t, rng=np.random.default_rng(5), t_host_myr=t, **kw)
+    np.testing.assert_allclose(mix["mixed_offsets"], dly["mixed_offsets"])
+    assert dly["mixed_weights"].sum() == pytest.approx(mix["mixed_weights"].sum())
+    assert not np.allclose(mix["mixed_weights"], dly["mixed_weights"])
+
+
+def test_delay_routing_sends_short_delay_systems_to_star_forming_hosts():
+    """A population that all merges promptly carries no elliptical weight."""
+    n = 200
+    v = np.full(n, 150.0)
+    t = np.full(n, 100.0)
+    out = compute_offsets_mixed_hosts(
+        v, t, max_systems=n, rng=np.random.default_rng(5), t_host_myr=t
+    )
+    n_per_host = len(out["mixed_weights"]) // len(HOST_MODELS)
+    ell = list(HOST_MODELS).index("Elliptical")
+    w_ell = out["mixed_weights"][ell * n_per_host : (ell + 1) * n_per_host]
+    assert w_ell.sum() == 0.0
+
+
+# ---------------------------------------------------------------------------
 # compute_offsets_delay_hosts
 # ---------------------------------------------------------------------------
 def test_compute_offsets_delay_hosts_returns_three_documented_keys():
@@ -978,6 +1044,39 @@ def test_classical_band_edges_are_ordered_by_construction():
     assert med_gold < med_obs < med_samp
     assert band["gold"].size < band["observed"].size
     assert band["sampled"].shape == (64, band["observed"].size)
+
+
+def test_rice_band_summary_statistics_are_per_realisation_not_pooled():
+    """Summaries of the resampled curve are taken one realisation at a time.
+
+    ``classical_sgrb_ad_pvalues`` runs one AD test per realisation and reports
+    the median p, because pooling would present ``n_samples x N`` draws as if
+    they were that many independent bursts.  Statistics quoted beside that
+    p-value follow the same convention.  For the median it makes no odds, the
+    two agree to within Monte-Carlo noise; for the beyond-30-kpc fraction it is
+    a real if small offset, because a single realisation can only place a whole
+    number of its 80 bursts past the cut while the pooled average cannot.
+    """
+    band = classical_sgrb_offset_band(n_samples=200)
+    sampled = band["sampled"]
+    assert sampled.ndim == 2, "pooling the draws loses the realisation axis"
+    assert sampled.shape[1] == band["observed"].size
+
+    per_realisation_median = float(np.median(np.median(sampled, axis=1)))
+    pooled_median = float(np.median(sampled))
+    per_realisation_tail = float(np.median((sampled > 30.0).mean(axis=1)))
+    pooled_tail = float((sampled > 30.0).mean())
+
+    # The medians agree; which one is larger is noise, so only the size of the
+    # gap is asserted.
+    assert abs(per_realisation_median - pooled_median) < 0.3
+
+    # The tail fraction does not: the median realisation lands on a whole
+    # number of bursts, and pooling sits consistently above it.
+    assert per_realisation_tail < pooled_tail
+    assert per_realisation_tail * sampled.shape[1] == pytest.approx(
+        round(per_realisation_tail * sampled.shape[1]), abs=1e-9
+    )
 
 
 def test_classical_ad_pvalues_track_the_band_for_a_wide_tailed_model():

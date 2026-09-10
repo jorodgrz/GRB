@@ -52,6 +52,9 @@ Thin smoke tests aligned with the figures in
 | 6 | `test_section_06_bns_rate.py`, `test_section_06_lvk_rate_comparison.py` (+ `06b` channel split and `06b` formation-channel classifier) | BNS Merger Rate R(z) per GRB Class |
 | 7 | `test_section_07_bhns_spin.py`, `test_section_07_lvk_rate_comparison.py` (+ `07b` channel split) | BHNS Merger Rate R(z) with BH Spin Sensitivity |
 | 8 | `test_section_08_offsets.py` | Physical Host-Galaxy Offset Distributions |
+| 8a | `test_section_08a_free_drift.py` | Free-drift check: what the natal kick and drift time are worth with no potential; what the two panels are allowed to claim (the collinear two-leg bound, the isotropic projection factor, and why the joint density is binned over the sample rather than the frame); and the data provenance the figure rests on (the two loaders return the same rows, the drift-baseline identity holds, the columns carry no sentinel values, the assumed units survive a range check, and the file's kick directions are a selected anisotropic sample rather than a bug) |
+| 8c | `test_section_08c_free_drift_grid.py` | Free drift across the 20-model grid: that a weighted median of a fraction keeps its zeros, that the first leg is negligible on the fiducial and dominant on EH, that exactly two models leave the BHNS disk class empty, and that the grid moves the drift time far more than the kick |
+| 8b | `test_section_08b_host_routing.py` | Delay-time host assignment: the sign of the offset shift for prompt and slow populations, and that the elliptical fraction becomes a prediction rather than the assumed 0.25 |
 | 11 | `test_section_11_model_grid_scan.py` | Full 20-model Broekgaarden+ 2021 grid scan (population-synthesis robustness) |
 
 ### `anchors/` (literature audit)
