@@ -309,13 +309,13 @@ def test_bns_histogram_is_actually_weighted_on_real_sample(bns_modelA_fiducial):
     Build the panel's histogram twice on the real sample -- once with
     weights, once with unit weights -- and assert the two normalised
     bin fields differ by more than 5 percent in L1 norm on the
-    M_TOV-anchored 0.02 Msun grid Section 1 uses.
+    M_TOV-anchored 0.01 Msun grid Section 1 uses.
     """
     m1 = bns_modelA_fiducial["m1"]
     m2 = bns_modelA_fiducial["m2"]
     w = bns_modelA_fiducial["weights"]
 
-    _bw = 0.02
+    _bw = 0.01
     _nb = int(np.ceil((M_TOV - _M2_LO_BNS) / _bw))
     edges = M_TOV - _bw * np.arange(_nb, -1, -1)
 
@@ -346,7 +346,7 @@ def test_bhns_histogram_is_actually_weighted_on_real_sample(bhns_modelA_fiducial
     BH = bhns_modelA_fiducial["M_BH"]
     w = bhns_modelA_fiducial["weights"]
 
-    _bw_ns = 0.02
+    _bw_ns = 0.01
     _nb_ns = int(np.ceil((M_TOV - 1.25) / _bw_ns))
     ns_edges = M_TOV - _bw_ns * np.arange(_nb_ns, -1, -1)
     bh_edges = 2.5 + 0.25 * np.arange(int(np.round((18.0 - 2.5) / 0.25)) + 1)

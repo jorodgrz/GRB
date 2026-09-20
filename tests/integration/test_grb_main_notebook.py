@@ -51,53 +51,102 @@ _CLASS_LINE_RE = re.compile(
     re.MULTILINE,
 )
 
-# Section 4 cosmic-integration anchor lines.  rate_label may format the
-# expected rate as either "33" (>= 1) or "0.33" (< 1).
+# Section 4's normalisation audit table.  The w_000 anchor is the first
+# numeric column of each population's row:
+#
+#         w_000 anchor   FCI pointwise   ClassMSSFR bins  binned/config
+#   BNS         33.4         2.804e+09         4.161e+09          0.992
+#   BHNS        43.0         4.053e+09         4.088e+09          0.975
+#
+# The earlier patterns matched a "BNS R_loc expected = ... Gpc^-3 yr^-1"
+# line that Section 4 stopped printing when the audit table replaced it.
+# They went unnoticed because the repo_root fixture resolved one level
+# short, so this whole module skipped rather than ran.  Requiring the
+# exponential second column keeps the BNS pattern off the BHNS row and
+# off the "cut downstream: BNS ...%" line above the table.
 _R_LOC_BNS_RE = re.compile(
-    r"^BNS\s+R_loc expected\s*=\s*([\d.,]+)\s+Gpc\^-3 yr\^-1",
+    r"^ +BNS +([\d,]+\.\d+) +[\d.]+e[+-]\d+",
     re.MULTILINE,
 )
 _R_LOC_BHNS_RE = re.compile(
-    r"^BHNS R_loc expected\s*=\s*([\d.,]+)\s+Gpc\^-3 yr\^-1",
+    r"^ +BHNS +([\d,]+\.\d+) +[\d.]+e[+-]\d+",
+    re.MULTILINE,
+)
+
+# Same table, last column: ClassMSSFR-binned star-forming mass divided by
+# the run-configuration M_SF.  This is the no-free-parameter closure of
+# the rate path, so it is the column with physics in it.
+_NORM_RATIO_RE = re.compile(
+    r"^ +(BNS|BHNS) +[\d,]+\.\d+ +[\d.]+e[+-]\d+ +[\d.]+e[+-]\d+ +([\d.]+) *$",
     re.MULTILINE,
 )
 
 
-# Files the notebook is expected to (re)generate.  Both .pdf (vector,
-# for paper) and .png (raster, 300 dpi, for previews) variants per the
-# project plotting standards.  `channels_x_classes.csv` is included
-# because the Section 11 follow-up cell exports the cross-tab to CSV
-# alongside the heatmap.
+# Every figure grb_main.ipynb writes to plots/, both formats, plus the one
+# CSV export.  Extracted from the savefig targets in the code cells, which
+# include f-string forms (`plots/name.{ext}`) and bare stems handed to a
+# helper, so a literal-only scan undercounts.  The previous hand-kept list
+# named 13 figures no cell saves while omitting 33 the notebook writes, and
+# went unnoticed because the repo_root fixture resolved one level short and
+# skipped this module.  test_manuscript_figures_exist covers the manuscript
+# side, including figures comparison.ipynb owns.
 _REQUIRED_PLOT_FILES = (
-    "mass_plane_bhns.pdf",
-    "mass_plane_bhns.png",
-    "mass_plane_bns.png",
-    "fig1_bns_mass_plane_modelA.pdf",
-    "mass_distributions_by_class.pdf",
-    "mass_distributions_by_class.png",
+    "channel_class_crosstab_4models.pdf",
+    "channel_class_crosstab_4models.png",
+    "class_fractions_alpha_ce_5pt.pdf",
+    "class_fractions_alpha_ce_5pt.png",
+    "class_fractions_beta_sweep.pdf",
+    "class_fractions_beta_sweep.png",
+    "class_fractions_sn_engine.pdf",
+    "class_fractions_sn_engine.png",
+    "composition_bhns_20models.pdf",
+    "composition_bhns_20models.png",
+    "composition_bns_20models.pdf",
+    "composition_bns_20models.png",
+    "delay_time_bhns_by_class_per_channel.pdf",
+    "delay_time_bhns_by_class_per_channel.png",
+    "delay_time_by_class_per_channel.pdf",
+    "delay_time_by_class_per_channel.png",
     "delay_time_distributions.pdf",
     "delay_time_distributions.png",
+    "eos_x_model_matrix_20models.pdf",
+    "eos_x_model_matrix_20models.png",
+    "fig15_classification_scheme.pdf",
+    "fig15_classification_scheme.png",
+    "free_drift_grid_20models.pdf",
+    "free_drift_grid_20models.png",
+    "kinematic_inputs_free_drift.pdf",
+    "kinematic_inputs_free_drift.png",
+    "mass_distributions_by_class.pdf",
+    "mass_distributions_by_class.png",
+    "mass_plane_bhns.pdf",
+    "mass_plane_bhns.png",
+    "mass_plane_bns.pdf",
+    "mass_plane_bns.png",
+    "metallicity_bhns_by_class_per_channel.pdf",
+    "metallicity_bhns_by_class_per_channel.png",
+    "metallicity_by_class_per_channel.pdf",
+    "metallicity_by_class_per_channel.png",
     "metallicity_dependence.pdf",
     "metallicity_dependence.png",
-    "formation_channels_by_grb_class.pdf",
-    "formation_channels_by_grb_class.png",
-    "rate_bns_by_class.pdf",
-    "rate_bns_by_class.png",
-    "rate_bhns_spin_sensitivity.pdf",
-    "rate_bhns_spin_sensitivity.png",
     "projected_offsets.pdf",
     "projected_offsets.png",
-    "rate_beaming_comparison.pdf",
-    "rate_beaming_comparison.png",
-    "eos_sensitivity.pdf",
-    "eos_sensitivity.png",
-    "channels_x_classes.pdf",
-    "channels_x_classes.png",
-    "channels_x_classes.csv",
-    "offset_cdf_by_class.pdf",
-    "offset_cdf_by_class.png",
-    "beamed_class_comparison.pdf",
-    "beamed_class_comparison.png",
+    "rate_bhns_by_class_20models.pdf",
+    "rate_bhns_by_class_20models.png",
+    "rate_bhns_by_class_per_channel.pdf",
+    "rate_bhns_by_class_per_channel.png",
+    "rate_bhns_spin_sensitivity.pdf",
+    "rate_bhns_spin_sensitivity.png",
+    "rate_bns_by_class.pdf",
+    "rate_bns_by_class.png",
+    "rate_bns_by_class_20models.pdf",
+    "rate_bns_by_class_20models.png",
+    "rate_bns_by_class_per_channel.pdf",
+    "rate_bns_by_class_per_channel.png",
+    "rate_bns_tng_sweep.pdf",
+    "rate_bns_tng_sweep.png",
+    "rate_sbgrb_vs_swift.pdf",
+    "rate_sbgrb_vs_swift.png",
 )
 
 
@@ -158,16 +207,23 @@ def _parse_class_table(stdout: str, header_re: re.Pattern) -> dict[str, float]:
 
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
-    """Project root (parent of `tests/`)."""
-    return Path(__file__).resolve().parent.parent
+    """Project root.
+
+    This file sits in ``tests/integration/``, so the root is two levels
+    up.  It used to be one, which resolved to ``tests/`` and made every
+    data path miss; ``executed_notebook`` then skipped on "required
+    COMPAS file missing" in every environment, including one with a
+    fully populated ``data/``.
+    """
+    return Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="session")
 def required_compas_files(repo_root: Path) -> tuple[Path, ...]:
     """The four COMPAS HDF5 files required by `grb_main.ipynb` (Section 1)."""
     return (
-        repo_root / "Data" / "COMPASCompactOutput_BNS_A.h5",
-        repo_root / "Data" / "COMPASCompactOutput_BHNS_A.h5",
+        repo_root / "data" / "COMPASCompactOutput_BNS_A.h5",
+        repo_root / "data" / "COMPASCompactOutput_BHNS_A.h5",
     )
 
 
@@ -195,7 +251,7 @@ def executed_notebook(repo_root, required_compas_files):
 
     nb = nbformat.read(notebook_path, as_version=4)
 
-    plots_dir = repo_root / "Plots"
+    plots_dir = repo_root / "plots"
     plots_dir.mkdir(exist_ok=True)
     marker = plots_dir / ".smoke_marker"
     marker.write_text(str(time.time()))
@@ -337,20 +393,24 @@ def test_grb_main_bhns_class_fractions_in_foucart_band(executed_notebook):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_notebook, repo_root: Path):
-    """Section 4 `R_loc expected` lines must equal `read_expected_local_rate`.
+    """Section 4's audit table must carry the file's own `w_000` anchor.
 
-    The notebook prints
+    The first numeric column of each population's row is the
+    Broekgaarden+ (2021) anchor recovered from `weights_intrinsic/w_000`.
+    Checking it against `grb_io.read_expected_local_rate` guards the
+    propagation: the notebook must print the anchor read from the HDF5
+    rather than some other rate.  It is not a physics check, because
+    Section 4 prints that helper's own return value.
 
-        BNS  R_loc expected = ... Gpc^-3 yr^-1, ...
-        BHNS R_loc expected = ... Gpc^-3 yr^-1, ...
-
-    These are the Broekgaarden+ (2021) Table 3 anchors recovered from
-    `weights_intrinsic/w_000` and used to calibrate
-    `MEAN_MASS_EVOLVED`.  The stand-alone helper
-    `grb_io.read_expected_local_rate` reads the same column from the
-    HDF5; this test asserts the printed and module-computed values
-    agree to within 5 percent (the production rate-print uses
-    `rate_label` formatting which rounds to 2 sig figs).
+    The physics lives in the table's last column,
+    ``ClassMSSFR bins / M_SF(run config)``, which is the ratio the
+    no-free-parameter rate path has to land on.  CLAUDE.md records that
+    the binned convention plus the run-configuration star-forming mass
+    reproduce the stored anchors to well under a percent, so the ratio
+    is asserted against 1.0 with 5 percent of slack.  Dropping the
+    metallicity binning (`dPdlogZ_binned_to_grid`) or reverting to a
+    per-population `calibrate_mean_mass_evolved` both move it far
+    outside that band, which is the regression worth catching here.
     """
     import sys
 
@@ -372,8 +432,8 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_noteboo
     R_bns_printed = float(m_bns.group(1).replace(",", ""))
     R_bhns_printed = float(m_bhns.group(1).replace(",", ""))
 
-    R_bns_expected = read_expected_local_rate(repo_root / "Data" / "COMPASCompactOutput_BNS_A.h5")
-    R_bhns_expected = read_expected_local_rate(repo_root / "Data" / "COMPASCompactOutput_BHNS_A.h5")
+    R_bns_expected = read_expected_local_rate(repo_root / "data" / "COMPASCompactOutput_BNS_A.h5")
+    R_bhns_expected = read_expected_local_rate(repo_root / "data" / "COMPASCompactOutput_BHNS_A.h5")
 
     rel_bns = abs(R_bns_printed - R_bns_expected) / R_bns_expected
     rel_bhns = abs(R_bhns_printed - R_bhns_expected) / R_bhns_expected
@@ -388,6 +448,20 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_noteboo
         f"Broekgaarden Table 3 anchor {R_bhns_expected:.2f} by "
         f"{rel_bhns * 100:.1f}% (>5% relative)."
     )
+
+    ratios = {pop: float(v) for pop, v in _NORM_RATIO_RE.findall(stdout)}
+    assert set(ratios) == {"BNS", "BHNS"}, (
+        f"Section 4 audit table did not yield both normalisation ratios; parsed {ratios}"
+    )
+    for pop, ratio in ratios.items():
+        assert abs(ratio - 1.0) < 0.05, (
+            f"Section 4 {pop} ClassMSSFR-binned mass / run-configuration "
+            f"M_SF = {ratio:.3f}, more than 5% off unity.  The rate path "
+            f"is meant to close on the run configuration with no free "
+            f"parameter; check dPdlogZ_binned_to_grid and that the "
+            f"normalisation is simulation_star_forming_mass(), not a "
+            f"per-population calibrate_mean_mass_evolved."
+        )
 
     # Local-rate physical bands per Broekgaarden+ 2021 Sec. 4.
     # BNS: Models A/J/K range 10 to 300 Gpc^-3 yr^-1 across MSSFR /
@@ -413,7 +487,7 @@ def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook, repo_ro
        older than the marker file written before execution).
     """
     nb = executed_notebook
-    plots_dir = repo_root / "Plots"
+    plots_dir = repo_root / "plots"
     marker_mtime = nb._smoke_marker_mtime  # type: ignore[attr-defined]
 
     missing = []
@@ -435,4 +509,26 @@ def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook, repo_ro
     assert not stale, (
         f"Stale plots/ files (mtime older than pre-run marker): {stale}; "
         f"the notebook may not have regenerated them."
+    )
+
+
+def test_manuscript_figures_exist(repo_root: Path):
+    """Every figure the manuscript includes is present in plots/.
+
+    This runs without executing the notebook, because a missing figure
+    breaks the LaTeX build whatever produced it.  It is the check that
+    catches a figure owned by another notebook, or one whose generating
+    cell was renamed out from under the \\plotone call.
+    """
+    tex = repo_root / "overleaf-paper" / "grb_paper.tex"
+    if not tex.exists():
+        pytest.skip(f"manuscript not present: {tex}")
+
+    included = sorted(set(re.findall(r"plots/([a-z0-9_]+\.pdf)", tex.read_text())))
+    assert included, "no plots/*.pdf references found in grb_paper.tex"
+
+    missing = [f for f in included if not (repo_root / "plots" / f).exists()]
+    assert not missing, (
+        f"grb_paper.tex includes {len(included)} figures; these are absent "
+        f"from plots/ and will break the LaTeX build: {missing}"
     )

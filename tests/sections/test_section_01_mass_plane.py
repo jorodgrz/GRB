@@ -294,7 +294,7 @@ def test_foucart_disk_mass_iso_contours_at_mdisk_thresholds():
         )
 
 
-def _bns_mass_histogram(m2, m1, w, m_lo=1.25, m_tov=M_TOV, bw=0.02):
+def _bns_mass_histogram(m2, m1, w, m_lo=1.25, m_tov=M_TOV, bw=0.01):
     """Replicate the Section 1 BNS panel's weighted 2D mass histogram.
 
     Square ``bw`` bins with the top edge pinned on ``m_tov`` and the
