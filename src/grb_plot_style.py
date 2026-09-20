@@ -188,10 +188,59 @@ MODEL_GRID_FAMILY_ORDER: list[str] = [
     "wr_winds",
 ]
 
+# Twenty separable colours for the 20-model grid, as an alternative to the
+# cividis ramp of ``model_grid_colors``.  A sequential colormap sampled at 20
+# points is the wrong tool for 20 categories: on the Section 6d / 7c rate
+# panels the neighbouring cividis shades are not tellable apart, which is the
+# whole point of drawing every model.
+#
+# Model A keeps ``C_MODEL_A``: it is the fiducial, it is drawn heavier than the
+# rest, and a pastel reference would be the least visible line on the panel.
+# The other 19 are the solution of a constrained search over the pastel box
+# L* in [68, 90], C* in [14, 36] (CIELCh), maximising the minimum pairwise
+# CIELab distance for normal vision subject to floors on that distance under
+# simulated deuteranopia, protanopia and tritanopia (Vienot, Brettel and
+# Mollon 1999 dichromat projection).  Pure CVD optimisation was tried first
+# and rejected: it collapses the set onto the blue-yellow axis, the only axis
+# a dichromat retains, and the result reads as monotonous to everyone else.
+#
+# Achieved separations, pinned by tests/unit/test_palette_and_rcparams.py:
+# normal 17.1, deuteranopia 6.1, protanopia 5.7, tritanopia 4.3.  Twenty
+# categories cannot be made fully CVD-safe (ColorBrewer stops at 12 for
+# qualitative sets, 8 of them CVD-safe), so the legend order and the family
+# hue bands carry identification where colour alone runs out.
+#
+# Colours are assigned family-major: the selected set is sorted by hue and
+# handed out in ``MODEL_GRID_FAMILY_ORDER``, so one physics knob occupies one
+# hue band and members within it run light to dark.
+MODEL_GRID_PASTEL: dict[str, str] = {
+    "A": C_MODEL_A,
+    "alpha0p1": "#EAC7BF",
+    "F": "#FFB495",
+    "G": "#E8929B",
+    "alpha10": "#C69F68",
+    "B": "#F9E39E",
+    "C": "#C6BF9C",
+    "D": "#AEBD7C",
+    "E": "#CDE8BC",
+    "EH": "#9FC2AE",
+    "H": "#6DBE99",
+    "I": "#9CEAE0",
+    "J": "#A2D5FA",
+    "K": "#5BC9DC",
+    "L": "#8FA8C4",
+    "M": "#DCD3F0",
+    "N": "#8AABE6",
+    "O": "#E5B1E9",
+    "fWR0p1": "#FFC6DD",
+    "fWR5": "#C69FAF",
+}
+
 
 def model_grid_colors(
     models: dict[str, dict] | None = None,
     cmap_name: str = "cividis",
+    style: str = "cividis",
 ) -> dict[str, tuple[float, float, float, float]]:
     """Assign one colour per model in the 20-variation Broekgaarden+ 2021 grid.
 
@@ -211,9 +260,27 @@ def model_grid_colors(
         plot-to-loader import cycle).
     cmap_name : str
         Any perceptually uniform colormap; cividis and viridis are the
-        project defaults.
+        project defaults.  Ignored when ``style="pastel"``.
+    style : {"cividis", "pastel"}
+        ``"cividis"`` samples the colormap, which keeps a family band
+        readable as a ramp but makes individual models hard to separate.
+        ``"pastel"`` returns ``MODEL_GRID_PASTEL``, the separable
+        categorical set the Section 6d / 7c rate panels use.
     """
     import matplotlib
+
+    if style == "pastel":
+        keys = list(models) if models is not None else list(MODEL_GRID_PASTEL)
+        missing = [k for k in keys if k not in MODEL_GRID_PASTEL]
+        if missing:
+            raise KeyError(
+                f"MODEL_GRID_PASTEL has no colour for {missing}; add one there "
+                f"rather than falling back to a colormap sample, so the model "
+                f"keeps one colour across every figure."
+            )
+        return {k: matplotlib.colors.to_rgba(MODEL_GRID_PASTEL[k]) for k in keys}
+    if style != "cividis":
+        raise ValueError(f"style must be 'cividis' or 'pastel', got {style!r}")
 
     if models is None:
         from grb_io import BROEKGAARDEN21_MODELS  # lazy: no import cycle

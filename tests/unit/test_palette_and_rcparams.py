@@ -8,6 +8,7 @@ single source of truth fail loudly.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from grb_plot_style import (
@@ -182,6 +183,109 @@ def test_model_grid_colors_cover_all_twenty_and_are_distinct():
     )
     rounded = {tuple(round(c, 6) for c in rgba) for rgba in colors.values()}
     assert len(rounded) == len(colors), "model_grid_colors produced duplicate colours."
+
+
+_M_RGB2XYZ = np.array(
+    [
+        [0.4124564, 0.3575761, 0.1804375],
+        [0.2126729, 0.7151522, 0.0721750],
+        [0.0193339, 0.1191920, 0.9503041],
+    ]
+)
+_WHITE_D65 = np.array([0.95047, 1.0, 1.08883])
+_LMS = np.array(
+    [
+        [0.31399022, 0.63951294, 0.04649755],
+        [0.15537241, 0.75789446, 0.08670142],
+        [0.01775239, 0.10944209, 0.87256922],
+    ]
+)
+# Vienot, Brettel and Mollon (1999) dichromat projections.
+_DICHROMAT = {
+    "deuteranopia": np.array([[1.0, 0.0, 0.0], [0.9513092, 0.0, 0.04866992], [0.0, 0.0, 1.0]]),
+    "protanopia": np.array([[0.0, 1.05118294, -0.05116099], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+    "tritanopia": np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-0.86744736, 1.86727089, 0.0]]),
+}
+
+
+def _lab(hexcode, cvd=None):
+    """CIELab coordinates of a hex colour, optionally as a dichromat sees it."""
+    rgb = np.array([int(hexcode[i : i + 2], 16) for i in (1, 3, 5)]) / 255.0
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    if cvd is not None:
+        lin = lin @ _LMS.T @ _DICHROMAT[cvd].T @ np.linalg.inv(_LMS).T
+        lin = np.clip(lin, 0.0, 1.0)
+    xyz = lin @ _M_RGB2XYZ.T / _WHITE_D65
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16.0 / 116.0)
+    return np.array([116.0 * f[1] - 16.0, 500.0 * (f[0] - f[1]), 200.0 * (f[1] - f[2])])
+
+
+def test_model_grid_pastel_covers_the_registry_and_keeps_the_fiducial_reference():
+    """The pastel set is keyed to the same 20 suffixes and keeps Model A on
+    C_MODEL_A.
+
+    Model A is drawn heavier than the rest on the Section 6d / 7c panels, so
+    it takes the locked reference blue rather than a pastel; a near-white
+    fiducial would be the least visible line on the figure.
+    """
+    from grb_io import BROEKGAARDEN21_MODELS
+    from grb_plot_style import C_MODEL_A, MODEL_GRID_PASTEL, model_grid_colors
+
+    assert set(MODEL_GRID_PASTEL) == set(BROEKGAARDEN21_MODELS)
+    assert MODEL_GRID_PASTEL["A"] == C_MODEL_A
+    assert len(set(MODEL_GRID_PASTEL.values())) == 20, "duplicate colour in the set"
+    # The 19 non-fiducial entries sit in the pastel box the search ran over.
+    for suffix, hexcode in MODEL_GRID_PASTEL.items():
+        if suffix == "A":
+            continue
+        L = _lab(hexcode)[0]
+        assert 66.0 <= L <= 92.0, f"{suffix} at L*={L:.0f} is outside the pastel band"
+
+    pastel = model_grid_colors(style="pastel")
+    cividis = model_grid_colors()
+    assert set(pastel) == set(cividis), "the two styles must key the same models"
+
+
+def test_model_grid_pastel_separation_survives_colour_vision_deficiency():
+    """Minimum pairwise CIELab separation, for normal vision and under the
+    three dichromacies.
+
+    These are the numbers the constrained search was solved for.  A regression
+    here means someone hand-edited a hex and collapsed a pair; the figure would
+    still render, just with two models the reader cannot tell apart, which is
+    the exact failure the palette replaced.  Thresholds sit just under the
+    achieved values (17.1 / 6.1 / 5.7 / 4.3) to allow rounding, not drift.
+    """
+    from grb_plot_style import MODEL_GRID_PASTEL
+
+    hexes = list(MODEL_GRID_PASTEL.values())
+    for kind, floor in (
+        (None, 17.0),
+        ("deuteranopia", 6.0),
+        ("protanopia", 5.6),
+        ("tritanopia", 4.2),
+    ):
+        lab = np.array([_lab(h, kind) for h in hexes])
+        d = np.linalg.norm(lab[:, None] - lab[None, :], axis=-1)
+        np.fill_diagonal(d, np.inf)
+        assert d.min() >= floor, (
+            f"minimum pairwise dE under {kind or 'normal vision'} fell to "
+            f"{d.min():.1f}, below the {floor} the palette was solved for"
+        )
+
+
+def test_model_grid_colors_rejects_an_unknown_suffix_in_pastel_style():
+    """A model with no pastel entry is an error, not a colormap fallback.
+
+    Falling back would give the new model a colour that changes whenever the
+    registry grows, so it would not match between the BNS and BHNS panels.
+    """
+    from grb_plot_style import model_grid_colors
+
+    with pytest.raises(KeyError, match="MODEL_GRID_PASTEL"):
+        model_grid_colors(models={"NOT_A_MODEL": {"family": "fiducial"}}, style="pastel")
+    with pytest.raises(ValueError, match="cividis"):
+        model_grid_colors(style="jet")
 
 
 def test_model_grid_family_order_matches_registry_families():

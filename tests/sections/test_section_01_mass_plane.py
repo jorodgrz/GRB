@@ -23,7 +23,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from grb_classify import NS_MAX_FIDUCIAL, classify_bhns, classify_bns_2024, classify_grid
+from grb_classify import (
+    NS_MAX_FIDUCIAL,
+    NS_MAX_MASS_TOL,
+    classify_bhns,
+    classify_bns_2024,
+    classify_grid,
+)
 from grb_physics import M_THRESH, M_TOV, MDISK_LONG, MDISK_SHORT, foucart_disk_mass
 
 
@@ -64,6 +70,59 @@ def test_classify_grid_ns_max_truncates_bns_region():
         f"{bns_labels_above.sum()} cells with both m1, m2 > ns_max "
         f"= {ns_max} were classified as BNS"
     )
+
+
+def test_classify_grid_tolerates_the_compas_rounding_step_above_ns_max():
+    """A component a rounding step above ``M_NS_max`` stays in the BNS region.
+
+    COMPAS enforces ``M_NS_max`` during evolution and writes the gravitational
+    mass afterwards, so 42 components across the 20-model grid land above
+    their own file's cap, by at most 3.1e-4 Msun.  Compared exactly, each is a
+    COMPAS-typed NS that the BHNS branch would pick up and hand a Foucart disk
+    mass, inverting a classification the simulation already made.
+    """
+    # Just above a 2.5 Msun cap by less than the tolerance, and a companion
+    # well inside it: the pair is a BNS in the run that produced it.
+    m1 = np.array([2.5 + 3.1e-4, 2.5 + 1e-5])
+    m2 = np.array([1.3, 1.4])
+    cls = classify_grid(m1, m2, ns_max=2.5, R_1p4_km=12.0)
+    assert np.all(np.isin(cls, (1, 2, 3, 4))), (
+        f"a component {NS_MAX_MASS_TOL} Msun above the cap left the BNS "
+        f"region and was classified {cls.tolist()}"
+    )
+
+
+def test_classify_grid_ns_max_tolerance_does_not_mask_a_model_mismatch():
+    """The slack is far narrower than the gap between fiducial caps.
+
+    ``strict_ns_max`` exists to catch a population classified at the wrong
+    model's ``M_NS_max``; the adjacent fiducial values differ by 0.5 Msun,
+    500x the tolerance, so a real mismatch still reassigns systems.
+    """
+    assert NS_MAX_MASS_TOL < 0.01
+    gaps = np.diff(np.array(NS_MAX_FIDUCIAL))
+    assert NS_MAX_MASS_TOL < gaps.min() / 100.0
+
+    # A component squarely between two fiducial caps must still move.
+    m1 = np.array([2.7])
+    m2 = np.array([1.3])
+    assert classify_grid(m1, m2, ns_max=3.0, R_1p4_km=12.0)[0] in (1, 2, 3, 4)
+    assert classify_grid(m1, m2, ns_max=2.5, R_1p4_km=12.0)[0] in (0, 5, 6)
+
+
+def test_classify_grid_bns_and_bhns_regions_stay_complementary():
+    """The tolerance is applied to the same cap on both branches.
+
+    Widening only the BNS side would leave a sliver of mass plane that is
+    neither BNS nor a BHNS candidate, which would silently fall to class 0.
+    """
+    edge = 2.5 + NS_MAX_MASS_TOL / 2.0
+    m_heavy = np.array([edge, edge, 2.5 + 2 * NS_MAX_MASS_TOL])
+    m_light = np.array([1.3, edge, 1.3])
+    cls = classify_grid(m_heavy, m_light, ns_max=2.5, R_1p4_km=12.0)
+    # Inside the cap+tol the pair is BNS; beyond it the heavy component is a BH.
+    assert cls[0] in (1, 2, 3, 4) and cls[1] in (1, 2, 3, 4)
+    assert cls[2] in (0, 5, 6)
 
 
 def test_classify_grid_weighted_class_fractions_sum_to_one():

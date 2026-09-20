@@ -66,6 +66,12 @@ council/
 # Smoke-test marker written by tests/test_grb_main_notebook.py
 plots/.smoke_marker
 
+# Section 6d / 7c per-class R(z) grid caches.  Unlike the Section 11 and
+# 6c caches these are not tracked: nothing else reads them, and the cells
+# rebuild them from data/ in about four minutes each when absent.
+plots/rate_bns_by_class_per_model.npz
+plots/rate_bhns_by_class_per_model.npz
+
 # Coverage.py / pytest-cov outputs
 .coverage
 .coverage.*

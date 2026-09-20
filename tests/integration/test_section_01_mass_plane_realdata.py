@@ -460,3 +460,50 @@ def test_observed_gw_events_fall_inside_grid_panel():
             f"{name}: M1 = {m1} falls outside the Section 1 BNS panel "
             f"M1 extent [{_M1_LO_BNS}, {_M1_HI_BNS}]."
         )
+
+
+@pytest.mark.requires_data
+@pytest.mark.slow
+def test_over_cap_components_stay_bns_across_the_grid(repo_root):
+    """Every COMPAS-typed NS above its own file's cap stays in the BNS region.
+
+    COMPAS writes gravitational masses after enforcing ``M_NS_max``, so a
+    handful of components land a rounding step above the cap.  Compared
+    exactly they leave the BNS region and are handed a Foucart BHNS disk
+    mass, inverting the classification the simulation made.  On the 20-model
+    grid that is 41 BNS systems, in models I, P, Q and R (paper-II letters).
+
+    Data-bound because the excess is a property of the released files, not
+    something a synthetic grid reproduces.
+    """
+    import os
+
+    from grb_classify import classify_grid
+    from grb_io import ALL_MODEL_SUFFIXES, load_bns
+
+    checked = 0
+    for suffix in ALL_MODEL_SUFFIXES:
+        path = os.path.join(repo_root, "data", f"COMPASCompactOutput_BNS_{suffix}.h5")
+        if not os.path.exists(path):
+            continue
+        bns = load_bns(path, expected_model=suffix)
+        cap = bns["ns_max"]
+        over = (bns["m1"] > cap) | (bns["m2"] > cap)
+        if not over.any():
+            continue
+        m1, m2 = bns["m1"][over], bns["m2"][over]
+        # The excess must be a rounding step, not physics; assert that before
+        # relying on the tolerance to absorb it.
+        excess = np.maximum(m1, m2).max() - cap
+        assert 0 < excess < 1e-2, (
+            f"{suffix}: component exceeds M_NS_max by {excess:.2e} Msun, too "
+            f"large to be an output rounding step"
+        )
+        cls = classify_grid(m1, m2, ns_max=cap, R_1p4_km=12.0)
+        assert np.all(np.isin(cls, (1, 2, 3, 4))), (
+            f"{suffix}: {int((~np.isin(cls, (1, 2, 3, 4))).sum())} COMPAS-typed "
+            f"BNS systems left the BNS region; labels {sorted(set(cls.tolist()))}"
+        )
+        checked += int(over.sum())
+    if checked == 0:
+        pytest.skip("no over-cap components in the available files")

@@ -227,6 +227,24 @@ NS_MAX_FIDUCIAL = (2.0, 2.5, 3.0)
 ``classify_grid`` rejects any other value unless ``strict_ns_max=False``."""
 
 
+NS_MAX_MASS_TOL = 1e-3
+"""Tolerance [Msun] on the ``ns_max`` comparison in ``classify_grid``.
+
+COMPAS applies its ``M_NS_max`` cut during evolution and writes the
+gravitational mass out afterwards, so a remnant the run typed as an NS can
+land a rounding step above the cap in the file.  Across the 20-model
+Broekgaarden+ 2021 grid, 42 components sit above their own file's
+``M_NS_max``, by at most 3.1e-4 Msun.  Compared exactly, each of those is a
+COMPAS-typed NS that ``classify_grid`` would hand to the BHNS branch and
+give a Foucart disk mass, inverting the classification the simulation
+already made.
+
+CODE HEURISTIC; no paper sets this.  1e-3 Msun clears the observed excess by
+a factor of three and stays three orders of magnitude below the 0.5 Msun gap
+between adjacent ``NS_MAX_FIDUCIAL`` entries, so it cannot hide the
+model-mismatch error that ``strict_ns_max`` exists to catch."""
+
+
 def classify_grid(
     m1g,
     m2g,
@@ -357,7 +375,12 @@ def classify_grid(
     # The BNS class is symmetric in (m_heavy, m_light) so we do not
     # require any ordering on the input; mirror cells across the
     # m1=m2 diagonal receive identical classifications.
-    is_bns = (m_heavy <= ns_max) & (m_light <= ns_max) & (m_light > 0)
+    # Compare against the cap with NS_MAX_MASS_TOL of slack: COMPAS writes
+    # gravitational masses that can sit a rounding step above the M_NS_max it
+    # enforced during evolution, and an exact comparison sends those
+    # COMPAS-typed NSs into the BHNS branch below.
+    ns_cap = ns_max + NS_MAX_MASS_TOL
+    is_bns = (m_heavy <= ns_cap) & (m_light <= ns_cap) & (m_light > 0)
     hmns_split = hmns_factor * m_tov
 
     cls[is_bns & (m_tot < hmns_split)] = 3
@@ -370,7 +393,8 @@ def classify_grid(
     # Cells with 0 < m_light < ns_min are excluded (left at class 0)
     # and a warning is emitted; pass ns_min lower (e.g. 0.8 for ECSN/
     # USSN) to include them.
-    bhns_candidate = (m_heavy > ns_max) & (m_light <= ns_max)
+    # Same cap on both sides, so the BNS and BHNS regions stay complementary.
+    bhns_candidate = (m_heavy > ns_cap) & (m_light <= ns_cap)
     excluded = bhns_candidate & (m_light > 0) & (m_light < ns_min)
     if np.any(excluded):
         n_excl = int(np.sum(excluded))
