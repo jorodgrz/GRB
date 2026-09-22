@@ -8,8 +8,7 @@ The literature anchors for ``CLASS_THETA_J`` and the Fong+ 2015 beaming
 factors live in ``tests/anchors/test_literature_anchors.py``; this file pins
 the round-trip relations.
 
-Reference: Fong et al. (2015), ApJ 815, 102; Beniamini and Nakar
-(2019), MNRAS 482, 5430; Gottlieb et al. (2023), arXiv:2309.00038.
+Reference: Fong et al. (2015), ApJ 815, 102.
 """
 
 from __future__ import annotations

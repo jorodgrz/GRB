@@ -870,70 +870,57 @@ or the suppression double-counts."""
 #
 # Reference: Gottlieb et al. 2025, arXiv:2411.13657.
 
-GOTTLIEB25_F_RANGE = (0.02, 0.71)
-"""Range of the dimensionless ratio ``f_code = f_b / epsilon_gamma``,
-which the notebook samples log-uniformly to marginalise the BH-engine
-prediction in ``predict_bh_mc``.
+GOTTLIEB25_F_RANGE = (0.01 / 0.5, 0.11 / 0.15)
+"""Range of ``f_code = f_b / epsilon_gamma``, sampled log-uniformly by
+``predict_bh_mc`` in ``comparison.ipynb``.
 
-Gottlieb+25 Eq. (10) defines
-
-    E_iso,gamma = (epsilon_gamma / f_b) * E_j = 10 * f_{-1} * E_j,
-    f_{-1} = 0.1 * epsilon_gamma / f_b,
-
-with ``0.01 <= f_b <= 0.11`` (beaming fraction, Berger 2014,
-ARA&A 52, 43) and ``0.15 <= epsilon_gamma <= 0.5`` (gamma-ray
-radiative efficiency, Beniamini & Granot 2015).  Combining the
-boundary values gives ``f_{-1} in [0.14, 5.0]``.
-
-The notebook stores the inverse, ``f_code = f_b / epsilon_gamma``, so
-that ``f_inv = 0.1 / f_code`` reproduces the paper's ``f_{-1}``.
-Algebraically ``f_code in [0.01/0.5, 0.11/0.15] = [0.02, 0.733]``;
-the upper bound is rounded down to 0.71 here, which compresses the
-high-``f_code`` (low-``f_inv``) tail by about 3% relative to the strict
-algebraic limit and is a deliberate cosmetic choice, not a derived
-value."""
+Gottlieb+25 Eq. (10) writes ``E_iso,gamma = 10 f_{-1} E_j`` with
+``f_{-1} = 0.1 epsilon_gamma / f_b``, ``0.01 <= f_b <= 0.11`` and
+``0.15 <= epsilon_gamma <= 0.5``, deferring to Gottlieb et al. (2023)
+Sec. 2 for both ranges.  There the beaming range is Fong et al. (2015)
+and the efficiency range runs from Panaitescu and Kumar (2002, 0.5) to
+Beniamini et al. (2015, 2016, 0.15).  Those bounds give
+``f_{-1} in [0.136, 5.0]``.  Eq. (11) carries ``f_{-1}^{-1}``, so the
+argument ``gottlieb25_eq11`` expects is ``f_inv = 1 / f_{-1} = f_code / 0.1``,
+spanning [0.2, 7.3].
+"""
 
 GOTTLIEB25_DISK_RANGE = (0.01, 0.10)
-"""Post-merger accretion-disk-mass prior for the HMNS / magnetar engine
-[Msun].  Anchored on the BNS disk-mass fit of Kruger & Foucart 2020
-(arXiv:2002.07728, Eq. 4), which gives ``M_disk <~ 0.1 Msun`` for
-``R_NS ~ 12 km``.  The upper edge is consistent with Gottlieb+25 §3.1
-(sbGRB-producing HMNSs have "less massive disks" than the ~0.1 Msun
-lbGRB benchmark) and with the disk masses sampled by the Radice+18 NR
-simulations (arXiv:1809.11163)."""
+"""Post-merger disk-mass prior for the HMNS engine [Msun].  Kruger and
+Foucart (2020, arXiv:2002.07728) Sec. III describe the numerical BNS disk
+masses as switching sharply between ~0.01 and ~0.1 Msun; this range spans
+that transition."""
 
 GOTTLIEB25_WIND_FRAC = 0.3
-"""Disk-wind ejected fraction ``f_wind = M_ej / M_disk``.  Gottlieb+25
-§3.1, line 474; consistent with ``f_wind ~ 0.2-0.4`` in Radice+18
-GRMHD simulations (arXiv:1809.11163).
+"""Disk-wind ejected fraction ``f_wind = M_ej / M_d`` adopted by
+Gottlieb+25 Sec. 3.1 (their weak-field value)."""
 
-Point value retained for the Fig. 1 visual band in
-``comparison.ipynb``; the Fig. 2 / Fig. 3 Monte-Carlo path samples
-``GOTTLIEB25_WIND_FRAC_RANGE`` log-uniformly instead, so that the
-HMNS-engine prediction reflects the GRMHD scatter."""
-
-GOTTLIEB25_WIND_FRAC_RANGE = (0.2, 0.4)
-"""Disk-wind ejected fraction range, ``f_wind in [0.2, 0.4]``.  Radice
-et al. 2018 GRMHD simulations (arXiv:1809.11163, Table 2) give
-``f_wind ~ 0.2-0.4`` across the BNS post-merger disk-mass range; this
-range is drawn log-uniformly in the HMNS-engine MC.  The point value
-``GOTTLIEB25_WIND_FRAC = 0.3`` is the geomean and is retained for the
-Fig. 1 visual band only."""
+GOTTLIEB25_WIND_FRAC_RANGE = (0.3, 0.4)
+"""Gottlieb+25 Sec. 3.1: post-merger disks with weak (strong) magnetic
+fields eject ``M_ej ~ 0.3 (0.4) M_d`` (Christie et al. 2019; Fernandez
+et al. 2019; Nedora et al. 2021; Gottlieb et al. 2023b; Kiuchi et al.
+2023).  Drawn log-uniformly in the ``comparison.ipynb`` HMNS Monte Carlo.
+An earlier [0.2, 0.4] range was attributed to Radice et al. (2018,
+arXiv:1809.11163), a viscous-dynamical-ejecta paper that reports no
+wind fraction."""
 
 GOTTLIEB25_T_HMNS_RANGE = (0.1, 10.0)
-"""Long-lived-HMNS lifetime window [s].  Set by magnetar spin-down and
-viscous timescales (Lippuner+17, Fujibayashi+18, Metzger 2019).  Used
-as a *guide for the eye* in Fig. 1 of ``comparison.ipynb``; Gottlieb+25
-§3.1 does not claim the HMNS engine predicts T_50 directly."""
+"""Long-lived-HMNS lifetime window [s].  Gottlieb+25 Sec. 2.3.2 give
+``0.1 s <~ t_HMNS <~ 1 s`` for the long-lived HMNSs that power sbGRBs;
+the upper decade to 10 s has no source.  Used as the HMNS launch-delay
+prior in ``grb_rates.breakout_fraction_bns`` and as a guide in
+``comparison.ipynb`` Fig. 1."""
 
-# External long-duration merger-GRB E_iso anchor [erg].  Literature isotropic
-# gamma-ray energies of long-duration GRBs with kilonova / compact-merger
-# evidence (the Gottlieb 2024 "lbGRB" engine class).  Used to de-circularize
-# the BH-engine null in comparison.ipynb: the BH track was previously anchored
-# on the in-sample Rastinejad+ 2024 lbGRBs it is then compared against, so the
-# lbGRB residual was partly internal to its own anchor.  Anchoring on this
-# external set makes the short-vs-long separation anchor-independent.  Sources
-# are tabulated in data/external_lgrb_eiso.csv (one primary analysis per event).
+# Long-duration merger-GRB E_iso anchor [erg], tabulated with sources in
+# data/external_lgrb_eiso.csv.  comparison.ipynb draws the BH-engine E_iso for
+# every lb/sb event from this set rather than from each burst's own energy.
+# Two properties limit what it buys.  (1) It is not external to the tested
+# sample: 060614, 211211A and 230307A are all three Rastinejad+ 2024 lbGRBs,
+# leaving two independent events (211227A, 191019A).  (2) The energies are in
+# different bands: 060614, 211227A and 191019A are Swift/BAT 15-150 keV values
+# (Lu et al. 2022; Stratta et al. 2025; Levan et al. 2024 list the same band),
+# while 211211A and 230307A are broadband.  Levan et al. (2024) give 2e51 and
+# 7e51 erg for those two in 15-150 keV, against 1.3e52 and 6.97e52 here.
 LBGRB_EISO_EXTERNAL_ERG = (8.4e50, 1.14e51, 1.70e51, 1.30e52, 6.97e52)
 LBGRB_EISO_EXTERNAL_LOGMEAN = float(np.mean(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
 LBGRB_EISO_EXTERNAL_LOGSTD = float(np.std(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
@@ -954,10 +941,12 @@ def gottlieb25_eq11(T50, E_iso, alpha=2.0, f_inv=1.0):
     E_iso : array-like
         Isotropic-equivalent gamma-ray energy [erg].
     alpha : float, default 2.0
-        Power-law index of the prompt luminosity function.
+        Decay index of the BH accretion rate, ``Mdot ~ t^-alpha``, with
+        ``1.5 <~ alpha <~ 2`` (Gottlieb+25 Sec. 2.1).
     f_inv : float, default 1.0
-        Inverse GRB radiative efficiency normalised to f = 0.1:
-        ``f_inv = (f / 0.1) ** -1``.
+        ``f_{-1}^{-1} = f_b / (0.1 epsilon_gamma)``, the inverse of the
+        Gottlieb+25 Eq. (10) ``f_{-1}``.  Eq. (11) scales as ``f_{-1}^{-1}``
+        because ``E_j = E_iso / (10 f_{-1})``.
     """
     T50 = np.asarray(T50, dtype=float)
     E_iso = np.asarray(E_iso, dtype=float)

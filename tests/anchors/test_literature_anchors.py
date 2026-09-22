@@ -2057,77 +2057,65 @@ def test_gao25_fermi_gbm_gaussian_dtd_local_rate_matches_table2():
 
 # ─────────────────────────────────────────────────────────────────────
 # Fong et al. (2015) ApJ 815, 102 [papers/Fong_2015.pdf]
-# Beniamini and Nakar (2019) MNRAS 482, 5430 [papers/Beniamini_2019.pdf]
 # Jet half-opening angle bands per class.
 # ─────────────────────────────────────────────────────────────────────
-def test_class_theta_j_sbgrb_band_matches_fong_beniamini_nakar():
-    """`CLASS_THETA_J['sbGRB']` is the project's 10 to 16 deg fiducial band.
+def test_class_theta_j_sbgrb_band_is_fong_2015_median_and_1sigma():
+    """`CLASS_THETA_J['sbGRB']` is the Fong et al. (2015) median, 16 +/- 10 deg.
 
-    What the two cited papers report:
-
-    - Fong et al. (2015) ApJ 815, 102: "a median jet opening angle of
-      16 +/- 10 deg" from 11 short GRBs with opening-angle measurements
-      and lower limits, capped at 30 deg.  So 16 deg is their median and
-      their 1-sigma range is roughly [6, 26] deg.
-    - Beniamini and Nakar (2019) MNRAS 482, 5430: a typical structured-jet
-      core angle theta_0 = 0.1 rad, log-normal with median 0.1 rad and
-      spread ~0.5 dex, with 0.2 rad used as a comparison case.  0.1 rad is
-      5.7 deg, not 10 deg.
-
-    The [10, 16] band is therefore narrower than Fong's 1-sigma range and
-    its lower edge is the project's own choice, not a value either paper
-    quotes.  An earlier version of this docstring justified the 10 deg edge
-    by saying Beniamini and Nakar "prefer typical core opening angles
-    closer to 10 deg", which reads their 0.1 rad as degrees.  The band is
-    left as it is, because it is a declared fiducial that sets the width of
-    the Section 6c beaming envelope, but it is a choice and is labelled as
-    one here.
+    Fong et al. (2015) Sec. 5.2 and Fig. 8: 11 short GRBs, four with
+    jet-break measurements and seven with lower limits, the limits spread
+    uniformly up to an assumed theta_j,max = 30 deg, give a median of
+    "16 +/- 10 deg (1 sigma)".  The band is that median and its 1 sigma
+    edges, unmodified.
     """
     from grb_rates import CLASS_THETA_J
 
     sb = CLASS_THETA_J["sbGRB"]
-    assert sb["lo"] == pytest.approx(10.0, abs=1.0), sb["lo"]
-    assert sb["fid"] == pytest.approx(13.0, abs=1.0), sb["fid"]
-    assert sb["hi"] == pytest.approx(16.0, abs=1.0), sb["hi"]
-    assert sb["lo"] < sb["fid"] < sb["hi"]
+    assert sb["fid"] == pytest.approx(16.0, abs=1e-12), sb["fid"]
+    assert sb["lo"] == pytest.approx(6.0, abs=1e-12), sb["lo"]
+    assert sb["hi"] == pytest.approx(26.0, abs=1e-12), sb["hi"]
 
 
-def test_class_theta_j_lbgrb_band_matches_gottlieb_2023_mad_jets():
-    """`CLASS_THETA_J['lbGRB']` is the project's 5 to 8 deg band for MAD jets.
+def test_class_theta_j_lbgrb_band_is_narrower_than_sbgrb():
+    """`CLASS_THETA_J['lbGRB']` is the project's 5 to 8 deg band.
 
-    The physical argument is Gottlieb (2023): MAD-powered BH-engine lbGRB
-    jets are more strongly collimated than HMNS-engine sbGRB jets, so their
-    half-opening angle is smaller.  The band's ordering relative to the
-    sbGRB band is what the classification depends on, and that is what this
-    test pins.
-
-    CODE FIDUCIAL for the numbers.  The specific 5 to 8 deg range could not
-    be located in the text of ``papers/Gottlieb_2023.pdf``, which never uses
-    the words "opening" or "collimation" in its extractable text, so treat
-    the bounds as a project choice pending a page-and-equation citation
-    rather than as a quantity that paper tabulates.  For scale, Beniamini
-    and Nakar (2019) put a typical structured-jet core at 0.1 rad = 5.7 deg,
-    which this band brackets.
+    CODE HEURISTIC; not from any single paper.  Gottlieb et al. (2023)
+    Sec. 3 and Gottlieb et al. (2024) Eq. 10 both adopt the Fong et al.
+    (2015) beaming range 0.01 <= f_b <= 0.11 for every class, so they do
+    not supply a narrower lbGRB angle.  The band encodes the expectation
+    that BH-engine jets are more collimated than HMNS-engine jets; this
+    test pins the numbers and that ordering, nothing more.
     """
     from grb_rates import CLASS_THETA_J
 
     lb = CLASS_THETA_J["lbGRB"]
-    assert lb["lo"] == pytest.approx(5.0, abs=1.0), lb["lo"]
-    assert lb["fid"] == pytest.approx(6.5, abs=1.0), lb["fid"]
-    assert lb["hi"] == pytest.approx(8.0, abs=1.0), lb["hi"]
-    assert lb["lo"] < lb["fid"] < lb["hi"]
+    assert lb["lo"] == pytest.approx(5.0, abs=1e-12), lb["lo"]
+    assert lb["fid"] == pytest.approx(6.5, abs=1e-12), lb["fid"]
+    assert lb["hi"] == pytest.approx(8.0, abs=1e-12), lb["hi"]
+    assert lb["fid"] < CLASS_THETA_J["sbGRB"]["fid"]
 
 
-def test_fong_2015_beaming_factor_for_fiducial_sbgrb_in_published_range():
-    """sbGRB beaming factor f_beam = 1 - cos(13 deg) within Fong (2015) band [0.015, 0.04]."""
+def test_fong_2015_beaming_factor_at_fiducial_sbgrb_angle():
+    """f_beam at the sbGRB fiducial reproduces Fong et al. (2015) f_b ~ 0.04.
+
+    Fong Sec. 5.2 quote the median beaming factor as f_b = 0.04 (+0.07 /
+    -0.03) and its inverse as f_b^-1 = 27 (+158 / -18).  1 - cos(16 deg) =
+    0.0387, which rounds to their 0.04 and inverts to 25.8, inside the
+    rounding of their 27.  The 1 sigma edges are checked loosely because
+    Fong et al. round the angle and the beaming factor independently: the
+    6 deg edge gives 0.0055 against their 1/185 = 0.0054, and the 26 deg edge
+    gives 0.101 against their 0.11.
+    """
     from grb_rates import CLASS_THETA_J, beamed_rate
 
-    theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
-    f_beam = float(beamed_rate(1.0, theta_fid))
-    # Fong (2015) abstract band: f_beam ~ 0.015-0.04 for theta_j 10-16 deg.
-    assert 0.015 <= f_beam <= 0.040, (
-        f"sbGRB f_beam = {f_beam:.4f} outside Fong (2015) band [0.015, 0.040]."
-    )
+    sb = CLASS_THETA_J["sbGRB"]
+    f_fid = float(beamed_rate(1.0, sb["fid"]))
+    f_lo = float(beamed_rate(1.0, sb["lo"]))
+    f_hi = float(beamed_rate(1.0, sb["hi"]))
+    assert f_fid == pytest.approx(0.04, abs=0.005), f_fid
+    assert 1.0 / f_fid == pytest.approx(27.0, abs=1.5), 1.0 / f_fid
+    assert f_lo == pytest.approx(1.0 / (27.0 + 158.0), rel=0.05), f_lo
+    assert f_hi == pytest.approx(0.04 + 0.07, abs=0.01), f_hi
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -3599,3 +3587,53 @@ def test_a_bh_fid_is_a_declared_fiducial_inside_the_foucart_calibration_range():
         "classify_bhns no longer defaults to grb_physics.A_BH_FID; the fiducial "
         "spin has forked again."
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Gottlieb et al. (2025) arXiv:2411.13657 [papers/Gottlieb_2024.pdf]
+# Eq. (10) and (11) inputs used by comparison.ipynb.
+# ─────────────────────────────────────────────────────────────────────
+def test_gottlieb25_f_range_is_eq10_fb_over_epsilon_bounds():
+    """``GOTTLIEB25_F_RANGE`` spans f_b / eps_gamma for Eq. (10)'s bounds.
+
+    Gottlieb+25 Eq. (10): ``0.01 <= f_b <= 0.11`` and
+    ``0.15 <= eps_gamma <= 0.5``, so f_b / eps_gamma runs from 0.01 / 0.5 to
+    0.11 / 0.15 exactly, and f_{-1} = 0.1 eps_gamma / f_b spans [0.136, 5].
+    """
+    from grb_physics import GOTTLIEB25_F_RANGE
+
+    assert GOTTLIEB25_F_RANGE[0] == pytest.approx(0.01 / 0.5, rel=1e-12)
+    assert GOTTLIEB25_F_RANGE[1] == pytest.approx(0.11 / 0.15, rel=1e-12)
+    f_m1 = 0.1 / np.array(GOTTLIEB25_F_RANGE)
+    assert f_m1.min() == pytest.approx(0.1 * 0.15 / 0.11, rel=1e-12)
+    assert f_m1.max() == pytest.approx(5.0, rel=1e-12)
+
+
+def test_gottlieb25_eq11_scales_with_inverse_f_minus_1():
+    """Eq. (11) carries f_{-1}^{-1}: raising f_{-1} lowers the predicted M_ej.
+
+    From Eqs. (9)-(10), E_j = E_iso / (10 f_{-1}) and M_ej = 0.3 M_d, giving
+    M_ej ~ 1.2e-3 f_{-1}^{-1} (E_iso / 2e51) (T50 / s)^(alpha - 1) Msun, which
+    Gottlieb+25 round to 1e-3.  ``gottlieb25_eq11`` multiplies by its
+    ``f_inv`` argument, so callers must pass 1 / f_{-1}.  The notebook once
+    passed f_{-1} itself, biasing every prediction low by ~0.17 dex.
+    """
+    from grb_physics import gottlieb25_eq11
+
+    f_m1 = 2.0
+    m = gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0 / f_m1)
+    assert float(m) == pytest.approx(1e-3 / f_m1, rel=1e-12)
+
+
+def test_gottlieb25_wind_frac_range_is_weak_and_strong_field_values():
+    """``GOTTLIEB25_WIND_FRAC_RANGE`` is Gottlieb+25 Sec. 3.1's 0.3 to 0.4.
+
+    Sec. 3.1: disks with strong (weak) magnetic fields eject
+    ``M_ej ~ 0.4 (0.3) M_d``, and the paper adopts 0.3.  The earlier
+    [0.2, 0.4] range cited Radice et al. (2018, arXiv:1809.11163), which
+    reports no wind fraction.
+    """
+    from grb_physics import GOTTLIEB25_WIND_FRAC, GOTTLIEB25_WIND_FRAC_RANGE
+
+    assert GOTTLIEB25_WIND_FRAC_RANGE == (0.3, 0.4)
+    assert GOTTLIEB25_WIND_FRAC == pytest.approx(0.3, abs=1e-12)

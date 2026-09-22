@@ -1,8 +1,8 @@
-# Rastinejad et al. 2024, ApJ 979, 190.
+# Rastinejad et al. 2025, ApJ 979, 190 (arXiv:2409.02158, posted 2024).
 # Component ejecta masses (M_B, M_P, M_R) and asymmetric +/- intervals are
 # taken from Table 3 medians.  GRB 230307A uses the paper-favored KN Fit 1.
 #
-# Component-to-origin mapping (Metzger 2019, Rev. Mod. Phys. 89, 023001;
+# Component-to-origin mapping (Metzger 2019, Living Rev. Relativ. 23, 1;
 # Kasen et al. 2017, Nature 551, 80):
 #   M_B (lanthanide-poor)  : fast dynamical ejecta (tidal + shocked).
 #   M_P (intermediate Ye)  : disk-wind ejecta; thermal / neutrino-driven.
@@ -19,9 +19,10 @@
 #             previously used biased posterior mass toward the T_90 value;
 #             the notebook now draws T_50 log-uniformly on [0.02, 0.07] s
 #             to reflect the "upper bound only" status.
-#   170817A : T_50 = 0.6 +/- 0.1 s from Goldstein+2017, ApJL 848 L14 Table 1
-#             (Fermi-GBM 50-300 keV main pulse; T_90 = 2.0 +/- 0.5 s).
-#             Default Gaussian prior.
+#   170817A : T_50 = 0.6 +/- 0.1 s is UNSOURCED.  Goldstein+2017, ApJL 848
+#             L14 reports T_90 = 2.0 +/- 0.5 s (50-300 keV) and no T_50; its
+#             Table 1 is the trigger timeline.  Rastinejad+ Table 1 also has
+#             no T_50.  Enters only the GW170817 marker, never a statistic.
 #   230307A : No published T_50.  T_90 ~ 35 s (Levan+2024).  The burst's
 #             main-pulse fluence is concentrated within the first ~10 s,
 #             with an extended-emission tail extending T_90 to ~35 s.
@@ -33,12 +34,19 @@
 #
 # E_iso uncertainties for events without published errors (050709 and
 # 230307A) are set to 30% relative.
+#
+# 170817A E_iso departs from Rastinejad+ Table 1, which lists fluence
+# "28 +/- 2" (1e-6 erg cm^-2) and E_iso 0.0006e52 erg, both a factor 100
+# above Goldstein+2017: fluence (2.8 +/- 0.2)e-7 erg cm^-2 over T_90
+# (10-1000 keV) at d_L = 40 +/- 8 Mpc gives E_iso = (5.3 +/- 2.2)e46 erg,
+# stored below.  Rastinejad+ say they do not use this value; here it sets
+# only the off-axis GW170817 marker in Fig. 2.
 name,grb_class,T50_s,T50_err_s,T50_ref,E_iso_52,E_iso_err52,E_iso_ref,M_B_med,M_B_lo,M_B_hi,M_P_med,M_P_lo,M_P_hi,M_R_med,M_R_lo,M_R_hi
 050709, sb, 0.07,  0.04, Villasenor+2005,    0.0310, 0.0093,  R+24T1, 0.003, 0.002, 0.004, 0.029, 0.009, 0.010, 0.015, 0.012, 0.072
 060614, lb, 43.2,  0.8,  R+24T1,             0.5100, 0.0700,  R+24T1, 0.014, 0.010, 0.013, 0.029, 0.027, 0.034, 0.146, 0.120, 0.072
 130603B,sb, 0.06,  0.004,R+24T1,             0.2900, 0.0200,  R+24T1, 0.006, 0.004, 0.017, 0.075, 0.037, 0.063, 0.023, 0.020, 0.160
 160821B,sb, 0.28,  0.05, R+24T1Swift,        0.0050, 0.0010,  R+24T1, 0.003, 0.001, 0.001, 0.011, 0.002, 0.002, 0.011, 0.009, 0.021
-170817A,gw, 0.6,   0.1,  Goldstein+2017L14,  0.0006, 0.00004, R+24T1, 0.004, 0.0005,0.0005,0.019, 0.001, 0.001, 0.052, 0.002, 0.003
+170817A,gw, 0.6,   0.1,  unsourced,          0.0000053, 0.0000022, Goldstein+2017L14, 0.004, 0.0005,0.0005,0.019, 0.001, 0.001, 0.052, 0.002, 0.003
 200522A,sb, 0.38,  0.05, R+24T1,             0.0810, 0.0200,  R+24T1, 0.046, 0.009, 0.009, 0.020, 0.018, 0.068, 0.019, 0.016, 0.124
 211211A,lb, 21.2,  0.2,  R+24T1Swift,        1.7200, 0.0300,  R+24T1, 0.007, 0.001, 0.000, 0.010, 0.002, 0.001, 0.130, 0.054, 0.051
 230307A,lb, 17.5,  10.0, T90/2_Levan+2024,   2.9000, 0.8700,  R+24T1, 0.012, 0.001, 0.001, 0.025, 0.003, 0.003, 0.054, 0.022, 0.019

@@ -96,7 +96,7 @@ See [tests/README.md](tests/README.md) for the per-folder, per-section layout an
 - Bauswein et al. (2020), [arXiv:2004.00846](https://arxiv.org/abs/2004.00846)
 - Bavera et al. (2020), [arXiv:1906.12257](https://arxiv.org/abs/1906.12257)
 - Beniamini, Nava, and Piran (2016), [arXiv:1606.00311](https://arxiv.org/abs/1606.00311) (radiative-efficiency anchor for `GOTTLIEB25_F_RANGE`)
-- Beniamini and Nakar (2019), [arXiv:1808.05076](https://arxiv.org/abs/1808.05076)
+- Beniamini and Nakar (2019), [arXiv:1808.07493](https://arxiv.org/abs/1808.07493), MNRAS 482, 5430
 - Berger (2014), [arXiv:1311.2603](https://arxiv.org/abs/1311.2603), ARA&A 52, 43
 - Binney and Tremaine (2008), *Galactic Dynamics*, 2nd ed., Princeton University Press
 - Biscoveanu, Landry, and Vitale (2022), [arXiv:2207.01601](https://arxiv.org/abs/2207.01601) (NSBHPop population model)

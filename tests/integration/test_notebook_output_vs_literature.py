@@ -17,8 +17,8 @@ the resulting numbers to published values from:
   (BHNS disk-mass thresholds, BNS classification fractions);
 - Bauswein et al. (2013) PRL 111, 131101 (EOS-dependent prompt-collapse
   threshold);
-- Fong et al. (2015) ApJ 815, 102; Beniamini and Nakar (2019) MNRAS
-  482, 5430 (jet half-opening angles for beaming).
+- Fong et al. (2015) ApJ 815, 102 (sGRB jet half-opening angle for
+  beaming).
 
 A single module-scoped fixture builds the BNS A + BHNS A pipeline once
 without spinning up a Jupyter kernel; tests are individually
@@ -357,7 +357,7 @@ def test_bhns_modelA_R0_within_LIGO_O4_BHNS_band(notebook_pipeline):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Beamed-rate observed comparison (Fong 2015, Beniamini-Nakar 2019,
+# Beamed-rate observed comparison (Fong 2015,
 # Wanderman-Piran 2015, Ghirlanda 2016).
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
@@ -376,7 +376,7 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
 
     Union: [0.13, 6.4] Gpc^-3 yr^-1.  That is wide because the two papers
     disagree by more than an order of magnitude on the same quantity, not
-    because the band has been padded; Model A's 0.83 lands in the gap
+    because the band has been padded; Model A's 1.25 lands in the gap
     between them.
 
     Colombo et al. (2022) used to be a third handle here at 3.6 (1.8-6.5).
@@ -388,10 +388,8 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
     sGRB rate at all.  It is now ``grb_rates.COLOMBO22_NSNS_LOCAL_RATE``.
 
     The intrinsic BNS sbGRB rate from Section 6 multiplied by f_beam =
-    1 - cos(theta_j_fid) at theta_j_fid = 13 deg (Fong 2015 / Beniamini
-    and Nakar 2019 fiducial) should sit in this band.  Section 6c prints
-    R_sbGRB beamed ~ 0.8 Gpc^-3 yr^-1 for Model A, well inside the
-    envelope.
+    1 - cos(theta_j_fid) at theta_j_fid = 16 deg (the Fong 2015 median)
+    should sit in this band; Section 6c prints the value for Model A.
 
     Cited assumption: 100 percent jet launching above the disk-mass
     threshold (Gottlieb 2023); all disk-mass GRB rates are therefore

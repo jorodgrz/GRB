@@ -1,7 +1,7 @@
 """Validation tests for ``grb_rates.py``.
 
 Anchors the cosmic-rate convolution and the per-class beaming helpers
-to (a) the cited literature (Fong+ 2015, Beniamini and Nakar 2019,
+to (a) the cited literature (Fong+ 2015,
 Neijssel+ 2019, Madau and Dickinson 2014, Wanderman and Piran 2015) and
 (b) the COMPAS reference implementation in
 ``compas_python_utils.cosmic_integration.FastCosmicIntegration``.
@@ -23,14 +23,14 @@ import pytest
 # Beaming round-trip: f_beam = 1 - cos(theta_j); Fong+ 2015 ApJ 815, 102
 # ─────────────────────────────────────────────────────────────────────
 def test_beaming_round_trip_sbgrb():
-    """sbGRB fiducial: theta_j = 13 deg => f_beam ~ 0.0256."""
+    """sbGRB fiducial: theta_j = 16 deg => f_beam ~ 0.0387 (Fong+ 2015 median)."""
     from grb_rates import CLASS_THETA_J, beamed_rate
 
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     expected = 100.0 * (1.0 - np.cos(np.radians(theta_fid)))
     got = beamed_rate(100.0, theta_fid)
     assert np.isclose(got, expected, rtol=1e-12)
-    assert 2.55 < got < 2.58, got
+    assert 3.87 < got < 3.88, got
 
 
 def test_beaming_round_trip_lbgrb():

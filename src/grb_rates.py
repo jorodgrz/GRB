@@ -1883,20 +1883,28 @@ def mcrit_sweep(M_tot, q, w_all, M_crit_range=None, q_thresh=1.2):
 # Beaming correction
 # ═══════════════════════════════════════════════════════════════════════════
 CLASS_THETA_J = {
-    "sbGRB": {"lo": 10.0, "fid": 13.0, "hi": 16.0},
+    # Fong et al. 2015, ApJ 815, 102, Sec. 5.2 and Fig. 8
+    "sbGRB": {"lo": 6.0, "fid": 16.0, "hi": 26.0},
+    # CODE HEURISTIC; not from any single paper
     "lbGRB": {"lo": 5.0, "fid": 6.5, "hi": 8.0},
 }
 """Class-dependent jet half-opening angles [deg].
 
-sbGRB: fiducial prior range, NOT directly the Fong+ 2015 (ApJ 815, 102)
-measurement.  Fong+ 2015 report a median theta_j = 16 +/- 10 deg over
-11 sGRBs (so a symmetric 1-sigma band would extend ~6 to 26 deg).  The
-narrower 10 to 16 deg band used here is informed by the Beniamini and
-Nakar (2019, MNRAS 482, 5430, arXiv:1812.02194) structured-jet
-analysis of GW170817 and the population reanalysis they recommend
-(typical core opening angles closer to 10 deg with structured wings).
-lbGRB: Gottlieb (2023) argues MAD-powered BH jets from lbGRB sources
-have narrower collimation than HMNS-powered sbGRB jets.
+sbGRB is the Fong et al. (2015) short-GRB median, 16 +/- 10 deg (1 sigma),
+from 11 bursts (4 jet-break measurements, 7 lower limits) with the
+lower limits spread uniformly up to theta_j,max = 30 deg.  That cap is an
+assumption of theirs, motivated by merger simulations: with 90 deg the
+median is 33 (+38 / -27) deg, and the four measurements alone give
+6 +/- 1 deg.  The band maps to f_b = 1 - cos(theta_j) = 0.0055 to 0.101.
+Fong et al. quote the beaming factor separately, rounded, as
+f_b = 0.04 (+0.07 / -0.03), i.e. 8.1 to 27.1 deg, and
+f_b^-1 = 27 (+158 / -18), i.e. 6.0 to 27.3 deg; the angle interval is
+used here because ``beamed_rate`` takes angles.
+
+lbGRB has no published source.  Gottlieb et al. (2023, 2024) apply the
+same Fong f_b range to every class, so the narrower lbGRB band is a
+project choice that encodes the expectation that BH-engine jets are more
+collimated.
 """
 
 
@@ -2021,12 +2029,7 @@ def beamed_class_comparison(
 
 
 def beamed_rate(rate_intrinsic, theta_j_deg):
-    """``R_obs = R_intrinsic * (1 - cos(theta_j))``.
-
-    Fong+ 2015 sGRB median is theta_j = 16 +/- 10 deg; the 10-16 deg
-    fiducial band used in ``CLASS_THETA_J`` (Beniamini and Nakar 2019)
-    gives ``f_beam ~ 0.015-0.04``.
-    """
+    """``R_obs = R_intrinsic * (1 - cos(theta_j))``, a top-hat jet."""
     theta_j = np.radians(theta_j_deg)
     f_beam = 1.0 - np.cos(theta_j)
     return rate_intrinsic * f_beam

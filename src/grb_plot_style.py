@@ -160,6 +160,7 @@ ENGINE_PALETTE: dict[str, str] = {
     "lb": "#c0392b",  # lbGRB markers (red)
     "sb": "#1565c0",  # sbGRB markers (blue)
     "gw": "#555555",  # GW170817 marker (grey)
+    "hmns": "#1e8449",  # HMNS-engine prediction bands (green)
 }
 
 # Per-event ejecta composition (Rastinejad+ 2024 Table 3 decomposition).

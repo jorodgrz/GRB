@@ -214,15 +214,15 @@ BNS mass-ratio threshold         & $q_{\rm thresh}$ & $1.2$ & \nodata & \citet{g
 BHNS jet-launch disk threshold   & $M_{\rm disk,short}$ & $0.01\,\Msun$ & \nodata & \citet{gottlieb2023} \\
 BHNS bright-lbGRB disk threshold & $M_{\rm disk,long}$ & $0.1\,\Msun$ & \nodata & \citet{gottlieb2023} \\
 \cutinhead{Rate corrections (Section~\ref{sec:corrections})}
-sbGRB jet half-opening angle     & $\theta_j$ & $13^\circ$ & $10^\circ$ to $16^\circ$ & \citet{fong2015,beniamini_nakar2019} \\
-lbGRB jet half-opening angle     & $\theta_j$ & $6.5^\circ$ & $5^\circ$ to $8^\circ$ & \citet{gottlieb2023} \\
+sbGRB jet half-opening angle     & $\theta_j$ & $16^\circ$ & $6^\circ$ to $26^\circ$ & \citet{fong2015} \\
+lbGRB jet half-opening angle     & $\theta_j$ & $6.5^\circ$ & $5^\circ$ to $8^\circ$ & this work \\
 BHNS black-hole spin             & $\aBH$ & $0.5$ & $\{0.0, 0.3, 0.5, 0.7, 0.9\}$ & this work; \citet{foucart2018} \\
 BHNS misalignment factor         & \nodata & $0.5$ & \nodata & \citet{fragos2010,kawaguchi2015} heuristic \\
 \cutinhead{Observed-sample engine comparison (Section~\ref{sec:obsmethod})}
-Jet-structure exponent           & $\alpha$ & \nodata & $1.5$ to $2$ & \citet{gottlieb2024} \\
-Beaming-to-efficiency ratio      & $f_b/\epsilon_\gamma$ & \nodata & $0.02$ to $0.71$ & \citet{berger2014,beniamini2016} \\
-HMNS disk-wind fraction          & $f_{\rm wind}$ & $0.3$ & $0.2$ to $0.4$ & \citet{gottlieb2024}; range \citet{radice2018} \\
-HMNS-engine disk-mass prior      & $\Mdisk$ & \nodata & $0.01$ to $0.10\,\Msun$ & \citet{gottlieb2024} \\
+Accretion-rate decay index       & $\alpha$ & \nodata & $1.5$ to $2$ & \citet{gottlieb2024} \\
+Beaming-to-efficiency ratio      & $f_b/\epsilon_\gamma$ & \nodata & $0.02$ to $0.73$ & \citet{gottlieb2024}, Eq.~10 \\
+HMNS disk-wind fraction          & $f_{\rm wind}$ & $0.3$ & $0.3$ to $0.4$ & \citet{gottlieb2024} \\
+HMNS-engine disk-mass prior      & $\Mdisk$ & \nodata & $0.01$ to $0.10\,\Msun$ & \citet{kruger2020} \\
 \enddata
 \tablecomments{Parameters with no Range entry are held fixed; the equation of
 state enters only through the $(\Mtov, k)$ pair
@@ -231,9 +231,9 @@ relation of Eq.~\ref{eq:nsradius}, a modeling choice consistent with
 \citet{raaijmakers2021} rather than an EOS derivation. The fiducial $\aBH = 0.5$ is a choice of this work, not a
 \citet{foucart2018} recommendation; their remnant fit is calibrated for
 $\chi_{\rm BH} \in [-0.5, 0.9]$. The sbGRB jet-angle band is the
-fiducial compromise of Section~\ref{sec:corrections} (\citealt{fong2015}
-measure a median $16^\circ \pm 10^\circ$; \citealt{beniamini_nakar2019}
-prefer cores near $10^\circ$).}
+\citet{fong2015} median and $1\sigma$, which assumes their
+$\theta_{j,\max} = 30^\circ$; the lbGRB band is a choice of this work
+(Section~\ref{sec:corrections}).}
 \end{deluxetable*}
 
 A sample size enters
@@ -680,13 +680,17 @@ rate with an observed sGRB rate we multiply by the beaming fraction
 f_{\rm beam} = 1 - \cos\theta_j, \qquad \mathcal{R}_{\rm obs} = f_{\rm beam}\,\mathcal{R},
 \label{eq:beam}
 \end{equation}
-with per-class jet half-opening angles $\theta_j = 13^\circ$ (range 10 to 16) for
+with per-class jet half-opening angles $\theta_j = 16^\circ$ (range 6 to 26) for
 the sbGRB class and $\theta_j = 6.5^\circ$ (range 5 to 8) for the lbGRB classes.
-The sbGRB band is a fiducial prior rather than a single measurement: \citet{fong2015}
-find a median sGRB half-opening angle $\theta_j = 16^\circ \pm 10^\circ$, while the
-\citet{beniamini_nakar2019} structured-jet analysis of GW170817 prefers narrower
-cores closer to $10^\circ$, and we adopt $10^\circ$ to $16^\circ$ as the
-compromise band.
+The sbGRB values are the median and $1\sigma$ of the \citet{fong2015}
+short-GRB distribution, built from 11 bursts of which four have jet-break
+measurements and seven only lower limits. The median therefore depends on
+their assumed maximum opening angle of $30^\circ$: with $90^\circ$ it rises to
+$33^{+38}_{-27}$ deg, and the four measurements alone give $6 \pm 1$ deg.
+The band spans a factor of 18 in $f_{\rm beam}$. The lbGRB band is our
+choice, encoding the expectation that BH-engine jets are more tightly
+collimated; \citet{gottlieb2023} adopt the \citet{fong2015} range
+$0.01 \le f_b \le 0.11$ for every class and do not supply a narrower angle.
 (ii) BH spin: BHNS rates are computed on the grid
 $\aBH \in \{0.0, 0.3, 0.5, 0.7, 0.9\}$ with a fiducial $\aBH = 0.5$, and
 marginalized over a spin prior $p(\aBH)$,
@@ -746,20 +750,23 @@ ejecta decomposition $(M_B, M_P, M_R)$ (their Table~3). For each event we draw
 $10^4$ Monte Carlo realizations of the component ejecta masses from split-normal
 posteriors and of the burst duration $T_{50}$ (with log-uniform or log-normal
 priors for the two events lacking a published $T_{50}$). The black-hole-engine
-prediction for the ejecta mass at a given duration follows the
-\citet[their Eqs.~10 and 11]{gottlieb2024} scaling
-$M_{\rm ej} \propto f^{-1}\,E_{\gamma,\rm iso}\,T_{50}^{\,\alpha-1}$, marginalized
-over the jet-structure exponent $\alpha \in [1.5, 2]$ and the ratio
-$f_b/\epsilon_\gamma \in [0.02, 0.71]$ set by the \citet{berger2014} beaming
-and \citet{beniamini2016} radiative-efficiency bounds. The HMNS-engine
-prediction is the thermal disk-wind ejecta $M_{\rm ej} = f_{\rm wind}\,\Mdisk$,
-with $f_{\rm wind} \in [0.2, 0.4]$ spanning the GRMHD wind fractions of
-\citet{radice2018} and $\Mdisk \in [0.01, 0.10]\,\Msun$
-\citep[their Sec.~3.1]{gottlieb2024}. The diagnostic is the residual
-$\log_{10}(M_{\rm obs,wind}/M_{\rm pred,BH})$, which is consistent with zero for a
-black-hole-disk engine and strongly positive for an HMNS-wind engine. This
-comparison is an external consistency check on the engine classes and does not
-feed back into the population classification.
+prediction follows \citet[their Eq.~11]{gottlieb2024},
+$M_{\rm ej} \approx 10^{-3} f_{-1}^{-1}\,(E_{\gamma,\rm iso}/2\times10^{51}\,{\rm erg})\,(T_{50}/{\rm s})^{\alpha-1}\,\Msun$,
+marginalized over the decay index of the accretion rate, $\dot M \propto t^{-\alpha}$
+with $\alpha \in [1.5, 2]$ (their Sec.~2.1), and over
+$f_{-1} = 0.1\,\epsilon_\gamma/f_b$ with the beaming and radiative-efficiency
+bounds of their Eq.~10. For the long and short events $E_{\gamma,\rm iso}$ is
+drawn from a log-normal fit to five long merger GRBs, three of which are the
+long events of the sample; a common shift of this anchor cancels in the
+difference between the two classes, which is the statistic we quote. The
+HMNS-engine prediction is the disk-wind ejecta $M_{\rm ej} = f_{\rm wind}\,\Mdisk$
+with $f_{\rm wind} \in [0.3, 0.4]$, the weak- and strong-field wind fractions of
+\citet[their Sec.~3.1]{gottlieb2024}, and $\Mdisk \in [0.01, 0.10]\,\Msun$, the
+range across which the numerical disk masses collected by \citet{kruger2020}
+switch. The diagnostic is the residual
+$\log_{10}(M_{\rm obs,wind}/M_{\rm pred,BH})$ with $M_{\rm obs,wind} = M_P + M_R$.
+This comparison is an external consistency check on the engine classes and does
+not feed back into the population classification.
 
 
 
@@ -1154,13 +1161,16 @@ prediction.
 \epsscale{1.15}
 \plotone{plots/comparison_fig2.pdf}
 \caption{Engine discriminator for the \citet{rastinejad2024} kilonova-bearing
-GRBs: the ratio of each event's wind-like ejecta to the black-hole-disk
-prediction, versus burst duration. Events on the zero line need no more
-ejecta than a black-hole disk supplies; events in the shaded band require the
-disk-wind enrichment of a hyper-massive remnant. The long-duration events
-cluster near the black-hole expectation while the short-duration events sit
-well above it, inverting the naive duration-to-engine mapping. Open markers
-lack a published duration. \label{fig:engine}}
+GRBs: the ratio of each event's disk-wind ejecta $M_P + M_R$ to the
+black-hole-disk prediction of \citet[Eq.~11]{gottlieb2024}, versus burst
+duration. The dashed line is the black-hole prediction and the grey band a
+factor of 3 about it; the hatched bands are the 68 per cent range of the same
+ratio for the HMNS-engine prediction, pooled over each class. The long events
+lie $+0.55$ dex above the black-hole prediction and the short events $+2.21$
+dex, a separation of $1.66$ dex carried by the $T_{50}^{\alpha-1}$ term; the
+HMNS engine falls short of both classes by about 0.9 dex. GW170817 is shown at
+its observed off-axis energy and at an assumed on-axis $10^{52}$ erg and enters
+no statistic. Open markers lack a published duration. \label{fig:engine}}
 \end{figure}
 
 \subsection{Host-Galaxy Offset} \label{sec:offset2}
