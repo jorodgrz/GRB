@@ -2,7 +2,7 @@
 
 Each helper is exercised against:
 
-- a small hand-built population (E1, E3, E4, E5, E7) so the maths is
+- a small hand-built population (E3, E4, E5, E7) so the maths is
   obvious from the test, and
 - the canonical project constants (E2, E6) so a future refactor that
   silently breaks the convention is caught.
@@ -77,44 +77,6 @@ def test_observed_frame_rate_applies_one_plus_z_factor():
     R_int = np.array([100.0])
     np.testing.assert_allclose(observed_frame_rate(R_int, np.array([1.0])), np.array([50.0]))
     np.testing.assert_allclose(observed_frame_rate(R_int, np.array([3.0])), np.array([25.0]))
-
-
-# ─────────────────────────────────────────────────────────────────────
-# E1: classify_observed_mergers
-# ─────────────────────────────────────────────────────────────────────
-def test_classify_observed_mergers_mass_planes():
-    """Each ejecta-decomposition cell maps to the expected Gottlieb class."""
-    from grb_classify import classify_observed_mergers
-
-    # Five test sources: blue-dominated, mixed, red-dominated, faint,
-    # and intermediate.
-    M_B = np.array([0.04, 0.03, 0.001, 0.001, 0.02])
-    M_P = np.array([0.005, 0.01, 0.005, 0.001, 0.01])
-    M_R = np.array([0.005, 0.04, 0.05, 0.001, 0.025])
-    out = classify_observed_mergers(M_B, M_P, M_R)
-    # Pre-compute f_red expectations:
-    #   0: 0.005 / 0.05  = 0.10  -> blue-dominated
-    #   1: 0.04  / 0.08  = 0.50  -> mixed
-    #   2: 0.05  / 0.056 ~ 0.89  -> red-dominated
-    #   3: total 0.003 -> faint (M_ej < 0.01)
-    #   4: 0.025 / 0.055 ~ 0.45 -> mixed
-    assert out["sbGRB + blue KN"].tolist() == [True, False, False, False, False]
-    assert out["lbGRB + red KN (HMNS)"].tolist() == [False, True, False, False, True]
-    assert out["lbGRB + red KN (disk)"].tolist() == [False, False, True, False, False]
-    assert out["Faint lbGRB"].tolist() == [False, False, False, True, False]
-
-
-def test_classify_observed_mergers_threshold_swap_raises():
-    from grb_classify import classify_observed_mergers
-
-    with pytest.raises(ValueError, match="must exceed"):
-        classify_observed_mergers(
-            np.array([0.01]),
-            np.array([0.01]),
-            np.array([0.01]),
-            red_max_for_blue=0.7,
-            red_min_for_red=0.3,
-        )
 
 
 # ─────────────────────────────────────────────────────────────────────

@@ -1,16 +1,12 @@
-"""Section 2 of grb_main.ipynb: Component Mass Distributions by GRB Class.
+"""Alsing, Silva and Berti (2018) NS-mass remap and ``weighted_hist_pdf``.
 
-Smoke-level invariants on the Alsing, Silva and Berti (2018) double-Gaussian
-NS-mass remap, including that it preserves the ``m1 >= m2`` invariant.  The
-per-class component-mass histograms of Section 2 are drawn from the raw
-COMPAS masses under the cold-stability cut; the remap is a labelled
-systematic only, because it inflates the weight across the Fryer 2012
-baryonic-to-gravitational deficit near 1.7 Msun (Eq. 12-13; Broekgaarden+
-2021 footnote 3) rather than recovering it.  That deficit is confined to the
-delayed engine, which every model except the rapid variation uses.
+The remap is a labelled systematic, not on the science path: it inflates the
+weight across the Fryer 2012 near-1.7 Msun deficit (Eq. 12-13; Broekgaarden+
+2021 footnote 3) rather than recovering it.  These tests pin its mechanics on
+a synthetic sample.  ``weighted_hist_pdf`` feeds the Section 3 and 3b
+delay-time panels.
 
-Reference: Alsing, Silva and Berti (2018), MNRAS 478, 1377 (Table 3 fit);
-Mandel and Muller (2020), MNRAS 499, 3214 (gap motivation).
+Reference: Alsing, Silva and Berti (2018), MNRAS 478, 1377 (Table 3 fit).
 """
 
 from __future__ import annotations
@@ -18,13 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from grb_physics import (
-    M_TOV,
-    NS_REMAP_M_MIN,
-    NS_REMAP_W1,
-    NS_REMAP_W2,
-    remap_ns_masses_double_gaussian,
-)
+from grb_physics import M_TOV, NS_REMAP_M_MIN, remap_ns_masses_double_gaussian
 from grb_plot_style import weighted_hist_pdf
 
 
@@ -81,13 +71,8 @@ def test_remap_closes_artificial_gap_near_1p7(synthetic_pre_remap_ns_masses):
     )
 
 
-def test_alsing_double_gauss_weights_sum_to_one():
-    assert NS_REMAP_W1 + NS_REMAP_W2 == pytest.approx(1.0, rel=1e-6), (NS_REMAP_W1, NS_REMAP_W2)
-
-
-# The block below pins the abundance-weighted normalization contract that
-# the Section 2 component-mass histogram cell of grb_main.ipynb relies on:
-# for mutually exclusive class masks sharing the same population total,
+# Abundance-weighted normalisation contract of weighted_hist_pdf: for
+# mutually exclusive class masks sharing the same population total,
 # the per-class curve areas equal the class weight fractions and jointly
 # integrate to one (modulo out-of-range tails).  Catches both a silent
 # change to the helper and a future bin-range regression that drops area.
@@ -120,8 +105,8 @@ def test_weighted_hist_pdf_abundance_normalization_sums_to_one():
 def test_weighted_hist_pdf_clips_silently_when_bins_miss_support():
     """Documents that data outside [bins[0], bins[-1]] is dropped from the
     numerator but not from ``w_total``; the returned curve therefore
-    integrates to *less than* 1.  Callers (e.g. the Section 2 BNS-q panel)
-    are responsible for choosing bins that cover the full class support.
+    integrates to *less than* 1.  Callers are responsible for choosing bins
+    that cover the full class support.
     """
     rng = np.random.default_rng(1)
     data = rng.uniform(0.0, 10.0, 2000)

@@ -438,110 +438,63 @@ def classify_grid(
 # ═══════════════════════════════════════════════════════════════════════════
 # Formation channel classification (Broekgaarden et al.)
 # ═══════════════════════════════════════════════════════════════════════════
-_NO_EVENT = 9999
-"""Sentinel ordinal for a star that never filled its Roche lobe.  Larger than
-any COMPAS event counter in the Broekgaarden+ 2021 grid (max 7 on Model A)."""
+BROEKGAARDEN21_CHANNEL_CODE = (
+    "https://github.com/FloorBroekgaarden/DCO_FormationChannels/blob/"
+    "2779b913b1090ea9265cd800bfb25f6cbdab114e/Scripts/formation_channels.py"
+)
+"""Reference implementation of the Broekgaarden+ 2021 Sec. 3.1 channels.
+Pinned at the 2021-04 commit; the 2022-07 revision is identical.  The
+2022-09 revision adds a Case A branch that is not part of the paper and
+labels every Case A system "only stable", common envelope or not."""
 
-_CORE_ENVELOPE_TYPES = (3, 4, 5, 6)
-"""Hurley+ 2000 stellar types with a clear core-envelope structure: first
-giant branch, core helium burning, early and thermally pulsing AGB.  The
-Hertzsprung gap (2) is deliberately excluded, since its radiative envelope
-transfers stably and it is the donor of the classic channel I."""
+FORMATION_CHANNEL_INPUTS = (
+    "mt1_star1",
+    "mt1_CE",
+    "mt1_K1",
+    "mt1_K2",
+    "mt2_star2",
+    "mt2_CE",
+    "mt2_K2",
+)
+"""Loader keys ``classify_formation_channels`` reads, for
+``classify_formation_channels(**{k: d[k] for k in FORMATION_CHANNEL_INPUTS})``."""
 
-_MAIN_SEQUENCE_TYPES = (0, 1)
-"""Hurley+ 2000 main-sequence types, the companion in a single-core CE."""
+# Hurley+ 2000 stellar types; 0 and 1 are the main sequence.
+_HG, _FGB, _TPAGB, _HE_MS = 2, 3, 6, 7
 
 
-def classify_formation_channels(
-    *,
-    dblCE,
-    fc_CEE,
-    fc_mt_p1,
-    fc_mt_s1,
-    fc_mt_p1_K1,
-    fc_mt_p1_K2,
-    fc_mt_s1_K1,
-    fc_mt_s1_K2,
-):
-    """Event-sequence formation channel classification.
+def classify_formation_channels(*, mt1_star1, mt1_CE, mt1_K1, mt1_K2, mt2_star2, mt2_CE, mt2_K2):
+    """Broekgaarden+ 2021 (Sec. 3.1) formation channels from the first two
+    mass-transfer episodes.
 
-    Parameters are 1-D arrays over the merging subset.  ``fc_mt_p1`` /
-    ``fc_mt_s1`` are the event ordinals of each star's first Roche-lobe
-    overflow (0 if it never transferred) and ``fc_CEE`` the ordinal of the
-    common envelope, all on the COMPAS event counter.  The four ``_K``
-    arrays are the Hurley+ 2000 stellar types at those first episodes:
-    ``fc_mt_p1_K1`` / ``fc_mt_p1_K2`` are the donor and companion when the
-    primary transfers, ``fc_mt_s1_K2`` / ``fc_mt_s1_K1`` the donor and
-    companion when the secondary does.
+    Reproduces ``BROEKGAARDEN21_CHANNEL_CODE`` system by system.  Inputs are
+    the first (``mt1_*``) and second (``mt2_*``) rows of the COMPAS ``RLOF``
+    group: ``star1`` / ``star2`` say which star overflowed (star 1 is the
+    initially more massive primary), ``CE`` whether the episode became a
+    common envelope, ``K1`` / ``K2`` the Hurley types just before it.
 
-    Broekgaarden+ 2021 Sec. 3.1 keys channels III and IV on the *first* mass
-    transfer phase being a common envelope, so that is what separates them
-    from the classic channel I.  Two things have to be read to establish it,
-    because the archive stores one CE ordinal per system and it is the last
-    one; see the comments on the two ``ce_*_first`` terms.
+    I classic: the primary transfers stably with a core-envelope structure
+      (HG to TPAGB) onto a main-sequence secondary, then the unstripped
+      secondary overflows into a CE.
+    II only stable: as I, but the second episode is stable.
+    III single-core CE: the first episode is a CE from a giant primary
+      (FGB to TPAGB) onto a main-sequence secondary.
+    IV double-core CE: the same with a giant secondary.
+    V other: everything else, including Case A first transfer (their
+      Sec. 3.1.5), a secondary that overflows first, a Hertzsprung-gap donor
+      entering a CE, and systems with no mass transfer.
 
-    Returns
-    -------
-    dict of boolean arrays:
-        'I  Stable MT + CE', 'II  Stable MT only', 'III Single-core CE',
-        'IV  Double-core CE', 'V   Other'
+    The second episode is the second RLOF row whatever it is, so a stable
+    case BB transfer before the secondary's CE also sends a system to V.
     """
-    has_p1 = fc_mt_p1 > 0
-    has_s1 = fc_mt_s1 > 0
-    no_mt = ~has_p1 & ~has_s1
-    had_CE = fc_CEE > 0
+    classic_mt1 = mt1_star1 & ~mt1_CE & (mt1_K1 >= _HG) & (mt1_K1 <= _TPAGB) & (mt1_K2 <= 1)
+    secondary_mt2 = mt2_star2 & (mt2_K2 < _HE_MS)
+    ce_mt1 = mt1_star1 & mt1_CE & (mt1_K1 >= _FGB) & (mt1_K1 <= _TPAGB)
 
-    # Case A donors (donor Hurley K = 0 or 1 at first RLOF) are folded into
-    # I or II based on whether a CE follows, matching Broekgaarden+ 2022
-    # Sec. 3.2 convention: neither main-sequence type is in
-    # _CORE_ENVELOPE_TYPES, so a Case A donor never reaches channel III.
-    first_rlof = np.minimum(
-        np.where(has_p1, fc_mt_p1, _NO_EVENT), np.where(has_s1, fc_mt_s1, _NO_EVENT)
-    )
-
-    # COMPAS logs the common envelope as the event immediately after the RLOF
-    # episode that went dynamically unstable, so a CE that *is* the first mass
-    # transfer sits one ordinal above it.  Testing fc_CEE < first_rlof instead
-    # never fires on the Broekgaarden files (fc_CEE exceeds the first RLOF
-    # ordinal for every system in Models A to T) and silently empties channel
-    # III into channel I: 11.7 per cent of the weighted BHNS population and
-    # 0.1 per cent of BNS on Model A.
-    ce_logged_first = had_CE & ~no_mt & (fc_CEE == first_rlof + 1)
-
-    # Second arm, needed because the archive stores one CE ordinal per system
-    # and it is the *last* one.  Balancing eventCounter against every named
-    # event (mass-transfer episodes, the logged CE, and the supernovae, with
-    # the SN slots counted rather than assumed) leaves exactly one unnamed
-    # event for 10.6 per cent of the Model A BHNS weight, and every one of
-    # those systems has a core-bearing donor transferring onto a main-sequence
-    # companion at its first RLOF.  That is Broekgaarden+ 2021 Sec. 3.1.3
-    # verbatim, and their Sec. 3.1.3 also notes such systems often go on to a
-    # second CE, which is the one fc_CEE ends up holding.  The BNS ledger
-    # balances at 100 per cent with no system in that configuration, which is
-    # what validates the method.  Unlike the ordinal test above this rests on
-    # an inference from the event count, not on a column the archive provides;
-    # it recovers 98.0 per cent of the surplus-carrying systems.
-    from_primary = has_p1 & (fc_mt_p1 == first_rlof)
-    donor_K = np.where(from_primary, fc_mt_p1_K1, fc_mt_s1_K2)
-    companion_K = np.where(from_primary, fc_mt_p1_K2, fc_mt_s1_K1)
-    ce_unlogged_first = (
-        had_CE
-        & ~no_mt
-        & np.isin(donor_K, _CORE_ENVELOPE_TYPES)
-        & np.isin(companion_K, _MAIN_SEQUENCE_TYPES)
-    )
-
-    ce_is_first = ce_logged_first | ce_unlogged_first
-
-    # Single- versus double-core is then COMPAS's own flag.  On Model A it
-    # agrees with "both stars carry a core-envelope structure at the first
-    # RLOF" for 100 per cent of the CE-first BHNS and all but 47 of the BNS.
-    # A main-sequence companion cannot make it double-core, so the second arm
-    # only ever feeds channel III.
-    ch_IV = ce_is_first & (dblCE == 1)
-    ch_III = ce_is_first & (dblCE != 1)
-    ch_II = ~had_CE & ~no_mt
-    ch_I = had_CE & ~ce_is_first & ~no_mt
+    ch_I = classic_mt1 & secondary_mt2 & mt2_CE
+    ch_II = classic_mt1 & secondary_mt2 & ~mt2_CE
+    ch_III = ce_mt1 & (mt1_K2 <= 1)
+    ch_IV = ce_mt1 & (mt1_K2 >= _FGB) & (mt1_K2 <= _TPAGB)
     ch_other = ~(ch_I | ch_II | ch_III | ch_IV)
 
     return {
@@ -619,97 +572,3 @@ def channel_class_crosstab(channel_masks, class_masks, weights, normalise=None):
             f"normalise must be None, 'channel', 'class', or 'total'; got {normalise!r}"
         )
     return crosstab
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Observational classifier (Rastinejad et al. 2024 component decompositions)
-# ═══════════════════════════════════════════════════════════════════════════
-KN_RED_FRAC_BLUE_MAX = 0.30
-"""Boundary between blue-dominated (sbGRB + blue KN) and mixed kilonova
-ejecta in ``classify_observed_mergers``.  CODE HEURISTIC, not a value
-published by Gottlieb (2024) or Rastinejad et al. (2024).  Below this
-red-fraction the kilonova is interpreted as blue-dominated (long-lived
-HMNS engine, no significant red-component lanthanide-rich ejecta)."""
-
-KN_RED_FRAC_RED_MIN = 0.70
-"""Boundary between mixed and red-dominated kilonova ejecta in
-``classify_observed_mergers``.  CODE HEURISTIC; chosen symmetric
-about ``KN_RED_FRAC_BLUE_MAX``.  Above this red-fraction the kilonova
-is interpreted as red-dominated (post-merger disk wind from a prompt-
-collapse remnant)."""
-
-KN_M_EJ_FAINT_MAX = 0.01
-"""Total ejecta-mass threshold below which the source is mapped to
-'Faint lbGRB' [Msun].  Aligned with ``MDISK_SHORT`` (Gottlieb 2023,
-Sec. 4): below 0.01 Msun of available mass there is no engine fuel for
-a bright GRB or a detectable kilonova."""
-
-
-def classify_observed_mergers(
-    M_B,
-    M_P,
-    M_R,
-    red_max_for_blue=KN_RED_FRAC_BLUE_MAX,
-    red_min_for_red=KN_RED_FRAC_RED_MIN,
-    m_ej_faint=KN_M_EJ_FAINT_MAX,
-):
-    """Map Rastinejad et al. (2024) ejecta decompositions to Gottlieb (2024) classes.
-
-    .. warning::
-        This is a phenomenological mapping that uses the kilonova
-        ejecta colour decomposition (M_B blue, M_P purple, M_R red) as
-        a proxy for the Gottlieb (2024) four-class engine taxonomy.
-        The thresholds ``KN_RED_FRAC_BLUE_MAX = 0.30``,
-        ``KN_RED_FRAC_RED_MIN = 0.70``, and ``KN_M_EJ_FAINT_MAX = 0.01``
-        are CODE HEURISTICS, not values published by Gottlieb (2024)
-        or Rastinejad et al. (2024).  Override per-call to test the
-        sensitivity of any class-fraction comparison to the choice.
-
-    Used by ``comparison.ipynb`` to overlay observed-sample class
-    fractions on the model class-fraction predictions.
-
-    Parameters
-    ----------
-    M_B, M_P, M_R : array-like
-        Per-source posterior medians (or single-sample values) of the
-        blue / purple / red kilonova ejecta components [Msun],
-        following the Rastinejad et al. (2024, ApJ 979, 190) Table 3
-        column convention.  Negative or NaN entries are passed through
-        as NaN class labels.
-    red_max_for_blue : float, optional
-        Upper bound on the red fraction to count as 'sbGRB + blue KN'.
-    red_min_for_red : float, optional
-        Lower bound on the red fraction to count as 'lbGRB + red KN
-        (disk)'.  Must satisfy ``red_min_for_red > red_max_for_blue``.
-    m_ej_faint : float, optional
-        Total ejecta below which the source is 'Faint lbGRB' [Msun].
-
-    Returns
-    -------
-    dict of boolean arrays keyed by Gottlieb (2024) class label, plus
-    'M_ej_total' and 'f_red' diagnostic arrays.
-    """
-    if not red_min_for_red > red_max_for_blue:
-        raise ValueError(
-            f"red_min_for_red ({red_min_for_red}) must exceed "
-            f"red_max_for_blue ({red_max_for_blue})."
-        )
-    M_B = np.asarray(M_B, dtype=float)
-    M_P = np.asarray(M_P, dtype=float)
-    M_R = np.asarray(M_R, dtype=float)
-    M_ej = M_B + M_P + M_R
-    f_red = np.where(M_ej > 0, M_R / M_ej, np.nan)
-
-    is_faint = M_ej < m_ej_faint
-    is_blue_dom = (~is_faint) & (f_red < red_max_for_blue)
-    is_red_dom = (~is_faint) & (f_red >= red_min_for_red)
-    is_mixed = (~is_faint) & ~is_blue_dom & ~is_red_dom
-
-    return {
-        "sbGRB + blue KN": is_blue_dom,
-        "lbGRB + red KN (HMNS)": is_mixed,
-        "lbGRB + red KN (disk)": is_red_dom,
-        "Faint lbGRB": is_faint,
-        "M_ej_total": M_ej,
-        "f_red": f_red,
-    }

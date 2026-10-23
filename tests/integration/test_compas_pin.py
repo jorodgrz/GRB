@@ -2,7 +2,7 @@
 
 ``compas_python_utils`` is pinned in ``environment.yml`` to a single
 commit; a STROOPWAFEL weight-extraction bug there would make every
-rate in the manuscript systematically wrong.  The escalating defenses:
+rate in the notebook systematically wrong.  The escalating defenses:
 
 1. ``test_compas_python_utils_imports``: package imports cleanly.
 2. ``test_compas_cosmic_integration_module_imports``: the cosmic-
@@ -68,7 +68,7 @@ def test_find_metallicity_distribution_recovers_known_distribution(bns_a_path):
     The COMPAS Model A HDF5 is used only to read the simulation's
     ``min_logZ_COMPAS`` and ``max_logZ_COMPAS`` window so the upstream
     function is exercised against the same metallicity range the
-    manuscript pipeline uses.  The shape and norm invariants are
+    notebook pipeline uses.  The shape and norm invariants are
     package-internal and would not change with COMPAS data drift; the
     redshift-evolution check is the physics anchor.
     """

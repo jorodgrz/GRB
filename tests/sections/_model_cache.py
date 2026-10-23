@@ -112,13 +112,13 @@ def get_model(letter: str) -> Dict[str, Any]:
         load_bns_with_channels,
         read_expected_local_rate,
     )
-    from grb_physics import M_TOV, cold_stable_ns_mask
+    from grb_physics import M_TOV, cold_stable_bhns_mask, cold_stable_ns_mask
     from grb_rates import (
-        MSSFR_PARAMS_LEVINA26_TNG100,
-        SFR_PARAMS_LEVINA26_TNG100,
         compute_merger_rate,
         dPdlogZ_binned_to_grid,
+        fine_metallicity_grid,
         simulation_star_forming_mass,
+        tng_sfr_and_dPdlogZ,
     )
 
     bns = load_bns_with_channels(path=bns_path, expected_model=letter)
@@ -143,16 +143,18 @@ def get_model(letter: str) -> Dict[str, Any]:
     w_full_bns = float(bns["weights"].sum())
     w_full_bhns = float(bhns["weights"].sum())
     bns = filter_systems(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
-    keep_bhns = cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV)
+    keep_bhns = cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV)
     bhns = filter_systems(bhns, keep_bhns)
-    bhns_ch = filter_systems(bhns_ch, cold_stable_ns_mask(bhns_ch["M_NS"], m_tov=M_TOV))
+    bhns_ch = filter_systems(
+        bhns_ch, cold_stable_bhns_mask(bhns_ch["M_BH"], bhns_ch["M_NS"], m_tov=M_TOV)
+    )
     dropped_bns = 1.0 - bns["weights"].sum() / w_full_bns
     dropped_bhns = 1.0 - bhns["weights"].sum() / w_full_bhns
 
     # bhns and bhns_ch must be the same underlying sample; the shared
     # columns are bit-identical because both loaders filter on
     # mergesInHubbleTimeFlag and stream the same HDF5, and the cut above is a
-    # deterministic function of M_NS.  This is a cheap invariant on the cache
+    # deterministic function of (M_BH, M_NS).  This is a cheap invariant on the cache
     # contract.
     for _k in ("weights", "metallicity", "delay_time", "M_BH", "M_NS"):
         assert np.array_equal(bhns[_k], bhns_ch[_k]), (
@@ -162,18 +164,14 @@ def get_model(letter: str) -> Dict[str, Any]:
     redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
         max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
     )
-    sfr = fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
-    dPdlogZ, mets, p_draw = fci.find_metallicity_distribution(
-        redshifts,
-        min_logZ_COMPAS=float(np.log(METALLICITY_GRID[0])),
-        max_logZ_COMPAS=float(np.log(METALLICITY_GRID[-1])),
-        **MSSFR_PARAMS_LEVINA26_TNG100,
-    )
-    p_draw = float(p_draw)
+    # The notebook fiducial (Section 4): the TNG100-1 S(Z, z) table on
+    # FastCosmicIntegration's fine ln Z grid, with no analytic MSSFR anywhere.
+    mets, p_draw = fine_metallicity_grid(float(METALLICITY_GRID[0]), float(METALLICITY_GRID[-1]))
+    sfr, dPdlogZ = tng_sfr_and_dPdlogZ(redshifts, mets, box="TNG100-1")
 
     # COMPAS ClassMSSFR bin convention: the top and bottom simulated
     # metallicities absorb the star formation off the ends of the grid.  Without
-    # this, 28.5 percent of z = 0 star formation above the Z = 0.03 ceiling is
+    # this, 22.1 percent of z = 0 star formation above the Z = 0.03 ceiling is
     # assigned to nothing at all, and the shortfall is class-dependent.
     Z_grid_53 = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
     dPdlogZ = dPdlogZ_binned_to_grid(dPdlogZ, mets, Z_grid_53, p_draw)

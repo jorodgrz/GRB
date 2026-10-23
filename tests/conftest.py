@@ -134,14 +134,6 @@ def compas_file(request) -> str:
     return _skip_if_absent(request.param)
 
 
-@pytest.fixture(scope="session")
-def rastinejad_csv_path() -> str:
-    path = _data_path("rastinejad_2024.csv")
-    if not os.path.exists(path):
-        pytest.skip("data/rastinejad_2024.csv not present")
-    return path
-
-
 _AUTO_FOLDER_MARKERS = {
     "unit": "unit",
     "sections": None,  # populated per-file from filename below

@@ -19,6 +19,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from grb_io import LOADER_SELECTION
+
 # Class / channel keys, mirrored from the Section 11 scan cell.  Kept here so
 # a rename in the notebook that breaks the figure cells trips a test.
 BNS_CLASS_KEYS = [
@@ -86,7 +88,7 @@ def test_bhns_class_fractions_sum_to_one():
 def test_channel_class_crosstab_rows_are_conditional_distributions():
     """``normalise='channel'`` rows sum to 1 for every non-empty channel.
 
-    Section 11.5 plots P(class | channel); each populated row must be a
+    The 11.0b scan caches P(class | channel); each populated row must be a
     proper conditional distribution.
     """
     from grb_classify import channel_class_crosstab
@@ -150,7 +152,7 @@ def test_grid_scan_npz_schema_roundtrip(tmp_path):
         eos_names=np.array(["APR4", "SFHo", "LS220", "DD2"]),
         bns_class_keys=np.array(BNS_CLASS_KEYS),
         bhns_class_keys=np.array(BHNS_CLASS_KEYS),
-        norm=np.array("M_SF_SIM"),
+        norm=np.array(f"M_SF_SIM|TNG100-1 S(Z,z) data|{LOADER_SELECTION}"),
         ch_keys=np.array(CH_KEYS),
     )
     d = np.load(path, allow_pickle=False)
@@ -158,8 +160,7 @@ def test_grid_scan_npz_schema_roundtrip(tmp_path):
     assert d["frac_bns"].shape == (n_models, 4)
     assert d["frac_bhns"].shape == (n_models, 3)
     assert d["crosstab_bns"].shape == (n_models, 5, 4)
-    # The EOS sweep is per class, not a pre-summed HMNS fraction: Section 11.6
-    # sums the two HMNS classes itself, so the cached array keeps all four.
+    # The EOS sweep is cached per class, not as a pre-summed HMNS fraction.
     assert d["eos_frac_bns"].shape == (n_models, n_eos, 4)
     assert d["eos_frac_bns_kcons"].shape == (n_models, n_eos, 4)
     assert d["eos_names"].shape[0] == n_eos
@@ -186,43 +187,9 @@ def test_cached_grid_scan_on_disk_matches_the_schema():
     assert d["eos_frac_bns"].shape == (n, d["eos_names"].shape[0], len(BNS_CLASS_KEYS))
     assert d["eos_frac_bns_kcons"].shape == d["eos_frac_bns"].shape
     # Section 11.1 and 11.0b reject a cache written under the retired per-model
-    # w_000 normalisation.
-    assert str(d["norm"]) == "M_SF_SIM"
-
-
-def test_section_11_6_hmns_fraction_is_a_subset_sum_in_range():
-    """Section 11.6 sums two of the four classes, so its matrix stays in [0, 1].
-
-    The HMNS-engine fraction is the pair of classes leaving a surviving
-    massive remnant.  Both must be real class keys, and summing a subset of a
-    partition can never leave the unit interval.
-    """
-    hmns = ["sbGRB + blue KN", "lbGRB + red KN (HMNS)"]
-    assert set(hmns) <= set(BNS_CLASS_KEYS)
-
-    rng = np.random.default_rng(11)
-    frac = rng.dirichlet(np.ones(len(BNS_CLASS_KEYS)), size=(20, 4))
-    idx = [BNS_CLASS_KEYS.index(k) for k in hmns]
-    hm = frac[:, :, idx].sum(-1)
-    assert hm.shape == (20, 4)
-    assert np.all((hm >= 0.0) & (hm <= 1.0))
-
-
-def test_section_11_6_eos_columns_are_ordered_soft_to_stiff():
-    """The 11.6 columns are labelled by R_1.4, so EOS_MODELS must stay ordered.
-
-    The figure prints each EOS's radius under its column and the caption warns
-    that the response tracks M_TOV instead; both readings assume the column
-    order is the radius order carried by EOS_MODELS.
-    """
-    from grb_physics import EOS_MODELS
-
-    radii = [EOS_MODELS[e]["R_1p4"] for e in ["APR4", "SFHo", "LS220", "DD2"]]
-    assert radii == sorted(radii)
-    # The caption's point: M_TOV is not monotonic in R_1.4, which is why APR4
-    # outranks SFHo and LS220 in HMNS fraction.
-    mtov = [EOS_MODELS[e]["M_TOV"] for e in ["APR4", "SFHo", "LS220", "DD2"]]
-    assert mtov != sorted(mtov)
+    # w_000 normalisation or integrated over the Levina fit instead of the
+    # TNG100-1 S(Z, z) table.
+    assert str(d["norm"]) == f"M_SF_SIM|TNG100-1 S(Z,z) data|{LOADER_SELECTION}"
 
 
 def test_scan_suffix_order_matches_registry():
@@ -245,14 +212,13 @@ def test_bns_channel_fractions_sum_to_one():
     rng = np.random.default_rng(11)
     n = 5000
     chan = classify_formation_channels(
-        dblCE=rng.integers(0, 2, size=n),
-        fc_CEE=rng.integers(0, 4, size=n).astype(float),
-        fc_mt_p1=rng.integers(0, 4, size=n).astype(float),
-        fc_mt_s1=rng.integers(0, 4, size=n).astype(float),
-        fc_mt_p1_K1=rng.integers(0, 14, size=n),
-        fc_mt_p1_K2=rng.integers(0, 14, size=n),
-        fc_mt_s1_K1=rng.integers(0, 14, size=n),
-        fc_mt_s1_K2=rng.integers(0, 14, size=n),
+        mt1_star1=rng.integers(0, 2, size=n).astype(bool),
+        mt1_CE=rng.integers(0, 2, size=n).astype(bool),
+        mt1_K1=rng.integers(-1, 14, size=n),
+        mt1_K2=rng.integers(-1, 14, size=n),
+        mt2_star2=rng.integers(0, 2, size=n).astype(bool),
+        mt2_CE=rng.integers(0, 2, size=n).astype(bool),
+        mt2_K2=rng.integers(-1, 14, size=n),
     )
     w = rng.uniform(0.1, 5.0, size=n)
     masks = np.stack([chan[k] for k in CH_KEYS])

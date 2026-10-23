@@ -3,8 +3,9 @@ Cosmic merger rate computation and related utilities.
 
 compute_merger_rate is a thin chunked accumulator around
 ``compas_python_utils.cosmic_integration.FastCosmicIntegration.find_formation_and_merger_rates``;
-the MSSFR fiducial is the Levina+ 2026 (arXiv:2601.20202) skewed log-normal
-fit to IllustrisTNG TNG100-1 (Table 1).  Also includes Kroupa (2001) IMF
+the fiducial S(Z, z) is the IllustrisTNG TNG100-1 star formation table
+itself (``tng_sfr_and_dPdlogZ``), with the Levina+ 2026 (arXiv:2601.20202)
+Table 1 analytic fits kept for comparison.  Also includes Kroupa (2001) IMF
 verification, per-system rate weights, EOS / spin / beaming sweeps, and
 LVK observed-rate constants (``OBSERVED_SGRB_RATES`` for beaming-limited
 sGRB rates, ``LVK_GWTC5_LOCAL_RATES`` for intrinsic GW merger rates from
@@ -38,8 +39,11 @@ from grb_physics import (
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-# MSSFR / SFR parameters: Levina+ 2026 IllustrisTNG TNG100-1 fiducial
+# MSSFR / SFR parameters: Levina+ 2026 analytic fits to IllustrisTNG
 # ═══════════════════════════════════════════════════════════════════════════
+# Comparison only.  The fiducial is the TNG100-1 S(Z, z) table these were fit
+# to (``tng_sfr_and_dPdlogZ``); the fits put 34 percent more star formation at
+# z = 0 than the table and overstate the share above Z = 0.03 (Section 4d).
 # Madau and Dickinson (2014) functional form S(z) = a (1+z)^b / (1 + ((1+z)/c)^d),
 # best-fit to TNG100-1 in Levina+ 2026 Table 1.
 SFR_PARAMS_LEVINA26_TNG100 = {
@@ -223,6 +227,83 @@ def dPdlogZ_binned_to_grid(dPdlogZ, metallicities, metallicityGrid, p_draw):
     return out
 
 
+def fine_metallicity_grid(Z_min_COMPAS, Z_max_COMPAS, min_logZ=-12.0, max_logZ=0.0, step_logZ=0.01):
+    """The fine ln Z grid and ``p_draw`` of ``find_metallicity_distribution``, with no MSSFR.
+
+    Reproduces FastCosmicIntegration's ``metallicities`` and
+    ``p_draw_metallicity`` exactly (same ``np.arange`` in ln Z, same flat-in-
+    ln Z draw probability over the COMPAS range), so the TNG table can be put
+    on that grid without evaluating, and discarding, an analytic MSSFR.
+    """
+    metallicities = np.exp(np.arange(min_logZ, max_logZ + step_logZ, step_logZ))
+    p_draw = 1.0 / (np.log(Z_max_COMPAS) - np.log(Z_min_COMPAS))
+    return metallicities, p_draw
+
+
+def tng_sfr_and_dPdlogZ(redshifts, metallicities, box="TNG100-1", path=None):
+    """SFR(z) and pointwise dP/dlnZ taken from the IllustrisTNG S(Z, z) table itself.
+
+    Drop-in replacement for the ``find_sfr`` / ``find_metallicity_distribution``
+    pair: ``sfr`` is in Msun/yr/Gpc^3 on ``redshifts`` and ``dPdlogZ`` is per
+    d(ln Z) on the ``metallicities`` fine grid, normalised to one at every
+    redshift, so it goes through ``dPdlogZ_binned_to_grid`` unchanged.  This
+    is the distribution Levina+ 2026 (arXiv:2601.20202) fit in their Table 1,
+    without the fit.
+
+    Within a snapshot the cumulative star formation is interpolated linearly
+    in ln Z between the 0.167 dex bin edges, i.e. star formation is spread
+    uniformly in ln Z inside each TNG bin; every fine cell then holds the
+    exact share of the bins it overlaps and nothing is created or lost.  Star
+    formation below the first fine cell (Z < e^-12) is folded into it.
+    Between snapshots each bin is interpolated linearly in z.
+
+    The Levina repository's ``FastCosmicIntegration-withdata.py`` is not used:
+    its data branch weights systems by the ``Metals`` column instead of
+    ``Sfr`` and normalises it by an L2 norm, which at z = 0 in TNG100-1
+    over-weights Z = 1e-4 by a factor 18 and under-weights Z = 0.03 by 50.
+    """
+    from grb_io import load_tng_sfrd
+
+    d = load_tng_sfrd(box=box, path=path)
+    z_tng, ln_edges, sfrd = d["z"], np.log(d["Z_edges"]), d["sfrd"]
+    redshifts = np.asarray(redshifts, dtype=float)
+    if redshifts.min() < z_tng[0] - 1e-12 or redshifts.max() > z_tng[-1]:
+        raise ValueError(
+            f"redshifts span [{redshifts.min()}, {redshifts.max()}], outside the "
+            f"{box} snapshots [{z_tng[0]:.3g}, {z_tng[-1]:.3g}]"
+        )
+    per_bin = np.column_stack(
+        [np.interp(redshifts, z_tng, sfrd[:, j]) for j in range(sfrd.shape[1])]
+    )
+    sfr = per_bin.sum(axis=1)
+
+    ln_fine = np.log(np.asarray(metallicities, dtype=float))
+    step = float(ln_fine[1] - ln_fine[0])
+    if not np.allclose(np.diff(ln_fine), step, rtol=1e-6, atol=1e-12):
+        raise ValueError("metallicities must be uniform in ln Z")
+    cum_edges = np.concatenate([np.zeros((sfr.size, 1)), np.cumsum(per_bin, axis=1)], axis=1)
+    cells = np.append(ln_fine, ln_fine[-1] + step)
+    cum_cells = np.stack([np.interp(cells, ln_edges, row) for row in cum_edges])
+    P = np.diff(cum_cells, axis=1)
+    P[:, 0] += cum_cells[:, 0]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        dPdlogZ = np.where(sfr[:, None] > 0, P / (step * sfr[:, None]), 0.0)
+    return sfr, dPdlogZ
+
+
+def tng_sfr_callable(box="TNG100-1", path=None):
+    """SFR(z) in Msun/yr/Gpc^3 from the TNG S(Z, z) table, as a function of z.
+
+    Linear in z between snapshots, the same interpolation as
+    ``tng_sfr_and_dPdlogZ``; for the helpers that take ``sfr=`` as a callable.
+    """
+    from grb_io import load_tng_sfrd
+
+    d = load_tng_sfrd(box=box, path=path)
+    z_tng, total = d["z"], d["sfrd"].sum(axis=1)
+    return lambda z: np.interp(z, z_tng, total)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Cosmic integration: chunked wrapper around FastCosmicIntegration
 # ═══════════════════════════════════════════════════════════════════════════
@@ -337,15 +418,27 @@ def compute_merger_rate(
     return total
 
 
-def smooth_rate_curve(R, sigma=30):
+def smooth_rate_curve(R, sigma=30, edge="reflect"):
     """Display-only Gaussian smoothing of an R(z) curve.
 
     Applies the same kernel ``compute_merger_rate`` uses internally.
-    The reflective boundary inflates the smoothed value at index 0
-    (z = 0) on any rising R(z), so use this only on plotted copies and
-    quote R(z=0) from the unsmoothed array.
+    With ``edge='reflect'`` (the default, and scipy's) the boundary
+    inflates the smoothed value at index 0 (z = 0) on any rising R(z);
+    at sigma = 30 on the dz = 0.01 grid the kernel is 0.3 wide in z and
+    the lift is 30 percent or more.  ``edge='linear'`` pads the z = 0 end
+    by point reflection through R[0] (2 R[0] - R[k]), which leaves a
+    locally linear curve unbiased, so a figure that places z = 0 markers
+    against the curve should use it.  Quote R(z=0) from the unsmoothed
+    array either way.
     """
-    return _gaussian_filter1d(np.asarray(R, dtype=float), sigma=sigma)
+    R = np.asarray(R, dtype=float)
+    if edge == "reflect":
+        return _gaussian_filter1d(R, sigma=sigma)
+    if edge != "linear":
+        raise ValueError(f"edge must be 'reflect' or 'linear', got {edge!r}")
+    n_pad = min(int(4 * sigma), R.size - 1)
+    padded = np.concatenate([2.0 * R[0] - R[1 : n_pad + 1][::-1], R])
+    return _gaussian_filter1d(padded, sigma=sigma)[n_pad:]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -533,8 +626,9 @@ def per_system_rate_weights(
     Parameters
     ----------
     dPdlogZ : 2-D array, shape (n_z, n_metallicities)
-        Pointwise metallicity PDF from FCI's
-        ``find_metallicity_distribution``.
+        The same array passed to ``compute_merger_rate`` (on the science
+        path, the ``dPdlogZ_binned_to_grid`` output); the weights then sum
+        to that rate at ``z_target``.
     metallicities : 1-D array
         Metallicity grid that ``dPdlogZ`` is evaluated on.
     """
@@ -555,17 +649,25 @@ def per_system_rate_weights(
     w_all = np.asarray(COMPAS_weights, dtype=float)
 
     out = np.zeros(len(w_all))
-    t_form = t_merge - delays
-    valid = t_form >= t_min
+
+    # FCI keeps merger-rate slots j < K_i - 1, where K_i counts the redshift
+    # slots whose formation time t_j - d_i lies after time_first_SF (np.digitize
+    # on the decreasing time_of_formation), so it drops the last admissible
+    # slot; K_i = n_z keeps the whole row.  Reproduced so the weights sum to
+    # compute_merger_rate at every z_target, not only away from first SF.
+    times_desc = np.asarray(times, dtype=float)
+    t_asc = times_desc[::-1]
+    K = n_z - np.searchsorted(t_asc, time_first_SF + delays, side="right")
+    K = np.where(n_z == K, n_z + 1, K)
+    valid = (j_target < K - 1) & (t_merge - delays >= t_min)
     if not valid.any():
         return out
 
     idx = np.where(valid)[0]
-    z_form = times_to_z(t_form[idx])
-    z_idx_float = z_form / redshift_step
-    z_lo = np.clip(np.floor(z_idx_float).astype(np.int64), 0, n_z - 1)
-    z_hi = np.clip(z_lo + 1, 0, n_z - 1)
-    frac = z_idx_float - np.floor(z_idx_float)
+    z_form = times_to_z(t_merge - delays[idx])
+    # FCI takes the formation rate at the next redshift slot up, ceil(z / dz),
+    # not an interpolation between slots.
+    z_form_idx = np.clip(np.ceil(z_form / redshift_step).astype(np.int64), 0, n_z - 1)
 
     # FCI uses np.digitize(Z, metallicities) for the column index; mirror that
     # here so subset rate weights match the per-binary formation-rate row of
@@ -573,14 +675,7 @@ def per_system_rate_weights(
     cols = np.digitize(Z_arr[idx], metallicities)
     cols = np.clip(cols, 0, dPdlogZ.shape[1] - 1)
 
-    dP_lo = dPdlogZ[z_lo, cols]
-    dP_hi = dPdlogZ[z_hi, cols]
-    w = w_all[idx]
-
-    inv_p_draw = 1.0 / p_draw
-    f_lo = n_formed[z_lo] * dP_lo * inv_p_draw * w
-    f_hi = n_formed[z_hi] * dP_hi * inv_p_draw * w
-    out[idx] = f_lo * (1.0 - frac) + f_hi * frac
+    out[idx] = n_formed[z_form_idx] * dPdlogZ[z_form_idx, cols] / p_draw * w_all[idx]
     return out
 
 
@@ -708,15 +803,15 @@ def calibrate_mean_mass_evolved(
 # ═══════════════════════════════════════════════════════════════════════════
 # Right edge of the metallicity axis used for display binning, log10(Z / Zsun).
 # The COMPAS STROOPWAFEL prior extends to Z = 0.03 ~ 2.1 Zsun, where the
-# simulated grid runs out while cosmic star formation does not: under the
-# Levina+ 2026 (arXiv:2601.20202) Azzalini skew-log-normal fit to TNG100-1
-# (Table 1) the mean birth metallicity is <Z>(z=0) = 0.0247 = 1.74 Zsun, and
-# 28.5 percent of z = 0 star formation (16.2 percent SFR-weighted over
-# 0 < z < 10) falls above the grid ceiling entirely.  Solar is a round place to
+# simulated grid runs out while cosmic star formation does not: in the
+# TNG100-1 S(Z, z) table (``tng_sfr_and_dPdlogZ``) the mean birth metallicity
+# is <Z>(z=0) = 0.0211 = 1.49 Zsun, and 22.1 percent of z = 0 star formation
+# (14.6 percent over 0 < z < 10, weighted by SFR per unit redshift) falls above
+# the grid ceiling entirely (the Levina+ 2026 fit gives 0.0247, 28.5 and 16.2).  Solar is a round place to
 # stop a yield plot, not a place where the star formation stops.
 #
 # This is therefore a display convention, not a relevance cut and not a noise
-# cut: 64.8 percent of z = 0 cosmic star formation (39.8 percent SFR-weighted)
+# cut: 59.6 percent of z = 0 cosmic star formation (36.5 percent SFR-weighted)
 # sits above Zsun, and the Model A merging samples hold 13.4 percent (BNS) and
 # 1.7 percent (BHNS) of their STROOPWAFEL weight there, at Kish effective
 # sample sizes of 4.7e4 and 4.3e3.  Any figure that applies the truncation
@@ -765,6 +860,125 @@ def kish_effective_sample_size(weights):
     if s2 == 0.0:
         return 0.0
     return float(s1 * s1 / s2)
+
+
+def _truncated_powerlaw_log_moments(beta, u):
+    """Mean and variance of y = ln(t / t_lo) for dp/dt ~ t^(beta - 1) on [t_lo, t_lo e^u].
+
+    In y the density is proportional to exp(beta y) on [0, u].  The series
+    branch avoids the 1/beta cancellation near the log-uniform case.
+    """
+    x = beta * u
+    if abs(x) < 1e-6:
+        return u / 2.0 + beta * u * u / 12.0, u * u / 12.0
+    with np.errstate(over="ignore"):
+        mean = u / -np.expm1(-x) - 1.0 / beta
+        var = 1.0 / beta**2 - u * u / (4.0 * np.sinh(x / 2.0) ** 2)
+    return float(mean), float(var)
+
+
+def powerlaw_index_mle(t, w, t_lo, t_hi):
+    """Weighted maximum-likelihood index alpha of dp/dt ~ t^alpha on [t_lo, t_hi].
+
+    Fits the unbinned sample, so unlike a least-squares line through histogram
+    bins the result does not move with the bin grid.  The weighted score
+    equation reduces to matching the weighted mean of ln t to the truncated
+    power law's, which is monotonic in alpha and solved by bracketing.
+
+    Returns ``(alpha, sigma)``.  ``sigma`` is the sandwich (robust) error of the
+    weighted estimating equation sum w_i (y_i - E[y]) = 0 with y = ln(t/t_lo),
+
+        sigma^2 = sum w_i^2 (y_i - E[y])^2 / (sum w_i * Var[y])^2,
+
+    which is the correct sampling variance for importance-weighted data.  The
+    Fisher form with a Kish effective N assumes the model is exact and the
+    weights independent of y; on the Section 3c tails it ran 10 to 40 percent
+    below a bootstrap, where the sandwich agrees with it.  It is the sampling
+    error of the index only and says nothing about whether a single power law
+    describes the window.  Returns ``(nan, nan)`` when fewer than three
+    systems fall in the window.
+    """
+    from scipy.optimize import brentq
+
+    t = np.asarray(t, dtype=float)
+    w = np.asarray(w, dtype=float)
+    if not 0.0 < t_lo < t_hi:
+        raise ValueError(f"need 0 < t_lo < t_hi, got {t_lo}, {t_hi}")
+    m = (t >= t_lo) & (t <= t_hi)
+    if m.sum() < 3 or w[m].sum() <= 0.0:
+        return np.nan, np.nan
+    u = np.log(t_hi / t_lo)
+    y = np.log(t[m] / t_lo)
+    wm = w[m]
+    y_bar = np.average(y, weights=wm)
+    beta_max = 1e3 / u
+    beta = brentq(lambda b: _truncated_powerlaw_log_moments(b, u)[0] - y_bar, -beta_max, beta_max)
+    mean_y, var_y = _truncated_powerlaw_log_moments(beta, u)
+    sigma = np.sqrt(np.sum(wm**2 * (y - mean_y) ** 2)) / (wm.sum() * var_y)
+    return float(beta - 1.0), float(sigma)
+
+
+def cosmic_sf_mass_fraction_per_grid_point(
+    metallicityGrid,
+    Z_range,
+    sfr_params=None,
+    mssfr_params=None,
+    max_redshift=10.0,
+    redshift_step=0.01,
+    tng_box=None,
+):
+    """Fraction of all cosmic star formation that falls in each COMPAS metallicity cell.
+
+    The SFR and metallicity distribution come from the TNG S(Z, z) table named
+    by ``tng_box`` (``tng_sfr_and_dPdlogZ``), TNG100-1 when neither it nor the
+    fit parameters are given.  Pass ``sfr_params`` and ``mssfr_params``
+    instead to use an analytic fit.
+
+    F_i = int SFR(z) P_i(z) dt / int SFR(z) dt over 0 < z < ``max_redshift``,
+    with P_i(z) the ClassMSSFR bin probability of grid point i
+    (``dPdlogZ_binned_to_grid``: log-midpoint interior edges, outer edges at
+    ``MSSFR_Z_LOWER_LIMIT`` / ``MSSFR_Z_UPPER_LIMIT``, so the end points absorb
+    the tails).  Same FastCosmicIntegration calls and Planck 2015 cosmology as
+    Section 4.  The simulation weights every grid point equally (1/N each,
+    ``metallicity_prior_mass_fraction``); multiplying a system's STROOPWAFEL
+    weight by N * F_i turns a grid-averaged distribution into the one the
+    Universe's star formation would produce, integrated over all formation
+    epochs.  Sums to 1.
+    """
+    from astropy.cosmology import Planck15
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        calculate_redshift_related_params,
+        find_metallicity_distribution,
+        find_sfr,
+    )
+
+    grid = np.asarray(metallicityGrid, dtype=float)
+    z, _, times, _, _, _ = calculate_redshift_related_params(
+        max_redshift=max_redshift, redshift_step=redshift_step, cosmology=Planck15
+    )
+    use_fit = sfr_params is not None or mssfr_params is not None
+    if use_fit and tng_box is not None:
+        raise ValueError("pass either tng_box or the fit parameters, not both")
+    if use_fit and (sfr_params is None or mssfr_params is None):
+        raise ValueError("an analytic fit needs both sfr_params and mssfr_params")
+    if not use_fit and tng_box is None:
+        tng_box = "TNG100-1"
+    if use_fit:
+        dP, fine, p_draw = find_metallicity_distribution(
+            z,
+            min_logZ_COMPAS=np.log(Z_range[0]),
+            max_logZ_COMPAS=np.log(Z_range[1]),
+            **mssfr_params,
+        )
+        sfr = find_sfr(z, **sfr_params)
+    else:
+        fine, p_draw = fine_metallicity_grid(Z_range[0], Z_range[1])
+        sfr, dP = tng_sfr_and_dPdlogZ(z, fine, box=tng_box)
+    binned = dPdlogZ_binned_to_grid(dP, fine, grid, p_draw)
+    P = binned[:, np.digitize(grid, fine)] / (grid.size * p_draw)
+    dt = np.abs(np.gradient(times))
+    F = (sfr[:, None] * P * dt[:, None]).sum(axis=0)
+    return F / F.sum()
 
 
 # Fractional tolerance on the check that a metallicity grid really is the
@@ -1918,12 +2132,18 @@ density (see the Section 6c comparison in ``grb_main.ipynb``).
 """
 
 
-F_SKY_BAT = 1.0 / 6.0
-"""Effective Swift-BAT sky fraction Omega_BAT / 4pi.  Ghirlanda et al.
-(2016, A&A 594, A84) Sec. 3.2 adopt this value for the observed-sGRB rate
-integral; consistent with the Lien et al. (2016, ApJ 829, 7) Swift-BAT
-triggered-GRB catalog effective coverage.  Combined with T_SWIFT_BRIGHT_YR
-in the Section 6c counts-to-rate-density conversion.
+# Du et al. 2025, ApJL 987, L13, Table 2: Swift/BAT field of view 1.40 sr.
+F_SKY_BAT = 1.40 / (4.0 * np.pi)
+"""Swift-BAT sky fraction Omega_BAT / 4pi = 0.1114.
+
+The 1.40 sr field of view is the one Du et al. (2025) adopt in their
+Table 2 for the Swift/BAT rate they publish, taken from the NASA BAT
+instrument description.  Using it keeps the Section 6c BRIGHT points on the
+same footing as the Du et al. marker on the same axis.  No duty-cycle
+factor is applied, following Du et al., who instead describe their rates
+as lower limits for the time lost to the South Atlantic Anomaly (Sec. 4.4).
+The earlier value, 1/6, was attributed to Ghirlanda et al. (2016), who
+keep Delta Omega / 4pi symbolic (their Eq. 4) and quote no BAT value.
 """
 
 
@@ -2363,7 +2583,7 @@ def wanderman_piran_2015_Rz(
 # Modern short-GRB rate literature (replaces WP15 as the Section 6c overlay).
 #
 # Three papers, three roles:
-#   - Pracchia and Salafia (2026), A&A, arXiv:2601.03861: intrinsic rho_dot(z)
+#   - Pracchia and Salafia (2026), A&A 710, A267, arXiv:2601.03861: intrinsic rho_dot(z)
 #     as a numerical convolution of Madau and Fragos (2017) SFR with a DTD
 #     kernel; four Table 2 posteriors (ELF/QUSJ x power-law/log-normal DTD).
 #     Their preferred short delays (⟨tau_d⟩ = 77-116 Myr) invert the WP15
@@ -2390,19 +2610,30 @@ MADAU_FRAGOS_2017_SFR = {
 }
 
 # Pracchia and Salafia (2026) Table 2 posteriors on log10(R_0 / Gpc^-3 yr^-1)
-# with 90 percent credible intervals.  R_0 is the SGRB local rate density
+# with 90 percent credible intervals, read from arXiv:2601.03861v2 (5 Aug
+# 2026), the accepted A&A 710, A267 text.  v1 (7 Jan 2026) printed a different
+# power-law fit (ELF tau_min 0.08 Gyr, alpha_tau 3.33; QUSJ 0.03 Gyr, 3.08), so
+# a figure quoting those numbers is built on the superseded preprint.  R_0 is the SGRB local rate density
 # defined by their Eq. 4 (intrinsic source-frame; Eq. 6 is the posterior
 # PDF that infers it).  ELF = empirical luminosity function (broken
 # power-law, their Eq. 12); QUSJ = quasi-universal structured jet
 # (Salafia et al. 2023).  DTD parameters follow Eq. 7 (power-law) and
-# Eq. 8 (log-normal).  Mean delay time is Table 2 col. "⟨tau_d⟩" in Myr.
+# Eq. 8 (log-normal).  Table 2 has no mean-delay column: ``mean_tau_d_Myr``
+# is the median <tau_d> (their Eq. 17) quoted in the Sec. 3 text.
 PRACCHIA_SALAFIA_2026_ELF_POWERLAW = {
     "log10_R0": 1.92,
     "log10_R0_plus90": 1.50,
     "log10_R0_minus90": 0.92,
     "alpha_tau": 3.20,
+    "alpha_tau_plus90": 1.60,
+    "alpha_tau_minus90": 1.55,
     "tau_min_Gyr": 0.03,
+    "tau_min_plus90_Gyr": 0.28,
+    "tau_min_minus90_Gyr": 0.02,
     "mean_tau_d_Myr": 77,
+    # Sec. 3: median and 90 percent credible range of <tau_d> (their Eq. 17).
+    "mean_tau_d_plus90_Myr": 619,
+    "mean_tau_d_minus90_Myr": 65,
 }
 PRACCHIA_SALAFIA_2026_ELF_LOGNORMAL = {
     "log10_R0": 2.60,
@@ -2417,8 +2648,14 @@ PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW = {
     "log10_R0_plus90": 0.67,
     "log10_R0_minus90": 0.63,
     "alpha_tau": 3.33,
+    "alpha_tau_plus90": 1.48,
+    "alpha_tau_minus90": 1.59,
     "tau_min_Gyr": 0.04,
+    "tau_min_plus90_Gyr": 0.33,
+    "tau_min_minus90_Gyr": 0.03,
     "mean_tau_d_Myr": 105,
+    "mean_tau_d_plus90_Myr": 665,
+    "mean_tau_d_minus90_Myr": 93,
 }
 PRACCHIA_SALAFIA_2026_QUSJ_LOGNORMAL = {
     "log10_R0": 2.25,
@@ -2433,6 +2670,127 @@ PRACCHIA_SALAFIA_2026_ROWS = {
     "ELF_lognormal": PRACCHIA_SALAFIA_2026_ELF_LOGNORMAL,
     "QUSJ_powerlaw": PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW,
     "QUSJ_lognormal": PRACCHIA_SALAFIA_2026_QUSJ_LOGNORMAL,
+}
+
+
+# Power-law delay-time distributions dP/dtau ~ tau^-alpha_tau (tau >= tau_min)
+# inferred for short GRBs, for comparison with the Section 3c model indices.
+# ``alpha_tau`` is positive by the literature convention; the model index is
+# alpha = -alpha_tau.  ``ci`` names the interval the bounds describe.  Every
+# entry is read from the paper itself (papers/: Pracchia_2026, Gao_2025,
+# Zevin_2022, DAvanzo_2014, Wanderman_2014, Maoz_2024, Chen_2024).  The two later
+# summaries this table was first built from were each wrong on one point:
+# Ghirlanda et al. (2016) Sec. 3 give D'Avanzo et al.'s cutoff as 20 Myr where
+# the paper uses 10 Myr, and Pracchia and Salafia (2026) Sec. 1 round W15's
+# 0.81 to ~1 and Zevin et al.'s 90 percent interval to "1.5 - 2.2".
+SGRB_DTD_POWERLAW_LITERATURE = {
+    "PS26_ELF": {
+        "label": "Pracchia & Salafia 2026 (ELF)",
+        "alpha_tau": PRACCHIA_SALAFIA_2026_ELF_POWERLAW["alpha_tau"],
+        "alpha_tau_lo": 3.20 - 1.55,
+        "alpha_tau_hi": 3.20 + 1.60,
+        "ci": "90%",
+        "tau_min_Gyr": PRACCHIA_SALAFIA_2026_ELF_POWERLAW["tau_min_Gyr"],
+        "source": "primary: Table 2 (arXiv v2 = A&A 710, A267)",
+    },
+    "PS26_QUSJ": {
+        "label": "Pracchia & Salafia 2026 (QUSJ)",
+        "alpha_tau": PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW["alpha_tau"],
+        "alpha_tau_lo": 3.33 - 1.59,
+        "alpha_tau_hi": 3.33 + 1.48,
+        "ci": "90%",
+        "tau_min_Gyr": PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW["tau_min_Gyr"],
+        "source": "primary: Table 2 (arXiv v2 = A&A 710, A267)",
+    },
+    "Gao25": {
+        # Fermi/GBM sample with pseudo-redshifts; tau_min fixed at 10 Myr
+        # (their Eq. 5 setup, following Luo+ 2022), so it is an assumption,
+        # not a fit.
+        "label": "Gao 2025",
+        "alpha_tau": 2.04,
+        "alpha_tau_lo": 2.04 - 0.48,
+        "alpha_tau_hi": 2.04 + 0.44,
+        "ci": "1 sigma",
+        "tau_min_Gyr": 0.01,
+        "source": "primary: Table 2, power-law row",
+    },
+    "Zevin22": {
+        # 68 short-GRB host galaxies (arXiv:2206.02814, abstract): alpha =
+        # -1.83 +0.35 -0.39 and t_min = 184 +67 -79 Myr, medians and 90
+        # percent credible intervals; t_max > 7.95 Gyr at 99 percent.
+        "label": "Zevin+ 2022",
+        "alpha_tau": 1.83,
+        "alpha_tau_lo": 1.83 - 0.35,
+        "alpha_tau_hi": 1.83 + 0.39,
+        "ci": "90%",
+        "tau_min_Gyr": 0.184,
+        "tau_min_range_Gyr": (0.184 - 0.079, 0.184 + 0.067),
+        "source": "primary: abstract and Sec. 3",
+    },
+    "DAvanzo14": {
+        # Not a fit.  Sec. 4.2.4 compares f(t) ~ t^n for n = -1.5, -1, -0.5
+        # with an initial cutoff of 10 Myr against their complete Swift sample:
+        # -0.5 is "firmly discarded", -1 "still acceptable", -1.5 "favoured".
+        "label": "D'Avanzo+ 2014",
+        "alpha_tau": 1.5,
+        "alpha_tau_lo": np.nan,
+        "alpha_tau_hi": np.nan,
+        "alpha_tau_acceptable": 1.0,
+        "ci": "favoured of three tested",
+        "tau_min_Gyr": 0.01,
+        "source": "primary: Sec. 4.2.4",
+    },
+    "WP15": {
+        # Table 2, power-law delay with SFR1: f(tau) = tau^-alpha_t for
+        # tau > 20 Myr (Sec. 3.1).  Their likelihood ratio for this model against
+        # the preferred log-normal delay is 0.038, so it is the disfavoured
+        # alternative; with SFR2 the index is 0.71 +0.21 -0.23.
+        "label": "Wanderman & Piran 2015",
+        "alpha_tau": 0.81,
+        "alpha_tau_lo": 0.81 - 0.24,
+        "alpha_tau_hi": 0.81 + 0.25,
+        "ci": "1 sigma",
+        "tau_min_Gyr": 0.02,
+        "source": "primary: Table 2 (power-law, SFR1)",
+    },
+    "MN25_slow": {
+        # Galactic DNS pulsars, not short GRBs (Maoz & Nakar 2025, ApJ 982, 179;
+        # arXiv:2406.08630, Sec. 2): two-population fit, 1 sigma statistical
+        # only.  The slow population is a minority of Hubble-time mergers.
+        "label": "Maoz & Nakar 2025 (DNS, slow)",
+        "alpha_tau": 1.1,
+        "alpha_tau_lo": 1.1 - 0.15,
+        "alpha_tau_hi": 1.1 + 0.15,
+        "ci": "1 sigma",
+        "tau_min_Gyr": np.nan,
+        "source": "primary: abstract and Sec. 2",
+    },
+    "MN25_fast": {
+        # Same fit: the fast population outnumbers the slow one by A ~ 10-100
+        # among DNSs that merge within a Hubble time, so it is the one the
+        # authors tie to short GRBs and kilonovae.
+        "label": "Maoz & Nakar 2025 (DNS, fast)",
+        "alpha_tau": 1.9,
+        "alpha_tau_lo": 1.9 - 0.4,
+        "alpha_tau_hi": 1.9 + 0.4,
+        "ci": "1 sigma",
+        "tau_min_Gyr": np.nan,
+        "source": "primary: abstract and Sec. 2",
+    },
+    "Chen25": {
+        # Milky Way disk-star [Eu/Fe] (arXiv:2402.03696 v3, Sec. 4): alpha <=
+        # -2.0 and t_min <= 40 Myr at 90 percent confidence, under the
+        # assumption that BNS mergers are the only r-process site; the paper's
+        # own resolution is a second star-formation-tracking channel.
+        "label": "Chen+ 2025 (r-process)",
+        "alpha_tau": np.nan,
+        "alpha_tau_lo": 2.0,
+        "alpha_tau_hi": np.nan,
+        "ci": "lower limit",
+        "tau_min_Gyr": np.nan,
+        "tau_min_max_Gyr": 0.04,
+        "source": "primary: abstract and Sec. 4 (BNS-only enrichment)",
+    },
 }
 
 # Du et al. (2025), ApJL 987, L13, Table 5.  Observer-frame local rates
@@ -2484,8 +2842,12 @@ GAO25_LOCAL_RATE_FERMI_GBM = {
 }
 
 
-def _madau_fragos_2017_sfr(z, params=MADAU_FRAGOS_2017_SFR):
-    """Madau and Fragos (2017) cosmic SFR density, arbitrary normalisation."""
+def madau_fragos_2017_sfr(z, params=MADAU_FRAGOS_2017_SFR):
+    """Madau and Fragos (2017) cosmic SFR density, arbitrary normalisation.
+
+    The star formation history Pracchia & Salafia (2026, Eq. 10) assume.  Use
+    it only to reproduce their analysis; the project's own rates use the
+    TNG100-1 table (``tng_sfr_callable``)."""
     a = params["a_psi"]
     b = params["b_psi"]
     zp = params["z_psi"]
@@ -2653,7 +3015,7 @@ def pracchia_salafia_2026_Rz(
         if valid.sum() < 2:
             return 0.0
         z_prime = np.interp(t_zprime[valid], t_LB_grid, z_p_grid)
-        sfr = _madau_fragos_2017_sfr(z_prime)
+        sfr = madau_fragos_2017_sfr(z_prime)
         integrand = P_tau[valid] * sfr
         return float(np.trapezoid(integrand, tau_grid[valid]))
 
@@ -2680,4 +3042,130 @@ def pracchia_salafia_2026_Rz(
         "R_best": R_best.reshape(out_shape) if out_shape else R_best[0],
         "R_rate_lo": R_rate_lo.reshape(out_shape) if out_shape else R_rate_lo[0],
         "R_rate_hi": R_rate_hi.reshape(out_shape) if out_shape else R_rate_hi[0],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Forward model of Pracchia & Salafia (2026) for a model population.  Their
+# alpha_tau is not a measured delay distribution but the parameter of Eq. 9,
+# rho_dot(z) ~ int psi(z') P(t_LB(z') - t_LB(z)) dt, fitted to the redshift and
+# flux distribution of observed short GRBs with psi fixed to Madau and Fragos
+# (2017).  Section 3c puts a population-synthesis model through the same
+# equation and asks which (alpha_tau, tau_min) it would return.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Look-back grid for the convolution; matches pracchia_salafia_2026_Rz.
+_PS26_Z_PRIME_MAX = 15.0
+_PS26_TAU_MAX_GYR = 14.0
+
+
+def pracchia_salafia_2026_powerlaw_shapes(z, alpha_tau, tau_min_Gyr, *, sfr, n_tau=500):
+    """R(z)/R(0) of Pracchia & Salafia (2026) Eq. 9 for power-law DTDs.
+
+    P(tau) ~ tau^-alpha_tau above ``tau_min_Gyr`` (their Eq. 7), convolved
+    with ``sfr``, a callable of redshift with no default (their own choice is
+    ``madau_fragos_2017_sfr``, Eq. 10), on the same tau grid as
+    ``pracchia_salafia_2026_Rz``.  Takes 1-D
+    grids of ``alpha_tau`` and ``tau_min_Gyr`` and returns an array shaped
+    (n_alpha, n_tau_min, n_z), so a whole fitting grid costs one pass.
+    """
+    z = np.atleast_1d(np.asarray(z, dtype=float))
+    alpha = np.atleast_1d(np.asarray(alpha_tau, dtype=float))
+    tmins = np.atleast_1d(np.asarray(tau_min_Gyr, dtype=float))
+    zp = np.linspace(0.0, _PS26_Z_PRIME_MAX, 6000)
+    tlb = _lookback_time_Gyr(zp)
+    t_out = np.interp(z, zp, tlb)
+    out = np.empty((alpha.size, tmins.size, z.size))
+    for j, tmin in enumerate(tmins):
+        tau = np.logspace(np.log10(tmin), np.log10(_PS26_TAU_MAX_GYR), n_tau)
+        kernel = tau[None, :] ** -alpha[:, None]  # unnormalised; cancels in R/R(0)
+        for k, t0 in enumerate(t_out):
+            ok = t0 + tau <= tlb[-1]
+            psi = np.zeros_like(tau)
+            psi[ok] = sfr(np.interp(t0 + tau[ok], tlb, zp))
+            out[:, j, k] = np.trapezoid(kernel * psi[None, :], tau, axis=1)
+    return out / out[:, :, :1]
+
+
+def sfr_delay_convolution_shape(z, t_delay_Gyr, w, *, sfr):
+    """R(z)/R(0) for a weighted sample of delay times convolved with ``sfr``.
+
+    ``sfr`` is a callable of redshift and has no default: pass
+    ``tng_sfr_callable()`` for the project's star formation history or
+    ``madau_fragos_2017_sfr`` to reproduce Pracchia & Salafia (2026).
+
+    The discrete form of Eq. 9 with the model's own delay distribution in place
+    of a parametric one: each system formed at the look-back time t_LB(z) +
+    t_delay contributes w * sfr there.  Systems whose formation time would
+    precede z' = 15 contribute nothing.  No metallicity dependence, matching
+    Pracchia & Salafia's single universal DTD.
+    """
+    z = np.atleast_1d(np.asarray(z, dtype=float))
+    t = np.asarray(t_delay_Gyr, dtype=float)
+    w = np.asarray(w, dtype=float)
+    zp = np.linspace(0.0, _PS26_Z_PRIME_MAX, 6000)
+    tlb = _lookback_time_Gyr(zp)
+    rate = np.empty(z.size)
+    for k, t0 in enumerate(np.interp(z, zp, tlb)):
+        ok = t0 + t <= tlb[-1]
+        rate[k] = np.sum(w[ok] * sfr(np.interp(t0 + t[ok], tlb, zp)))
+    if rate[0] <= 0.0:
+        raise ValueError("no weight contributes at z = 0")
+    return rate / rate[0]
+
+
+def fit_pracchia_salafia_2026_powerlaw(z, shape, alpha_tau_grid, tau_min_grid_Gyr, *, sfr):
+    """(alpha_tau, tau_min) of the Eq. 9 power law that best matches ``shape``.
+
+    Least squares in ln R(z)/R(0) over the supplied redshifts.  This fits the
+    rate shape only; Pracchia & Salafia also fit luminosities and model
+    detector selection, so the returned values are what their DTD family would
+    need to reproduce a rate history, not a mock of their full inference.
+    ``at_tau_min_floor`` flags a best fit on the lowest tau_min of the grid,
+    where tau_min is unconstrained rather than measured.  ``sfr`` has no
+    default (see ``sfr_delay_convolution_shape``).
+    """
+    y = np.log(np.asarray(shape, dtype=float))
+    grid = np.log(
+        pracchia_salafia_2026_powerlaw_shapes(z, alpha_tau_grid, tau_min_grid_Gyr, sfr=sfr)
+    )
+    chi2 = ((grid - y[None, None, :]) ** 2).sum(axis=-1)
+    i, j = np.unravel_index(int(np.argmin(chi2)), chi2.shape)
+    return {
+        "alpha_tau": float(np.asarray(alpha_tau_grid)[i]),
+        "tau_min_Gyr": float(np.asarray(tau_min_grid_Gyr)[j]),
+        "rms_lnR": float(np.sqrt(chi2[i, j] / y.size)),
+        "at_tau_min_floor": j == 0,
+    }
+
+
+def merger_weighted_mean_delay_Gyr(t_delay_Gyr, w, *, sfr, z_max=8.0, n_z=161):
+    """Mean delay of the systems merging at z = 0 and of all mergers since ``z_max``.
+
+    For mergers at redshift z each system's weight is w * sfr at its formation
+    time, so the mean delay falls with z (the young Universe has no room for
+    long delays).  De Santis et al. (2026, App. H) quote this kind of average
+    for population-synthesis models; it differs from the mean of the intrinsic
+    delay distribution, sum(w t) / sum(w), which is what Pracchia & Salafia
+    (2026) Eq. 17 define.  ``all_mergers`` weights each redshift by its merger
+    rate per unit cosmic time, R(z) |dt|.  ``sfr`` is a callable of redshift
+    with no default; the project's is ``tng_sfr_callable()``.
+    """
+    t = np.asarray(t_delay_Gyr, dtype=float)
+    w = np.asarray(w, dtype=float)
+    zp = np.linspace(0.0, _PS26_Z_PRIME_MAX, 6000)
+    tlb = _lookback_time_Gyr(zp)
+    t_out = np.interp(np.linspace(0.0, z_max, n_z), zp, tlb)
+    rate = np.zeros(n_z)
+    mean = np.full(n_z, np.nan)
+    for k, t0 in enumerate(t_out):
+        ok = t0 + t <= tlb[-1]
+        ww = w[ok] * sfr(np.interp(t0 + t[ok], tlb, zp))
+        if ww.sum() > 0.0:
+            rate[k], mean[k] = ww.sum(), np.sum(ww * t[ok]) / ww.sum()
+    dt = np.abs(np.gradient(t_out))
+    good = rate > 0.0
+    return {
+        "at_z0": float(mean[0]),
+        "all_mergers": float(np.sum((mean * rate * dt)[good]) / np.sum((rate * dt)[good])),
     }

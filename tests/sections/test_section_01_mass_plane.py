@@ -476,7 +476,7 @@ def test_bhns_region_labels_land_in_the_class_they_name(repo_root):
     d_ns, d_bh = np.meshgrid(np.array([-0.01, 0.0, 0.01]), np.array([-0.05, 0.0, 0.05]))
     for key, ((m_ns, m_bh), text) in anchors.items():
         assert 1.25 <= m_ns <= 2.2, f"{text!r} anchor is off the M_NS axis"
-        assert 2.5 <= m_bh <= 18.0, f"{text!r} anchor is off the M_BH axis"
+        assert 2.5 <= m_bh <= 40.0, f"{text!r} anchor is off the M_BH axis"
         cls = classify_bhns(m_bh + d_bh.ravel(), m_ns + d_ns.ravel(), a_BH=A_BH_FID)
         assert cls[key].all(), (
             f"BHNS label {text!r} is filed under {key!r} but its anchor "

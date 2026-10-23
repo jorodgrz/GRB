@@ -106,25 +106,20 @@ def _build_setup(bns_a_path):
 
 def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
     """Run the FastCosmicIntegration plumbing at a chosen redshift step
-    using Levina+ 2026 TNG100-1 parameters.
+    over the notebook fiducial S(Z, z), the TNG100-1 table.
     """
     from grb_rates import (
-        MSSFR_PARAMS_LEVINA26_TNG100,
-        SFR_PARAMS_LEVINA26_TNG100,
         dPdlogZ_binned_to_grid,
+        fine_metallicity_grid,
         simulation_star_forming_mass,
+        tng_sfr_and_dPdlogZ,
     )
 
     redshifts, _, times, time_first_SF, _, _ = setup.fci.calculate_redshift_related_params(
         max_redshift=max_redshift, redshift_step=redshift_step, cosmology=setup.Planck15
     )
-    sfr = setup.fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
-    dPdlogZ, mets, p_draw = setup.fci.find_metallicity_distribution(
-        redshifts,
-        min_logZ_COMPAS=np.log(setup.Z_prior[0]),
-        max_logZ_COMPAS=np.log(setup.Z_prior[1]),
-        **MSSFR_PARAMS_LEVINA26_TNG100,
-    )
+    mets, p_draw = fine_metallicity_grid(*setup.Z_prior)
+    sfr, dPdlogZ = tng_sfr_and_dPdlogZ(redshifts, mets, box="TNG100-1")
     # COMPAS ClassMSSFR bin convention (notebook Section 4): the top and
     # bottom grid points absorb the star formation off the ends of the
     # simulated grid, which the pointwise lookup drops entirely.
@@ -192,7 +187,7 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
     ``calibrate_mean_mass_evolved`` (back-derives MEAN_MASS_EVOLVED
     from the Neijssel z=0 anchor).
 
-    The science-path forward pass uses Levina TNG100-1 and so produces
+    The science-path forward pass uses the TNG100-1 S(Z, z) table and so produces
     a different absolute R(z=0); that is a physics outcome, not a
     calibration drift, and is exercised in
     ``test_section_07_*`` integration tests instead.

@@ -43,7 +43,7 @@ def test_rate_quoting_cells_compute_unsmoothed():
 
     A cell that both calls ``compute_merger_rate`` and indexes a rate
     array at ``iz0`` is a quote path: its z = 0 values reach printed
-    summaries, Table 4/5 of the manuscript, or the LVK comparison
+    summaries, or the LVK comparison
     panels.  Each such call must pass ``smooth_sigma=0`` explicitly;
     cosmetic smoothing belongs on display copies via
     ``smooth_rate_curve``.

@@ -42,6 +42,7 @@ from grb_io import (
 )
 from grb_physics import (
     M_TOV,
+    cold_stable_bhns_mask,
     cold_stable_ns_mask,
     remap_ns_marginal,
     remap_ns_masses_double_gaussian,
@@ -87,7 +88,7 @@ def bns_modelA_fiducial(bns_a_path):
 def bhns_modelA_fiducial(bhns_a_path):
     """Section 0's fiducial BHNS sample: raw M_NS + cold-stability cut on the NS."""
     bhns = load_bhns_with_channels(path=bhns_a_path)
-    bhns = filter_systems(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
+    bhns = filter_systems(bhns, cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV))
     return {
         "M_BH": bhns["M_BH"],
         "M_NS": bhns["M_NS"],
@@ -363,21 +364,24 @@ def test_bhns_histogram_is_actually_weighted_on_real_sample(bhns_modelA_fiducial
 
 
 @pytest.mark.requires_data
-def test_bhns_offpanel_fraction_above_18_msun(bhns_modelA_fiducial):
-    """The BHNS panel crops M_BH at 18 Msun; the off-panel weight is small.
+def test_bhns_panel_contains_the_full_sample(bhns_modelA_fiducial):
+    """The BHNS panel's M_BH axis reaches 40 Msun and crops nothing.
 
-    The caption states that ~1.2 percent of the weighted sample lies
-    above the 18 Msun crop.  Pin that fraction so a future change to
-    the axis limit (or a data swap) that moved a large fraction of the
-    population off-panel would break here and force a caption update.
+    The caption states that the heaviest BH (37.1 Msun) is on the panel and
+    that 1.2 percent of the weight lies above 18 Msun.  Pin both so a data
+    swap that pushed systems past the axis, or moved the tail weight, forces
+    a caption update.
     """
     BH = bhns_modelA_fiducial["M_BH"]
     w = bhns_modelA_fiducial["weights"]
-    off = float(w[BH > 18.0].sum() / w.sum())
-    assert 0.010 <= off <= 0.015, (
-        f"Off-panel weight fraction above M_BH = 18 Msun is {off:.4f}; "
-        f"expected in [0.010, 0.015].  Update the panel crop and the "
-        f"caption's stated off-panel fraction together."
+    assert BH.max() <= 40.0, (
+        f"Heaviest BH is {BH.max():.1f} Msun, above the 40 Msun panel edge; "
+        f"raise M1_HI_BHNS and update the caption."
+    )
+    tail = float(w[BH > 18.0].sum() / w.sum())
+    assert 0.010 <= tail <= 0.015, (
+        f"Weight fraction above M_BH = 18 Msun is {tail:.4f}; "
+        f"expected in [0.010, 0.015] as the caption states."
     )
 
 

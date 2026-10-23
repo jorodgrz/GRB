@@ -20,6 +20,8 @@ import os
 import numpy as np
 import pytest
 
+from grb_io import LOADER_SELECTION
+
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 _NB_PATH = os.path.join(_REPO_ROOT, "grb_main.ipynb")
@@ -98,7 +100,7 @@ def test_section_6d_cache_shape_and_content():
     non-negative, with the normalisation stamp and class keys the cell
     checks for."""
     d = np.load(_CACHE, allow_pickle=False)
-    assert str(d["norm"]) == "M_SF_SIM"
+    assert str(d["norm"]) == f"M_SF_SIM|TNG100-1 S(Z,z) data|{LOADER_SELECTION}"
     assert [str(k) for k in d["class_keys"]] == CLASS_KEYS
     R = d["R_class"]
     assert R.shape == (20, 4, d["redshifts"].size)

@@ -12,9 +12,10 @@ on synthetic input.  This file adds:
 - both additivity tripwires (sum-over-channels and sum-over-classes)
   evaluated on the live Model A pipeline,
 - three literature anchors on the per-class channel composition
-  (Channel II essentially empty in BNS per Broekgaarden+ 2022 CE
-  picture; Channels III + V together essentially empty; dominant
-  channel per class is in {I, IV} under the fiducial alpha_CE = 1),
+  (Channel II essentially empty in BNS, the CE requirement of
+  Broekgaarden+ 2026 Sec. 4.1; Channels III + V together a few percent
+  at most; dominant channel per class is in {I, IV} under the fiducial
+  alpha_CE = 1),
 - a per-(class, channel) ``R(z = 0)`` regression pin so a future
   change to the COMPAS commit, the NS remap, the Levina+ 2026 MSSFR,
   or the calibration chain trips with a clear message.
@@ -23,8 +24,8 @@ Marker stack: ``requires_data`` + ``requires_compas`` + ``slow``.
 
 References: Gottlieb et al. (2024), arXiv:2411.13657 (four-class
 scheme); Broekgaarden et al. (2021), arXiv:2103.02608, Sec. 5
-(channels I-V); Broekgaarden et al. (2022), arXiv:2112.05763,
-Sec. 4.2 (BNS CE picture).
+(channels I-V); Broekgaarden et al. (2026), arXiv:2606.05322,
+Sec. 4.1 (BNS formation requires a CE).
 """
 
 from __future__ import annotations
@@ -40,7 +41,11 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from grb_classify import classify_bns_2024, classify_formation_channels  # noqa: E402
+from grb_classify import (  # noqa: E402
+    FORMATION_CHANNEL_INPUTS,
+    classify_bns_2024,
+    classify_formation_channels,
+)
 from grb_rates import compute_merger_rate  # noqa: E402
 from tests.sections._model_cache import get_model as _get_model  # noqa: E402
 
@@ -58,36 +63,37 @@ _CHANNEL_KEYS = [
     "V   Other",
 ]
 
-# Per-(class, channel) R(z = 0) in Gpc^-3 yr^-1 for Model A under
-# Levina+ 2026 TNG100-1 MSSFR + Planck 2015 cosmology, computed with
+# Per-(class, channel) R(z = 0) in Gpc^-3 yr^-1 for Model A under the
+# TNG100-1 S(Z, z) table + Planck 2015 cosmology, computed with
 # ``smooth_sigma = 0`` (matches the cache contract; the notebook cell
 # uses the default ``smooth_sigma = 30`` cosmetic Gaussian, which biases
-# z = 0 upward by ~30% via the reflective boundary).  Pinned against the
-# project's COMPAS commit ``81722d4``.  Channels not listed here have
-# zero population in this run (Channels III and V are empty for BNS;
-# Channel II is empty for BNS by the Broekgaarden+ 2022 CE picture)
-# and are handled by ``_assert_pinned`` with a 1e-3 absolute tolerance.
+# z = 0 upward by ~30% via the reflective boundary).  Channels follow
+# Broekgaarden+ 2021 Sec. 3.1 as reproduced in ``classify_formation_channels``
+# (re-pinned 2026-10-21; the earlier pins predated the TNG100-1 table and
+# no longer matched under either classifier).  Channel II is empty for
+# BNS; V holds the ~1 percent whose first transfer is not from the primary
+# onto a main-sequence star.  Zero cells use a 1e-3 absolute tolerance.
 _R0_PINS_BNS = {
-    ("sbGRB + blue KN", "I  Stable MT + CE"): 10.3378,
+    ("sbGRB + blue KN", "I  Stable MT + CE"): 9.17802,
     ("sbGRB + blue KN", "II  Stable MT only"): 0,
-    ("sbGRB + blue KN", "III Single-core CE"): 0.0357908,
-    ("sbGRB + blue KN", "IV  Double-core CE"): 21.9003,
-    ("sbGRB + blue KN", "V   Other"): 0,
-    ("lbGRB + red KN (HMNS)", "I  Stable MT + CE"): 3.15915,
+    ("sbGRB + blue KN", "III Single-core CE"): 0.00171074,
+    ("sbGRB + blue KN", "IV  Double-core CE"): 16.8199,
+    ("sbGRB + blue KN", "V   Other"): 0.0506895,
+    ("lbGRB + red KN (HMNS)", "I  Stable MT + CE"): 2.80164,
     ("lbGRB + red KN (HMNS)", "II  Stable MT only"): 0,
-    ("lbGRB + red KN (HMNS)", "III Single-core CE"): 0.0035502,
-    ("lbGRB + red KN (HMNS)", "IV  Double-core CE"): 3.91778,
-    ("lbGRB + red KN (HMNS)", "V   Other"): 0,
-    ("lbGRB + red KN (disk)", "I  Stable MT + CE"): 1.18067,
+    ("lbGRB + red KN (HMNS)", "III Single-core CE"): 0.000252245,
+    ("lbGRB + red KN (HMNS)", "IV  Double-core CE"): 2.98641,
+    ("lbGRB + red KN (HMNS)", "V   Other"): 0.0595495,
+    ("lbGRB + red KN (disk)", "I  Stable MT + CE"): 0.98727,
     ("lbGRB + red KN (disk)", "II  Stable MT only"): 0,
-    ("lbGRB + red KN (disk)", "III Single-core CE"): 0.000479847,
-    ("lbGRB + red KN (disk)", "IV  Double-core CE"): 3.25663,
-    ("lbGRB + red KN (disk)", "V   Other"): 0,
-    ("Faint lbGRB", "I  Stable MT + CE"): 0.0335034,
+    ("lbGRB + red KN (disk)", "III Single-core CE"): 0,
+    ("lbGRB + red KN (disk)", "IV  Double-core CE"): 2.70721,
+    ("lbGRB + red KN (disk)", "V   Other"): 0.115166,
+    ("Faint lbGRB", "I  Stable MT + CE"): 0.0271007,
     ("Faint lbGRB", "II  Stable MT only"): 0,
-    ("Faint lbGRB", "III Single-core CE"): 0.00256846,
-    ("Faint lbGRB", "IV  Double-core CE"): 3.07977,
-    ("Faint lbGRB", "V   Other"): 0,
+    ("Faint lbGRB", "III Single-core CE"): 0,
+    ("Faint lbGRB", "IV  Double-core CE"): 2.59722,
+    ("Faint lbGRB", "V   Other"): 0.00439234,
 }
 
 
@@ -131,16 +137,7 @@ def _build_per_cell_rates(mod):
     )
 
     classes = classify_bns_2024(bns["m1"], bns["m2"])
-    channels = classify_formation_channels(
-        dblCE=bns["dblCE"],
-        fc_CEE=bns["fc_CEE"],
-        fc_mt_p1=bns["fc_mt_p1"],
-        fc_mt_s1=bns["fc_mt_s1"],
-        fc_mt_p1_K1=bns["fc_mt_p1_K1"],
-        fc_mt_p1_K2=bns["fc_mt_p1_K2"],
-        fc_mt_s1_K1=bns["fc_mt_s1_K1"],
-        fc_mt_s1_K2=bns["fc_mt_s1_K2"],
-    )
+    channels = classify_formation_channels(**{k: bns[k] for k in FORMATION_CHANNEL_INPUTS})
 
     def _R(mask):
         if not mask.any():
@@ -252,7 +249,7 @@ def test_section_06b_all_cells_nonnegative_everywhere(bns_class_channel_rates):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 4. Channel II contributes negligibly to every BNS class (Broekgaarden+ 2022)
+# 4. Channel II contributes negligibly to every BNS class (Broekgaarden+ 2026)
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
@@ -260,7 +257,7 @@ def test_section_06b_all_cells_nonnegative_everywhere(bns_class_channel_rates):
 def test_section_06b_channel_II_negligible_in_every_BNS_class(bns_class_channel_rates):
     """f_II / f_total < 1e-2 in every BNS class at z = 0.
 
-    Anchor: Broekgaarden et al. (2022) arXiv:2112.05763, Sec. 4.2.  BNS
+    Anchor: Broekgaarden et al. (2026) arXiv:2606.05322, Sec. 4.1.  BNS
     progenitors must shrink the orbit by a CE episode to merge within a
     Hubble time, so the "stable MT only" channel is essentially empty
     for BNS in Model A (alpha_CE = 1, Fryer+ 2012 delayed engine).  A
@@ -277,7 +274,7 @@ def test_section_06b_channel_II_negligible_in_every_BNS_class(bns_class_channel_
         f_II = float(R_cell[cl]["II  Stable MT only"][iz0]) / R_total
         assert f_II < 1e-2, (
             f"Channel II is non-negligible in {cl!r}: "
-            f"f_II = {f_II:.3e} >= 1e-2 (Broekgaarden+ 2022 CE picture)"
+            f"f_II = {f_II:.3e} >= 1e-2 (Broekgaarden+ 2026 Sec. 4.1)"
         )
 
 
@@ -288,13 +285,14 @@ def test_section_06b_channel_II_negligible_in_every_BNS_class(bns_class_channel_
 @pytest.mark.requires_compas
 @pytest.mark.slow
 def test_section_06b_channels_III_V_together_negligible(bns_class_channel_rates):
-    """(f_III + f_V) / f_total < 1e-2 in every BNS class at z = 0.
+    """(f_III + f_V) / f_total < 5e-2 in every BNS class at z = 0.
 
-    Same anchor family as Channel II: Channels III (single-core CE) and
-    V (catch-all "Other") carry no measurable BNS weight under the
-    fiducial Model A prescription.  The CH_PLOT legend filter in
-    [grb_main.ipynb] Section 6b drops both from the legend; this test
-    pins the underlying numerical fact, not just the visual choice.
+    Single-core CE (III) carries almost no BNS weight under the fiducial
+    Model A prescription.  V holds the systems Broekgaarden+ 2021 Sec. 3.1.5
+    puts in "Other", here the ~1 percent whose first transfer is from the
+    secondary or onto an evolved companion; it is largest in the
+    lbGRB + red KN (disk) class at 3.0 percent.  The 5 percent ceiling is a
+    CODE HEURISTIC tripwire, not a literature value.
     """
     R_cell = bns_class_channel_rates["R_cell"]
     R_per_class = bns_class_channel_rates["R_per_class"]
@@ -305,9 +303,9 @@ def test_section_06b_channels_III_V_together_negligible(bns_class_channel_rates)
             continue
         f_III = float(R_cell[cl]["III Single-core CE"][iz0]) / R_total
         f_V = float(R_cell[cl]["V   Other"][iz0]) / R_total
-        assert (f_III + f_V) < 1e-2, (
+        assert (f_III + f_V) < 5e-2, (
             f"Channels III + V are non-negligible in {cl!r}: "
-            f"f_III + f_V = {f_III + f_V:.3e} >= 1e-2"
+            f"f_III + f_V = {f_III + f_V:.3e} >= 5e-2"
         )
 
 

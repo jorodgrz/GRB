@@ -29,8 +29,6 @@ from grb_plot_style import (
     CLASS_LABELS,
     CLASS_LABELS_SHORT,
     CLASS_PALETTE,
-    COMPONENT_PALETTE,
-    ENGINE_PALETTE,
     MODEL_PALETTE,
     apply_apj_rcparams,
 )
@@ -97,15 +95,6 @@ def test_channel_palette_covers_broekgaarden_channels_I_to_V():
     assert CHANNEL_PALETTE["IV"].lower() == "#ef4444"
     distinct = {v.lower() for v in CHANNEL_PALETTE.values()}
     assert len(distinct) == len(CHANNEL_PALETTE), "channel colours are not distinct"
-
-
-def test_engine_and_component_palettes_locked():
-    """comparison.ipynb BH/HMNS engine and ejecta-composition palettes."""
-    assert ENGINE_PALETTE["lb"].lower() == "#c0392b"
-    assert ENGINE_PALETTE["sb"].lower() == "#1565c0"
-    assert ENGINE_PALETTE["gw"].lower() == "#555555"
-    assert set(COMPONENT_PALETTE) == {"R", "P", "B"}
-    assert COMPONENT_PALETTE["R"].lower() == "#c0392b"
 
 
 def _classifier_class_keys():
@@ -351,7 +340,7 @@ def test_per_dex_helper_gaps_empty_bins_and_skips_empty_masks():
 
 
 def test_per_dex_helper_preserves_within_class_additivity():
-    """Section 3b relies on channel curves summing to the per-class total."""
+    """Per-dex curves of a partition of a class sum to the curve of the class."""
     import numpy as np
 
     from grb_plot_style import weighted_hist_pdf_per_dex
@@ -520,3 +509,59 @@ def test_plot_gated_curve_marker_applies_to_solid_and_faded():
     plt.close(fig)
 
     assert shapes == {"^"}, f"marker not carried through every state: {shapes}"
+
+
+def test_weighted_kde_per_dex_matches_exact_reflected_kernel_sum():
+    """The binned KDE equals a direct weighted Gaussian sum with mirror images at both ends."""
+    from grb_plot_style import weighted_kde_per_dex
+
+    rng = np.random.default_rng(7)
+    t = 10 ** rng.uniform(0.5, 4.1, 3000)
+    w = rng.uniform(0.1, 2.0, t.size)
+    lo, hi, bw = 3.0, 14100.0, 0.04
+    x, d = weighted_kde_per_dex(t, w, lo, hi, bw)
+    xs = np.log10(x[::150])
+    lt, a, b = np.log10(t), np.log10(lo), np.log10(hi)
+    exact = sum(
+        np.exp(-0.5 * ((xs[:, None] - c[None, :]) / bw) ** 2) @ w
+        for c in (lt, 2 * a - lt, 2 * b - lt)
+    ) / (w.sum() * bw * np.sqrt(2 * np.pi))
+    assert np.allclose(d[::150], exact, rtol=2e-3)
+
+
+def test_weighted_kde_per_dex_normalised_and_flat_for_log_uniform():
+    """A log-uniform sample has dp/dlog10 t = 1/range, including at the reflected edges."""
+    from grb_plot_style import weighted_kde_per_dex
+
+    rng = np.random.default_rng(8)
+    lo, hi = 10.0, 1e4
+    t = 10 ** rng.uniform(1.0, 4.0, 400_000)
+    x, d = weighted_kde_per_dex(t, np.ones_like(t), lo, hi, 0.04)
+    assert np.trapezoid(d, np.log10(x)) == pytest.approx(1.0, abs=2e-3)
+    assert np.allclose(d, 1.0 / 3.0, rtol=0.03), (d[0], d[-1], d.min(), d.max())
+
+
+def test_weighted_kde_per_dex_weights_matter():
+    """Weighting one half of a sample up moves the mass there, as STROOPWAFEL weights must."""
+    from grb_plot_style import weighted_kde_per_dex
+
+    t = np.r_[np.full(1000, 100.0), np.full(1000, 1000.0)]
+    w = np.r_[np.full(1000, 3.0), np.full(1000, 1.0)]
+    x, d = weighted_kde_per_dex(t, w, 10.0, 1e4, 0.05)
+    lx = np.log10(x)
+    left = np.trapezoid(d[lx < 2.5], lx[lx < 2.5])
+    assert left == pytest.approx(0.75, abs=0.01)
+
+
+def test_literature_dtd_palette_covers_every_literature_entry():
+    from grb_plot_style import C_MODEL_A, LITERATURE_DTD_PALETTE
+    from grb_rates import SGRB_DTD_POWERLAW_LITERATURE
+
+    assert set(LITERATURE_DTD_PALETTE) == set(SGRB_DTD_POWERLAW_LITERATURE)
+    # One colour per study; the two Maoz and Nakar populations are one fit.
+    studies = {k.split("_slow")[0].split("_fast")[0]: v for k, v in LITERATURE_DTD_PALETTE.items()}
+    assert len(set(studies.values())) == len(studies)
+    assert LITERATURE_DTD_PALETTE["MN25_slow"] == LITERATURE_DTD_PALETTE["MN25_fast"]
+    assert C_MODEL_A not in LITERATURE_DTD_PALETTE.values()
+    # WP15 sat on Model A's dashed cosmic-Z curve in the indigo C_WP15.
+    assert LITERATURE_DTD_PALETTE["WP15"] == "#8C510A"

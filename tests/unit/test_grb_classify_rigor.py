@@ -2,22 +2,19 @@
 
 Complements ``tests/unit/test_classify_asserts.py`` (kwarg coherence,
 fiducial-ns_max guard rails), ``tests/unit/test_phase4_helpers.py``
-(``classify_observed_mergers`` mass-plane mapping and
-``channel_class_crosstab`` normalisations), and
+(``channel_class_crosstab`` normalisations), and
 ``tests/sections/test_section_01_mass_plane.py`` (per-system <->
 ``classify_grid`` consistency over a synthetic meshgrid).  This file
 fills the gaps: partition completeness, exact boundary placement,
 kwarg coherence for ``k_thresh`` / ``hmns_factor`` / ``R_1p4_km`` /
 ``a_bh``, ``foucart_kw`` forwarding, ``classify_formation_channels``
-event-sequence priorities, and per-call thresholds on
-``classify_observed_mergers``.
+event-sequence priorities.
 
 References cited inline per test: Gottlieb et al. (2023, 2024,
 arXiv:2309.00038, 2411.13657) classification thresholds; Foucart et
 al. (2018) BHNS remnant; Broekgaarden et al. (2021, arXiv:2103.02608)
 formation-channel definitions; Margalit and Metzger (2017, ApJL 850,
-L19) HMNS-lifetime factor; Rastinejad et al. (2024, ApJ 979, 190)
-ejecta decomposition.
+L19) HMNS-lifetime factor.
 """
 
 from __future__ import annotations
@@ -25,14 +22,10 @@ from __future__ import annotations
 import warnings
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from grb_classify import (
     GRID_CLASS_LABELS,
-    KN_M_EJ_FAINT_MAX,
-    KN_RED_FRAC_BLUE_MAX,
-    KN_RED_FRAC_RED_MIN,
     bns_boundary_lines,
     channel_class_crosstab,
     classify_bhns,
@@ -40,14 +33,11 @@ from grb_classify import (
     classify_bns_2024,
     classify_formation_channels,
     classify_grid,
-    classify_observed_mergers,
 )
 from grb_physics import (
     HMNS_FACTOR_DEFAULT,
     M_THRESH,
     M_TOV,
-    MDISK_LONG,
-    MDISK_SHORT,
     Q_THRESH_BNS,
 )
 
@@ -471,101 +461,69 @@ def test_classify_grid_a_bh_shifts_bhns_partition():
 
 
 # ---------------------------------------------------------------------------
-# classify_formation_channels: partition, IV priority, V catch-all, II/III/I
+# classify_formation_channels: Broekgaarden+ 2021 Sec. 3.1 rules
 # ---------------------------------------------------------------------------
-def _channel_synthetic_table():
-    """Six-row hand-built table covering all five Broekgaarden channels.
+# One row per rule.  Columns are the first and second RLOF episodes:
+# (mt1_star1, mt1_CE, mt1_K1, mt1_K2, mt2_star2, mt2_CE, mt2_K2), Hurley types.
+_CHANNEL_ROWS = {
+    "classic, HG donor": ((True, False, 2, 1, True, True, 4), "I  Stable MT + CE"),
+    "classic, CHeB donor": ((True, False, 4, 1, True, True, 4), "I  Stable MT + CE"),
+    "only stable": ((True, False, 2, 1, True, False, 4), "II  Stable MT only"),
+    "single-core CE": ((True, True, 4, 1, False, False, -1), "III Single-core CE"),
+    "double-core CE": ((True, True, 5, 4, True, False, 8), "IV  Double-core CE"),
+    "Case A first transfer, then CE": ((True, False, 1, 1, True, True, 4), "V   Other"),
+    "secondary overflows first": ((False, False, 4, 2, True, True, 4), "V   Other"),
+    "HG donor enters a CE": ((True, True, 2, 1, False, False, -1), "V   Other"),
+    "CE onto an HG companion": ((True, True, 4, 2, False, False, -1), "V   Other"),
+    "second episode is the primary again": ((True, False, 2, 1, False, True, 4), "V   Other"),
+    "stripped secondary in the second episode": ((True, False, 2, 1, True, True, 7), "V   Other"),
+    "no mass transfer": ((False, False, -1, -1, False, False, -1), "V   Other"),
+}
 
-    Ordinals follow the COMPAS event counter as the Broekgaarden files write
-    it: the common envelope is logged one event after the RLOF episode that
-    went unstable, so a CE that *is* the first mass transfer sits at
-    ``fc_CEE = first RLOF + 1``.
 
-    Row 0: double-core CE as the first mass transfer -> IV.
-    Row 1: stable MT at event 1, CE on the secondary's episode -> I.
-    Row 2: stable MT only, no CE -> II.
-    Row 3: single-core CE as the first mass transfer -> III.
-    Row 4: dblCE = 1 but a stable MT came first -> I, since Broekgaarden+ 2021
-           Sec. 3.1.4 defines IV as double-core CE *as first mass transfer*.
-    Row 5: no MT, no CE, no dblCE -> V.
-    """
-    return dict(
-        dblCE=np.array([1, 0, 0, 0, 1, 0]),
-        fc_CEE=np.array([2, 4, 0, 2, 4, 0]),
-        fc_mt_p1=np.array([1, 1, 1, 1, 1, 0]),
-        fc_mt_s1=np.array([0, 3, 3, 4, 3, 0]),
-        # Hurley types at the first RLOF.  Row 1 and 4 use a Hertzsprung-gap
-        # donor (2), which transfers stably; rows 0 and 3 use a core-helium
-        # burning donor (4).  Row 5 never transfers.
-        fc_mt_p1_K1=np.array([4, 2, 2, 4, 2, 0]),
-        fc_mt_p1_K2=np.array([4, 1, 1, 1, 1, 0]),
-        fc_mt_s1_K1=np.array([0, 13, 13, 13, 13, 0]),
-        fc_mt_s1_K2=np.array([0, 4, 4, 4, 4, 0]),
-    )
+def _channel_table():
+    cols = list(zip(*(row for row, _ in _CHANNEL_ROWS.values())))
+    return {
+        "mt1_star1": np.array(cols[0]),
+        "mt1_CE": np.array(cols[1]),
+        "mt1_K1": np.array(cols[2]),
+        "mt1_K2": np.array(cols[3]),
+        "mt2_star2": np.array(cols[4]),
+        "mt2_CE": np.array(cols[5]),
+        "mt2_K2": np.array(cols[6]),
+    }
 
 
 def test_classify_formation_channels_partition_is_exclusive_and_complete():
-    """Each system lands in exactly one of the five Broekgaarden channels.
-
-    The implementation builds the masks in cascade with explicit
-    ``~`` exclusions; this test catches a refactor that lets two
-    channels overlap or leaves a system unclassified.
-    """
-    out = classify_formation_channels(**_channel_synthetic_table())
-    stack = np.stack([out[k] for k in out], axis=0)
-    counts = stack.sum(axis=0)
+    """Each system lands in exactly one of the five channels."""
+    out = classify_formation_channels(**_channel_table())
+    counts = np.stack(list(out.values())).sum(axis=0)
     assert (counts == 1).all(), f"Channel partition broken: per-row counts = {counts.tolist()}"
 
 
-def test_dblCE_routes_to_channel_IV_only_when_the_CE_is_the_first_mass_transfer():
-    """``dblCE = 1`` is necessary but not sufficient for Channel IV.
-
-    Broekgaarden+ 2021 Sec. 3.1.4 defines IV as a double-core CE *as first
-    mass transfer*.  Row 0 satisfies both; row 4 carries the same flag behind
-    an earlier stable MT and so belongs to the classic channel I.
-    """
-    out = classify_formation_channels(**_channel_synthetic_table())
-    assert bool(out["IV  Double-core CE"][0])
-    assert bool(out["I  Stable MT + CE"][4])
-    assert not bool(out["IV  Double-core CE"][4])
-
-
-def test_no_mt_and_no_ce_routes_to_channel_V():
-    """A system with neither stable MT nor CE lands in Channel V (Other).
-
-    Catch-all guard that prevents the cascade from leaving a row
-    unclassified.
-    """
-    out = classify_formation_channels(**_channel_synthetic_table())
-    assert bool(out["V   Other"][5])
+@pytest.mark.parametrize("case", list(_CHANNEL_ROWS))
+def test_classify_formation_channels_follows_broekgaarden21_rules(case):
+    """Each row lands in the channel Broekgaarden+ 2021 Sec. 3.1 and their
+    reference code assign.  The V rows are the cases where an event-order
+    reading of "stable MT first, CE later" disagrees with them: Case A
+    (their Sec. 3.1.5 puts it in Other), a secondary that overflows first,
+    a CE from a Hertzsprung-gap donor or onto a Hertzsprung-gap companion,
+    and a second episode that is not the unstripped secondary."""
+    out = classify_formation_channels(**_channel_table())
+    i = list(_CHANNEL_ROWS).index(case)
+    got = [k for k, m in out.items() if m[i]]
+    assert got == [_CHANNEL_ROWS[case][1]], f"{case}: got {got}"
 
 
-def test_channel_II_when_stable_mt_and_no_ce():
-    """Stable MT with no CE lands in Channel II (Stable MT only)."""
-    out = classify_formation_channels(**_channel_synthetic_table())
-    assert bool(out["II  Stable MT only"][2])
+def test_formation_channel_inputs_match_the_signature():
+    """``FORMATION_CHANNEL_INPUTS`` is the keyword set the classifier takes, so
+    ``**{k: d[k] for k in FORMATION_CHANNEL_INPUTS}`` cannot drift from it."""
+    import inspect
 
+    from grb_classify import FORMATION_CHANNEL_INPUTS
 
-def test_channel_III_when_the_first_mass_transfer_is_the_ce():
-    """A single-core CE as the first mass transfer lands in Channel III.
-
-    Row 3: the first RLOF is at event 1 and ``fc_CEE = 2``, so that episode
-    is the one that went unstable.  ``dblCE = 0`` makes it single-core.
-    An implementation that tests ``fc_CEE < fc_mt_p1`` never fires here,
-    because COMPAS logs the CE after the RLOF, and empties III into I.
-    """
-    out = classify_formation_channels(**_channel_synthetic_table())
-    assert bool(out["III Single-core CE"][3])
-
-
-def test_channel_I_when_a_stable_mt_precedes_the_ce():
-    """Stable MT before the CE lands in Channel I (Stable MT + CE).
-
-    Row 1: the first RLOF is at event 1 but the CE sits at event 4, on the
-    secondary's episode at event 3, so the first mass transfer was stable.
-    """
-    out = classify_formation_channels(**_channel_synthetic_table())
-    assert bool(out["I  Stable MT + CE"][1])
+    params = inspect.signature(classify_formation_channels).parameters
+    assert set(FORMATION_CHANNEL_INPUTS) == set(params)
 
 
 # ---------------------------------------------------------------------------
@@ -574,9 +532,8 @@ def test_channel_I_when_a_stable_mt_precedes_the_ce():
 def test_channel_class_crosstab_filters_non_boolean_class_keys():
     """Diagnostic keys (e.g. ``'M_disk'``) are silently filtered out.
 
-    The classifier dicts returned by ``classify_bhns`` and
-    ``classify_observed_mergers`` carry float diagnostic arrays
-    alongside the boolean class masks.  The crosstab must handle the
+    The classifier dict returned by ``classify_bhns`` carries float
+    diagnostic arrays alongside the boolean class masks.  The crosstab must handle the
     mixed dict without raising or producing an extra column.
     """
     n = 4
@@ -625,90 +582,6 @@ def test_channel_class_crosstab_zero_weights_returns_zero_matrix():
 
 
 # ---------------------------------------------------------------------------
-# classify_observed_mergers: NaN, all-zero, threshold override, diagnostics
-# ---------------------------------------------------------------------------
-def test_classify_observed_mergers_nan_input_documented_quirk_lands_in_hmns():
-    """A row with NaN ejecta lands in 'lbGRB + red KN (HMNS)' (documented quirk).
-
-    The boolean cascade inside ``classify_observed_mergers`` does
-    NOT propagate NaN as 'no class': ``M_ej = NaN`` causes both
-    ``is_faint``, ``is_blue_dom`` and ``is_red_dom`` to evaluate False
-    (any comparison with NaN is False under numpy), and the
-    ``is_mixed = ~is_faint & ~is_blue_dom & ~is_red_dom`` catch-all
-    then routes the row into the HMNS class.  The docstring claim
-    about ``NaN class labels`` is misleading; the actual behaviour
-    is locked in here as a regression sentinel rather than fixed
-    inline.  Callers that need NaN-safe behaviour must guard
-    upstream of ``classify_observed_mergers``.
-
-    ``f_red`` itself is NaN as expected.
-    """
-    M_B = np.array([np.nan])
-    M_P = np.array([np.nan])
-    M_R = np.array([np.nan])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        out = classify_observed_mergers(M_B, M_P, M_R)
-    assert np.isnan(out["M_ej_total"][0])
-    assert np.isnan(out["f_red"][0])
-    assert bool(out["lbGRB + red KN (HMNS)"][0]), (
-        "NaN-input cascade behaviour has shifted; the catch-all "
-        "is_mixed branch used to absorb NaN rows."
-    )
-    assert not bool(out["sbGRB + blue KN"][0])
-    assert not bool(out["lbGRB + red KN (disk)"][0])
-    assert not bool(out["Faint lbGRB"][0])
-
-
-def test_classify_observed_mergers_all_zero_ejecta_lands_in_faint():
-    """A source with ``M_B = M_P = M_R = 0`` is classified as Faint lbGRB.
-
-    The docstring defines 'Faint lbGRB' by ``M_ej < KN_M_EJ_FAINT_MAX``;
-    an exact-zero source sits comfortably below the 0.01 Msun floor.
-    The 0/0 inside ``f_red`` raises a benign ``RuntimeWarning``
-    which is suppressed locally.
-    """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        out = classify_observed_mergers(np.array([0.0]), np.array([0.0]), np.array([0.0]))
-    assert bool(out["Faint lbGRB"][0])
-    assert not bool(out["sbGRB + blue KN"][0])
-    assert not bool(out["lbGRB + red KN (HMNS)"][0])
-
-
-def test_classify_observed_mergers_threshold_override_changes_partition():
-    """A per-call ``red_max_for_blue`` override actually reclassifies a row.
-
-    Row with ``f_red = 0.4`` lands in the mixed class (HMNS) under
-    the default ``red_max_for_blue = 0.30``; raising the threshold
-    to 0.50 routes it to the blue-dominated class instead.  This
-    pins the documented per-call sensitivity-knob behaviour.
-    """
-    M_B = np.array([0.06])  # f_red = 0.04 / 0.10 = 0.40
-    M_P = np.array([0.0])
-    M_R = np.array([0.04])
-    out_default = classify_observed_mergers(M_B, M_P, M_R)
-    out_relaxed = classify_observed_mergers(M_B, M_P, M_R, red_max_for_blue=0.50)
-    assert bool(out_default["lbGRB + red KN (HMNS)"][0])
-    assert not bool(out_default["sbGRB + blue KN"][0])
-    assert bool(out_relaxed["sbGRB + blue KN"][0])
-    assert not bool(out_relaxed["lbGRB + red KN (HMNS)"][0])
-
-
-def test_classify_observed_mergers_diagnostic_keys_present():
-    """``M_ej_total`` and ``f_red`` diagnostic keys are float arrays."""
-    M_B = np.array([0.05, 0.01])
-    M_P = np.array([0.01, 0.01])
-    M_R = np.array([0.01, 0.06])
-    out = classify_observed_mergers(M_B, M_P, M_R)
-    for key in ("M_ej_total", "f_red"):
-        assert key in out
-        assert isinstance(out[key], np.ndarray)
-        assert out[key].dtype == np.float64
-        assert out[key].shape == M_B.shape
-
-
-# ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
 def test_GRID_CLASS_LABELS_covers_classify_grid_outputs():
@@ -737,36 +610,3 @@ def test_GRID_CLASS_LABELS_covers_classify_grid_outputs():
         "lbGRB + red KN (BHNS disk)",
     }
     assert bhns_labels == expected_bhns, (bhns_labels, expected_bhns)
-
-
-def test_KN_RED_FRAC_ordering_and_M_EJ_FAINT_alignment_with_MDISK_SHORT():
-    """Kilonova red-fraction thresholds are ordered; faint floor matches MDISK_SHORT.
-
-    ``classify_observed_mergers`` requires
-    ``red_min_for_red > red_max_for_blue`` (raises otherwise); the
-    defaults pin this ordering.  ``KN_M_EJ_FAINT_MAX = MDISK_SHORT
-    = 0.01 Msun`` is the Gottlieb 2023 Sec. 4 alignment between the
-    engine-fuel floor (BHNS disk-mass cut) and the kilonova-bright
-    floor (observed-merger faint cut).
-    """
-    assert KN_RED_FRAC_BLUE_MAX < KN_RED_FRAC_RED_MIN
-    assert KN_M_EJ_FAINT_MAX == MDISK_SHORT
-    assert KN_M_EJ_FAINT_MAX == 0.01
-    # And the upper red-fraction boundary should be symmetric about 0.5
-    # given the project's documented choice (KN_RED_FRAC_RED_MIN ~ 0.70,
-    # KN_RED_FRAC_BLUE_MAX ~ 0.30).  Pinning the symmetric centre keeps
-    # the thresholds from drifting independently.
-    assert (KN_RED_FRAC_BLUE_MAX + KN_RED_FRAC_RED_MIN) == pytest.approx(1.0, abs=0.05)
-    # Unused-import guard for the pandas import that pandas-stub-y
-    # frameworks would otherwise drop.
-    _ = pd.DataFrame  # noqa: F841
-
-    # Sanity guard: defaults of MDISK_SHORT / MDISK_LONG are within
-    # the Gottlieb 2023 Sec. 4 quoted range.
-    assert MDISK_SHORT < MDISK_LONG
-    assert MDISK_LONG == 0.10
-
-    # Tie back to M_THRESH > hmns_split sanity guard (cheap and pins
-    # the BNS classifier's expected three-region structure even
-    # under EOS sweeps).
-    assert M_THRESH > HMNS_FACTOR_DEFAULT * M_TOV

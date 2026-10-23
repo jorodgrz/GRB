@@ -67,6 +67,39 @@ and C_OBSERVED (purple)."""
 C_OBSERVED: str = "#6B21A8"
 """Observed sample overlay (purple)."""
 
+C_TNG_TABLE: str = "#E8862A"
+"""IllustrisTNG S(Z, z) simulation table in the Section 4e marginals
+(orange, solid), against the black dashed Levina+ 2026 fit, as in their
+Fig. 3.  Kept clear of the viridis map it sits beside."""
+
+C_SLOPE_GUIDE: str = "#475569"
+"""Power-law slope guides (t^-1, t^-2) in Section 3c: solid dark slate, so a
+reference slope reads apart from both the pastel models and the dashed
+literature fits."""
+
+LITERATURE_DTD_PALETTE: dict[str, str] = {
+    "PS26_ELF": "#D55E00",
+    "PS26_QUSJ": "#CC79A7",
+    "Gao25": "#009E73",
+    "Zevin22": "#56B4E9",
+    "DAvanzo14": "#E69F00",
+    "WP15": "#8C510A",
+    "MN25_slow": "#7F3C8D",
+    "MN25_fast": "#7F3C8D",
+    "Chen25": "#6B6B6B",
+}
+"""Published delay-time constraints in Section 3c, keyed like
+``grb_rates.SGRB_DTD_POWERLAW_LITERATURE``.  Okabe and Ito (2008) colours,
+saturated so they stand apart from the pastel model curves they overlay.
+WP15 is the ColorBrewer BrBG dark brown rather than the project indigo
+``C_WP15``: in this panel the indigo dashes sat on top of Model A's dashed
+cosmic-Z curve below 0.1 Gyr and read as it (CIELab dE 12 under normal vision,
+8 under simulated tritanopia).  The brown keeps dE >= 13.9 to every other line
+on the figure under normal vision and simulated deuteranopia, protanopia and
+tritanopia.
+Model A's blue is left out of the set.  The two Maoz and Nakar populations
+share one colour: they are one fit, told apart by marker fill."""
+
 
 CLASS_PALETTE: dict[str, str] = {
     "sbGRB + blue KN": C_SB_BLUE,
@@ -94,9 +127,8 @@ CLASS_LABELS: dict[str, str] = {
     "No GRB": "No GRB",
 }
 
-# Two-line forms for the crowded axes (the Section 11.4 engine-comparison
-# tick labels, the Section 12 decision-tree boxes) where the full label
-# overruns the width budget.
+# Two-line forms for the crowded axes (the Section 12 decision-tree boxes)
+# where the full label overruns the width budget.
 CLASS_LABELS_SHORT: dict[str, str] = {
     "sbGRB + blue KN": "sbGRB\n+ blue KN",
     "lbGRB + red KN (HMNS)": "lbGRB\n(HMNS)",
@@ -149,25 +181,6 @@ CHANNEL_PALETTE: dict[str, str] = {
     "III": C_CHANNEL_III,
     "IV": C_CHANNEL_IV,
     "V": C_CHANNEL_V,
-}
-
-
-# BH-engine vs HMNS-engine observational comparison (comparison.ipynb).  This
-# is a different observable axis from the four GRB classes, so it carries its
-# own palette; the lbGRB / sbGRB marker reds and blues are chosen for
-# protanopia separation rather than reused from CLASS_PALETTE.
-ENGINE_PALETTE: dict[str, str] = {
-    "lb": "#c0392b",  # lbGRB markers (red)
-    "sb": "#1565c0",  # sbGRB markers (blue)
-    "gw": "#555555",  # GW170817 marker (grey)
-    "hmns": "#1e8449",  # HMNS-engine prediction bands (green)
-}
-
-# Per-event ejecta composition (Rastinejad+ 2024 Table 3 decomposition).
-COMPONENT_PALETTE: dict[str, str] = {
-    "R": "#c0392b",  # lanthanide-rich (disk wind, MHD)
-    "P": "#7d3c98",  # intermediate (disk wind, thermal)
-    "B": "#1f78b4",  # lanthanide-poor (dynamical, not disk wind)
 }
 
 
@@ -441,6 +454,48 @@ def weighted_hist_pdf_per_dex(
         fill[last + 2 :] = False
         out[fill] = zero_fill
     return out
+
+
+def weighted_kde_per_dex(
+    data: ArrayLike,
+    w: ArrayLike,
+    x_lo: float,
+    x_hi: float,
+    bw_dex: float,
+    n_grid: int = 3001,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Weighted Gaussian KDE of ``log10(data)``, as ``dp/dlog10(x)`` on ``[x_lo, x_hi]``.
+
+    The step-free counterpart of ``weighted_hist_pdf_per_dex``, in the form
+    Broekgaarden+ 2021 use for their Fig. 7 distributions (a weighted kernel
+    density estimate on a log axis).  ``bw_dex`` is the Gaussian sigma in dex.
+
+    Evaluated as a binned KDE: the weights are histogrammed on ``n_grid``
+    points in log10(x) and convolved with the kernel, which matches the exact
+    estimator to second order in the grid step (1.2e-3 dex at the default over
+    the Section 3 range, against kernels of a few 1e-2 dex).  Both ends reflect,
+    so a sample cut off sharply at ``x_hi`` keeps its full height there instead
+    of rolling off over a kernel width; at an end where the density is already
+    zero the reflection changes nothing.  Normalised to the weight inside
+    ``[x_lo, x_hi]``, so the curve integrates to 1 over the range.
+
+    Returns ``(x, density)`` with ``x`` in the units of ``data``.
+    """
+    from scipy.ndimage import gaussian_filter1d
+
+    t = np.asarray(data, dtype=float)
+    wt = np.asarray(w, dtype=float)
+    # Cells tile [x_lo, x_hi] exactly and the density is evaluated at their
+    # centres, so scipy's 'reflect' mirror (about the outer cell boundary)
+    # falls on x_lo and x_hi themselves.
+    edges = np.linspace(np.log10(x_lo), np.log10(x_hi), n_grid + 1)
+    lx = 0.5 * (edges[:-1] + edges[1:])
+    dx = edges[1] - edges[0]
+    h, _ = np.histogram(np.log10(t), edges, weights=wt)
+    if h.sum() <= 0:
+        return 10**lx, np.zeros_like(lx)
+    dens = gaussian_filter1d(h / (h.sum() * dx), bw_dex / dx, mode="reflect")
+    return 10**lx, dens
 
 
 def plot_gated_curve(

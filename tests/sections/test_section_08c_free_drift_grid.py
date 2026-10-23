@@ -21,7 +21,7 @@ from grb_io import (
     load_bns_with_kicks,
 )
 from grb_offsets import ballistic_offset
-from grb_physics import A_BH_FID, M_TOV, cold_stable_ns_mask
+from grb_physics import A_BH_FID, M_TOV, cold_stable_bhns_mask, cold_stable_ns_mask
 
 
 def _wmedian(x, w, keep_zeros=False):
@@ -89,7 +89,7 @@ def test_two_models_leave_the_bhns_disk_class_empty():
         d = load_bhns_with_kicks(
             path=f"data/COMPASCompactOutput_BHNS_{suffix}.h5", expected_model=suffix
         )
-        d = filter_systems(d, cold_stable_ns_mask(d["M_NS"], m_tov=M_TOV))
+        d = filter_systems(d, cold_stable_bhns_mask(d["M_BH"], d["M_NS"], m_tov=M_TOV))
         masks = classify_bhns(d["M_BH"], d["M_NS"], a_BH=A_BH_FID)
         if masks["lbGRB + red KN (BHNS disk)"].sum() == 0:
             empty.append(suffix)

@@ -234,10 +234,11 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
       (b) the sum of the four class rates equals
           ``read_expected_local_rate(...)`` exactly (sum-of-parts identity).
 
-    The remap to the Alsing-Silva-Berti (2018) Galactic-NS double
-    Gaussian is applied to mirror the figure-pipeline state in
-    ``grb_main.ipynb``; the remap is rank-preserving and weight-conserving
-    so the total rate is invariant under it (the per-class split is not).
+    ``w_000`` counts the failed common-envelope ejections the loaders drop
+    by default, so the sample is loaded with ``drop_failed_ce=False`` to stay
+    row-aligned with it.  The Alsing-Silva-Berti (2018) remap is applied as a
+    labelled systematic; it is rank-preserving and weight-conserving, so the
+    total rate is invariant under it (the per-class split is not).
     """
     import h5py as h5
 
@@ -245,7 +246,7 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
     from grb_io import load_bns, read_expected_local_rate
     from grb_physics import remap_ns_masses_double_gaussian
 
-    bns = load_bns(path=bns_a_path)
+    bns = load_bns(path=bns_a_path, drop_failed_ce=False)
     m1_remap, m2_remap = remap_ns_masses_double_gaussian(
         bns["m1"],
         bns["m2"],
@@ -458,3 +459,19 @@ def test_cold_stable_ns_mask_no_args_raises():
 
     with pytest.raises(ValueError):
         cold_stable_ns_mask()
+
+
+def test_cold_stable_bhns_mask_keeps_only_types_that_agree_with_m_tov():
+    """NS at or below M_TOV and BH strictly above it, both required.
+
+    Row 2 is Model J's case: a COMPAS "BH" of 2.1 Msun is an NS under
+    M_TOV = 2.2 and is dropped, not moved to BNS.
+    """
+    from grb_physics import cold_stable_bhns_mask
+
+    m_bh = np.array([8.0, 8.0, 2.1, 2.2, 2.2001])
+    m_ns = np.array([1.4, 2.3, 1.4, 1.4, 2.2])
+    np.testing.assert_array_equal(
+        cold_stable_bhns_mask(m_bh, m_ns, m_tov=2.2),
+        np.array([True, False, False, False, True]),
+    )

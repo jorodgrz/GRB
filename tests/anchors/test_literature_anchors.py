@@ -547,8 +547,7 @@ def test_kruger_foucart_bns_dyn_ejecta_gw170817_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Abbott et al. (2019) PRX 9, 011001  -- GW170817; not in papers/, the
-# GW170817 PDF on disk is Abbott_2018.pdf (PRL 121, 161101, radii and EOS)
+# Abbott et al. (2019) PRX 9, 031040  -- GWTC-1, GW170817; not in papers/
 # Abbott et al. (2020) ApJL 892, L3   -- GW190425 [papers/Abbott_2020.pdf]
 # Pin `OBSERVED_GW_EVENTS` to the published low-spin 90% CL ranges and
 # source-frame chirp masses so the plot annotations cannot drift from the
@@ -557,10 +556,11 @@ def test_kruger_foucart_bns_dyn_ejecta_gw170817_band():
 @pytest.mark.parametrize(
     "name, M1_range, M2_range, Mtot_range, Mc_central, Mc_tol",
     [
-        # GW170817 (Abbott+ 2019 PRX 9, 011001 Table I, low-spin |chi| < 0.05):
-        # m1 in [1.36, 1.60], m2 in [1.17, 1.36], Mtot = 2.73 +0.04/-0.01,
-        # Mc (source) = 1.186 +0.001/-0.001 Msun.
-        ("GW170817", (1.36, 1.60), (1.17, 1.36), (2.69, 2.77), 1.186, 0.05),
+        # GW170817 (GWTC-1, Abbott+ 2019 PRX 9, 031040 Table III, low-spin
+        # |chi| < 0.05): m1 = 1.46 +0.12/-0.10, m2 = 1.27 +0.09/-0.09,
+        # Mc (source) = 1.186 +0.001/-0.001 Msun.  Total mass 2.73 +0.04/-0.01
+        # is from the properties paper (PRX 9, 011001, Table II, low-spin).
+        ("GW170817", (1.36, 1.58), (1.18, 1.36), (2.72, 2.77), 1.186, 0.05),
         # GW190425 (Abbott+ 2020 ApJL 892, L3 Table 1, low-spin |chi| < 0.05):
         # m1 in [1.60, 1.87], m2 in [1.46, 1.69], Mtot = 3.3 +0.1/-0.1,
         # Mc (source) = 1.44 +0.02/-0.02 Msun.
@@ -1938,14 +1938,12 @@ def test_pracchia_salafia_2026_Rz_shape_tracks_short_DTD_sfr():
     tau-substitution integrator would push the peak off or under-resolve
     the low-z rise.
     """
-    from grb_rates import _madau_fragos_2017_sfr, pracchia_salafia_2026_Rz
+    from grb_rates import madau_fragos_2017_sfr, pracchia_salafia_2026_Rz
 
     z_grid = np.linspace(0.0, 5.0, 200)
     out = pracchia_salafia_2026_Rz(z_grid, row="ELF_powerlaw")
     sfr = (
-        _madau_fragos_2017_sfr(z_grid)
-        * out["R_best"][0]
-        / _madau_fragos_2017_sfr(np.array([0.0]))[0]
+        madau_fragos_2017_sfr(z_grid) * out["R_best"][0] / madau_fragos_2017_sfr(np.array([0.0]))[0]
     )
     zpeak = z_grid[np.argmax(out["R_best"])]
     assert 1.7 <= zpeak <= 2.3, f"R(z) peak = {zpeak:.2f}; expected ~1.9 (SFR peak)"
@@ -2120,8 +2118,8 @@ def test_fong_2015_beaming_factor_at_fiducial_sbgrb_angle():
 
 # ─────────────────────────────────────────────────────────────────────
 # Fong et al. (2022) ApJ 940, 56 [arXiv:2206.01763]
-# Ghirlanda et al. (2016) A&A 594, A84
-# Swift-BAT observing envelope + effective sky fraction, used for the
+# Du et al. (2025) ApJL 987, L13, Table 2
+# Swift-BAT observing envelope + sky fraction, used for the
 # Section 6c BRIGHT counts-to-rate-density conversion.
 # ─────────────────────────────────────────────────────────────────────
 def test_swift_bright_window_matches_fong_2022_sample_span():
@@ -2142,23 +2140,16 @@ def test_swift_bright_window_matches_fong_2022_sample_span():
     )
 
 
-def test_bat_effective_sky_fraction_matches_ghirlanda_2016():
-    """`F_SKY_BAT` must match the Ghirlanda+ 2016 effective BAT sky fraction.
+def test_bat_sky_fraction_matches_du_2025_table_2():
+    """`F_SKY_BAT` is the Du et al. (2025) Table 2 Swift/BAT field of view.
 
-    Ghirlanda et al. (2016, A&A 594, A84) Sec. 3.2 adopt an effective
-    Swift-BAT sky coverage of Omega_BAT / 4pi ~ 1/6 for their
-    observed-sGRB rate integral (partial coding weighted).  The
-    Lien et al. (2016, ApJ 829, 7) Swift-BAT triggered-GRB catalog
-    gives a compatible number.  The plausible published range spans
-    roughly [0.11, 0.20]; project fiducial is 1/6.
+    Du et al. (2025, ApJL 987, L13) Table 2 list Omega = 1.40 sr for
+    Swift/BAT, so Omega / 4pi = 0.1114.  It replaced an unsourced 1/6 that
+    had been credited to Ghirlanda et al. (2016), who give no BAT value.
     """
     from grb_rates import F_SKY_BAT
 
-    assert 0.11 <= F_SKY_BAT <= 0.20, (
-        f"F_SKY_BAT = {F_SKY_BAT} is outside the published BAT effective "
-        f"sky-fraction band [0.11, 0.20]."
-    )
-    assert F_SKY_BAT == pytest.approx(1.0 / 6.0, rel=1e-9)
+    assert F_SKY_BAT == pytest.approx(1.40 / (4.0 * np.pi), rel=1e-12)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -2749,28 +2740,6 @@ def test_grid_class_labels_match_gottlieb_2024_hybrid_taxonomy():
     assert GRID_CLASS_LABELS == expected, GRID_CLASS_LABELS
 
 
-def test_kn_m_ej_faint_max_aligned_with_mdisk_short():
-    """`KN_M_EJ_FAINT_MAX` must equal `MDISK_SHORT = 0.01 Msun`.
-
-    Gottlieb (2023, arXiv:2309.00038) Sec. 4 / Fig. 6 fixes the
-    engine-fuel floor at 0.01 Msun: below that disk mass the central
-    engine has no fuel for a bright GRB and below that ejecta mass
-    the kilonova is not detectable.  The two thresholds therefore
-    sit at the same value across the BNS / BHNS branches and the
-    observed-merger classifier.  A future drift between the two
-    would mean the model and observed-sample "Faint" classes no
-    longer share a definition.
-    """
-    from grb_classify import KN_M_EJ_FAINT_MAX
-    from grb_physics import MDISK_SHORT
-
-    assert KN_M_EJ_FAINT_MAX == MDISK_SHORT == 0.01, (
-        f"KN_M_EJ_FAINT_MAX = {KN_M_EJ_FAINT_MAX}, MDISK_SHORT = "
-        f"{MDISK_SHORT}; both must equal 0.01 Msun per Gottlieb (2023) "
-        f"Sec. 4 / Fig. 6."
-    )
-
-
 def test_classify_bns_2024_default_hmns_factor_matches_HMNS_FACTOR_DEFAULT():
     """The default `hmns_factor` keyword of `classify_bns_2024` must
     equal `grb_physics.HMNS_FACTOR_DEFAULT`.
@@ -2795,30 +2764,6 @@ def test_classify_bns_2024_default_hmns_factor_matches_HMNS_FACTOR_DEFAULT():
         f"classifier and the Margalit-Metzger anchor are now out of "
         f"sync."
     )
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Gottlieb et al. (2025) arXiv:2411.13657 [papers/Gottlieb_2024.pdf]
-# Eq. (11) BH-engine disk-wind kilonova ejecta normalisation.
-# ─────────────────────────────────────────────────────────────────────
-def test_gottlieb_2025_eq11_canonical_normalisation_matches_paper():
-    """`gottlieb25_eq11` normalisation must reproduce Gottlieb+25 Eq. 11.
-
-    Gottlieb et al. (2025) arXiv:2411.13657, Eq. (11):
-
-        M_ej = 1e-3 * f_{-1}^{-1} * (E_iso / 2e51 erg) *
-               (T50 / 1 s)^{alpha - 1}   [Msun]
-
-    At the reference point ``(T50 = 1 s, E_iso = 2e51 erg,
-    alpha = 2, f_inv = 1)`` the right-hand side reduces to the
-    prefactor ``1e-3 Msun``.  Paper-pinned literal; do not edit
-    without updating the citation.
-    """
-    from grb_physics import gottlieb25_eq11
-
-    assert gottlieb25_eq11(T50=1.0, E_iso=2e51, alpha=2.0, f_inv=1.0) == pytest.approx(
-        1e-3, rel=1e-12
-    ), "Gottlieb+25 Eq. 11 normalisation drifted from 1e-3 Msun"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -2949,11 +2894,10 @@ def test_CE_PRESCRIPTION_BROEKGAARDEN21_full_string_schema():
 def test_observed_gw_events_match_abbott_2019_2020():
     """`OBSERVED_GW_EVENTS` coordinates must sit inside the Abbott+ 2019 / 2020 low-spin 90% CR.
 
-    Abbott et al. (2019) PRX 9, 011001 Table I (low-spin prior) reports
-    GW170817 component-mass 90% CR ``M1 in [1.36, 1.60]``,
-    ``M2 in [1.17, 1.36] Msun``; the representative point pinned here
-    (``M1 = 1.46, M2 = 1.27``) is consistent with the GWTC-1 catalogue
-    (Abbott et al. 2019 PRX 9, 031040) and lies inside those ranges.
+    GWTC-1 (Abbott et al. 2019, PRX 9, 031040) Table III (low-spin prior)
+    reports GW170817 medians ``M1 = 1.46 +0.12/-0.10`` and
+    ``M2 = 1.27 +0.09/-0.09 Msun``, which are the pinned point and its
+    90% CR.
     Abbott et al. (2020) ApJL 892, L3 Table 1 (low-spin prior) reports
     GW190425 component-mass 90% CR ``M1 in [1.60, 1.87]``,
     ``M2 in [1.46, 1.69] Msun``; the pinned point ``M1 = 1.73,
@@ -2970,7 +2914,7 @@ def test_observed_gw_events_match_abbott_2019_2020():
     assert gw170817["M1"] == pytest.approx(1.46, abs=0.02), gw170817
     assert gw170817["M2"] == pytest.approx(1.27, abs=0.02), gw170817
     assert "Abbott" in gw170817["reference"], gw170817["reference"]
-    assert "PRX 9, 011001" in gw170817["reference"], gw170817["reference"]
+    assert "PRX 9, 031040" in gw170817["reference"], gw170817["reference"]
     # m1 >= m2 invariant (Section 1 plots M2 on x-axis, M1 on y-axis).
     assert gw170817["M1"] >= gw170817["M2"], gw170817
 
@@ -2980,6 +2924,52 @@ def test_observed_gw_events_match_abbott_2019_2020():
     assert "Abbott" in gw190425["reference"], gw190425["reference"]
     assert "ApJL 892, L3" in gw190425["reference"], gw190425["reference"]
     assert gw190425["M1"] >= gw190425["M2"], gw190425
+
+
+@pytest.mark.parametrize(
+    "name, M1, M1_lo, M1_hi, M2, M2_lo, M2_hi",
+    [
+        # GWTC-1 (PRX 9, 031040) Table III, low-spin: 1.46 +0.12/-0.10,
+        # 1.27 +0.09/-0.09.
+        ("GW170817", 1.46, 1.36, 1.58, 1.27, 1.18, 1.36),
+        # Abbott+ 2020 (ApJL 892, L3) Table 1, low-spin: m1 1.60-1.87,
+        # m2 1.46-1.69; the point is the interval midpoint.
+        ("GW190425", 1.73, 1.60, 1.87, 1.58, 1.46, 1.69),
+    ],
+)
+def test_observed_gw_event_error_bars(name, M1, M1_lo, M1_hi, M2, M2_lo, M2_hi):
+    """The 90% CRs drawn as error bars on the Section 1 BNS panel."""
+    from grb_io import OBSERVED_GW_EVENTS
+
+    ev = OBSERVED_GW_EVENTS[name]
+    got = tuple(ev[k] for k in ("M1", "M1_lo", "M1_hi", "M2", "M2_lo", "M2_hi"))
+    assert got == pytest.approx((M1, M1_lo, M1_hi, M2, M2_lo, M2_hi), abs=1e-9)
+    assert ev["M1_lo"] <= ev["M1"] <= ev["M1_hi"]
+    assert ev["M2_lo"] <= ev["M2"] <= ev["M2_hi"]
+
+
+@pytest.mark.parametrize(
+    "name, M_BH, M_BH_lo, M_BH_hi, M_NS, M_NS_lo, M_NS_hi",
+    [
+        # Abbott+ 2021 (ApJL 915, L5) Table 2, secondary-spin prior
+        # chi2 < 0.99 (the column quoted in the abstract):
+        # GW200105 m1 = 8.9 +1.2/-1.5, m2 = 1.9 +0.3/-0.2;
+        # GW200115 m1 = 5.7 +1.8/-2.1, m2 = 1.5 +0.7/-0.3.
+        ("GW200105", 8.9, 7.4, 10.1, 1.9, 1.7, 2.2),
+        ("GW200115", 5.7, 3.6, 7.5, 1.5, 1.2, 2.2),
+    ],
+)
+def test_observed_nsbh_events_match_abbott_2021(
+    name, M_BH, M_BH_lo, M_BH_hi, M_NS, M_NS_lo, M_NS_hi
+):
+    """NSBH medians and 90% CRs drawn on the Section 1 BHNS panel."""
+    from grb_io import OBSERVED_NSBH_EVENTS
+
+    ev = OBSERVED_NSBH_EVENTS[name]
+    got = tuple(ev[k] for k in ("M_BH", "M_BH_lo", "M_BH_hi", "M_NS", "M_NS_lo", "M_NS_hi"))
+    assert got == pytest.approx((M_BH, M_BH_lo, M_BH_hi, M_NS, M_NS_lo, M_NS_hi), abs=1e-9)
+    assert "ApJL 915, L5, Table 2" in ev["reference"], ev["reference"]
+    assert "chi2 < 0.99" in ev["reference"], ev["reference"]
 
 
 def test_ns_max_modelA_matches_broekgaarden_2021():
@@ -3088,37 +3078,6 @@ def test_grb_physics_mean_mass_evolved_deprecated_attribute():
         f"_MEAN_MASS_EVOLVED_VALUE = {_MEAN_MASS_EVOLVED_VALUE} drifted "
         f"from the legacy regression sentinel 77708655."
     )
-
-
-# ─────────────────────────────────────────────────────────────────────
-# External long-merger-GRB E_iso anchor (engine discriminator, comparison.ipynb)
-# ─────────────────────────────────────────────────────────────────────
-def test_external_lbgrb_eiso_anchor_matches_literature():
-    """Pin the external lbGRB E_iso anchor to the cited E_iso values.
-
-    The BH-engine null in comparison.ipynb is anchored on five long-duration
-    merger GRBs with kilonovae, with E_iso [erg] from the primary analyses:
-    060614 (Mangano+ 2007), 211227A (Lu+ 2022), 191019A (Stratta+ 2025),
-    211211A (Troja+ 2022), 230307A (Svinkin+ 2023 / Dichiara+ 2025).  Each
-    value must stay inside the long-GRB E_iso band (~1e50 to 1e53 erg), and the
-    log-mean / log-std are derived (not free) so they cannot drift from the set.
-    """
-    import numpy as np
-
-    import grb_physics as gp
-
-    expected = (8.4e50, 1.14e51, 1.70e51, 1.30e52, 6.97e52)
-    assert gp.LBGRB_EISO_EXTERNAL_ERG == expected, (
-        f"LBGRB_EISO_EXTERNAL_ERG = {gp.LBGRB_EISO_EXTERNAL_ERG} drifted from "
-        f"the cited literature values {expected}."
-    )
-    eiso = np.array(gp.LBGRB_EISO_EXTERNAL_ERG)
-    assert np.all((eiso > 1e50) & (eiso < 1e53)), (
-        "external lbGRB E_iso values fall outside the long-GRB band [1e50, 1e53] erg"
-    )
-    assert np.isclose(gp.LBGRB_EISO_EXTERNAL_LOGMEAN, float(np.log10(eiso).mean()))
-    assert np.isclose(gp.LBGRB_EISO_EXTERNAL_LOGSTD, float(np.log10(eiso).std()))
-    assert 51.0 < gp.LBGRB_EISO_EXTERNAL_LOGMEAN < 52.5
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -3589,51 +3548,121 @@ def test_a_bh_fid_is_a_declared_fiducial_inside_the_foucart_calibration_range():
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Gottlieb et al. (2025) arXiv:2411.13657 [papers/Gottlieb_2024.pdf]
-# Eq. (10) and (11) inputs used by comparison.ipynb.
-# ─────────────────────────────────────────────────────────────────────
-def test_gottlieb25_f_range_is_eq10_fb_over_epsilon_bounds():
-    """``GOTTLIEB25_F_RANGE`` spans f_b / eps_gamma for Eq. (10)'s bounds.
+def test_pracchia_salafia_2026_power_law_dtd_intervals_match_table2():
+    """Table 2 power-law DTD rows: alpha_tau and tau_min with 90 percent intervals."""
+    from grb_rates import (
+        PRACCHIA_SALAFIA_2026_ELF_POWERLAW as elf,
+    )
+    from grb_rates import (
+        PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW as qusj,
+    )
 
-    Gottlieb+25 Eq. (10): ``0.01 <= f_b <= 0.11`` and
-    ``0.15 <= eps_gamma <= 0.5``, so f_b / eps_gamma runs from 0.01 / 0.5 to
-    0.11 / 0.15 exactly, and f_{-1} = 0.1 eps_gamma / f_b spans [0.136, 5].
+    assert (elf["alpha_tau"], elf["alpha_tau_plus90"], elf["alpha_tau_minus90"]) == (
+        3.20,
+        1.60,
+        1.55,
+    )
+    assert (elf["tau_min_Gyr"], elf["tau_min_plus90_Gyr"], elf["tau_min_minus90_Gyr"]) == (
+        0.03,
+        0.28,
+        0.02,
+    )
+    assert (qusj["alpha_tau"], qusj["alpha_tau_plus90"], qusj["alpha_tau_minus90"]) == (
+        3.33,
+        1.48,
+        1.59,
+    )
+    assert (qusj["tau_min_Gyr"], qusj["tau_min_plus90_Gyr"], qusj["tau_min_minus90_Gyr"]) == (
+        0.04,
+        0.33,
+        0.03,
+    )
+
+
+def test_sgrb_dtd_powerlaw_literature_values_and_provenance():
+    """Section 3c literature indices, each pinned to the paper it was read from.
+
+    Gao 2025 Table 2: gamma = 2.04 +0.44 -0.48 (1 sigma), tau_min fixed at 10
+    Myr.  Zevin et al. 2022 abstract: alpha = -1.83 +0.35 -0.39 and t_min =
+    184 +67 -79 Myr (90 percent).  D'Avanzo et al. 2014 Sec. 4.2.4: n = -1.5
+    favoured and -1 still acceptable among three fixed indices, 10 Myr cutoff.
+    Wanderman and Piran 2015 Table 2 (power law, SFR1): 0.81 +0.25 -0.24 (1
+    sigma), tau_min 20 Myr.  Chen et al. (arXiv:2402.03696) Sec. 4: alpha <=
+    -2.0 at 90 percent.  Pins against the two summaries this table was first
+    built from (Ghirlanda+ 2016's 20 Myr for D'Avanzo; Pracchia and Salafia
+    2026's rounded "~1" and "1.5 - 2.2") and against the superseded PS26 v1
+    Table 2 (ELF 80 Myr and 3.33, QUSJ 30 Myr and 3.08); the values pinned
+    here are v2, the accepted A&A 710, A267 text.
     """
-    from grb_physics import GOTTLIEB25_F_RANGE
+    from grb_rates import SGRB_DTD_POWERLAW_LITERATURE as lit
 
-    assert GOTTLIEB25_F_RANGE[0] == pytest.approx(0.01 / 0.5, rel=1e-12)
-    assert GOTTLIEB25_F_RANGE[1] == pytest.approx(0.11 / 0.15, rel=1e-12)
-    f_m1 = 0.1 / np.array(GOTTLIEB25_F_RANGE)
-    assert f_m1.min() == pytest.approx(0.1 * 0.15 / 0.11, rel=1e-12)
-    assert f_m1.max() == pytest.approx(5.0, rel=1e-12)
+    assert set(lit) == {
+        "PS26_ELF",
+        "PS26_QUSJ",
+        "Gao25",
+        "Zevin22",
+        "DAvanzo14",
+        "WP15",
+        "MN25_slow",
+        "MN25_fast",
+        "Chen25",
+    }
+    assert lit["PS26_ELF"]["alpha_tau"] == 3.20 and lit["PS26_ELF"]["tau_min_Gyr"] == 0.03
+    assert lit["PS26_QUSJ"]["alpha_tau"] == 3.33 and lit["PS26_QUSJ"]["tau_min_Gyr"] == 0.04
+    assert lit["PS26_ELF"]["alpha_tau_lo"] == pytest.approx(1.65)
+    assert lit["PS26_ELF"]["alpha_tau_hi"] == pytest.approx(4.80)
+    assert lit["PS26_QUSJ"]["alpha_tau_lo"] == pytest.approx(1.74)
+    assert lit["PS26_QUSJ"]["alpha_tau_hi"] == pytest.approx(4.81)
+    for k in ("PS26_ELF", "PS26_QUSJ"):
+        assert "v2" in lit[k]["source"] and "A267" in lit[k]["source"], k
+    g = lit["Gao25"]
+    assert (g["alpha_tau"], g["tau_min_Gyr"], g["ci"]) == (2.04, 0.01, "1 sigma")
+    assert (g["alpha_tau_lo"], g["alpha_tau_hi"]) == (pytest.approx(1.56), pytest.approx(2.48))
+    z = lit["Zevin22"]
+    assert (z["alpha_tau"], z["tau_min_Gyr"], z["ci"]) == (1.83, 0.184, "90%")
+    assert (z["alpha_tau_lo"], z["alpha_tau_hi"]) == (pytest.approx(1.48), pytest.approx(2.22))
+    assert z["tau_min_range_Gyr"] == (pytest.approx(0.105), pytest.approx(0.251))
+    d = lit["DAvanzo14"]
+    assert (d["alpha_tau"], d["alpha_tau_acceptable"], d["tau_min_Gyr"]) == (1.5, 1.0, 0.01)
+    assert np.isnan(d["alpha_tau_lo"]) and np.isnan(d["alpha_tau_hi"]), (
+        "D'Avanzo did not fit an interval"
+    )
+    w = lit["WP15"]
+    assert (w["alpha_tau"], w["tau_min_Gyr"], w["ci"]) == (0.81, 0.02, "1 sigma")
+    assert (w["alpha_tau_lo"], w["alpha_tau_hi"]) == (pytest.approx(0.57), pytest.approx(1.06))
+    assert lit["Chen25"]["alpha_tau_lo"] == 2.0 and lit["Chen25"]["ci"] == "lower limit"
+    ms, mf = lit["MN25_slow"], lit["MN25_fast"]
+    assert (ms["alpha_tau"], ms["alpha_tau_lo"], ms["alpha_tau_hi"]) == (
+        1.1,
+        pytest.approx(0.95),
+        pytest.approx(1.25),
+    )
+    assert (mf["alpha_tau"], mf["alpha_tau_lo"], mf["alpha_tau_hi"]) == (
+        1.9,
+        pytest.approx(1.5),
+        pytest.approx(2.3),
+    )
+    for k, r in lit.items():
+        assert r["source"].startswith("primary"), k
 
 
-def test_gottlieb25_eq11_scales_with_inverse_f_minus_1():
-    """Eq. (11) carries f_{-1}^{-1}: raising f_{-1} lowers the predicted M_ej.
+def test_pracchia_salafia_2026_mean_delay_intervals():
+    """Sec. 3: <tau_d> = 77 +619 -65 Myr (ELF) and 105 +665 -93 Myr (QUSJ), median
+    and 90 percent, for the power-law DTD (their Eq. 17)."""
+    from grb_rates import (
+        PRACCHIA_SALAFIA_2026_ELF_POWERLAW as elf,
+    )
+    from grb_rates import (
+        PRACCHIA_SALAFIA_2026_QUSJ_POWERLAW as qusj,
+    )
 
-    From Eqs. (9)-(10), E_j = E_iso / (10 f_{-1}) and M_ej = 0.3 M_d, giving
-    M_ej ~ 1.2e-3 f_{-1}^{-1} (E_iso / 2e51) (T50 / s)^(alpha - 1) Msun, which
-    Gottlieb+25 round to 1e-3.  ``gottlieb25_eq11`` multiplies by its
-    ``f_inv`` argument, so callers must pass 1 / f_{-1}.  The notebook once
-    passed f_{-1} itself, biasing every prediction low by ~0.17 dex.
-    """
-    from grb_physics import gottlieb25_eq11
-
-    f_m1 = 2.0
-    m = gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0 / f_m1)
-    assert float(m) == pytest.approx(1e-3 / f_m1, rel=1e-12)
-
-
-def test_gottlieb25_wind_frac_range_is_weak_and_strong_field_values():
-    """``GOTTLIEB25_WIND_FRAC_RANGE`` is Gottlieb+25 Sec. 3.1's 0.3 to 0.4.
-
-    Sec. 3.1: disks with strong (weak) magnetic fields eject
-    ``M_ej ~ 0.4 (0.3) M_d``, and the paper adopts 0.3.  The earlier
-    [0.2, 0.4] range cited Radice et al. (2018, arXiv:1809.11163), which
-    reports no wind fraction.
-    """
-    from grb_physics import GOTTLIEB25_WIND_FRAC, GOTTLIEB25_WIND_FRAC_RANGE
-
-    assert GOTTLIEB25_WIND_FRAC_RANGE == (0.3, 0.4)
-    assert GOTTLIEB25_WIND_FRAC == pytest.approx(0.3, abs=1e-12)
+    assert (elf["mean_tau_d_Myr"], elf["mean_tau_d_plus90_Myr"], elf["mean_tau_d_minus90_Myr"]) == (
+        77,
+        619,
+        65,
+    )
+    assert (
+        qusj["mean_tau_d_Myr"],
+        qusj["mean_tau_d_plus90_Myr"],
+        qusj["mean_tau_d_minus90_Myr"],
+    ) == (105, 665, 93)

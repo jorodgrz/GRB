@@ -82,23 +82,11 @@ _NORM_RATIO_RE = re.compile(
 )
 
 
-# Every figure grb_main.ipynb writes to plots/, both formats, plus the one
-# CSV export.  Extracted from the savefig targets in the code cells, which
-# include f-string forms (`plots/name.{ext}`) and bare stems handed to a
-# helper, so a literal-only scan undercounts.  The previous hand-kept list
-# named 13 figures no cell saves while omitting 33 the notebook writes, and
-# went unnoticed because the repo_root fixture resolved one level short and
-# skipped this module.  test_manuscript_figures_exist covers the manuscript
-# side, including figures comparison.ipynb owns.
+# Every figure grb_main.ipynb writes to plots/, both formats.  Extracted from
+# the savefig targets in the code cells, which include f-string forms
+# (`plots/name.{ext}`) and stems handed to a helper (`outfile + '.pdf'`), so a
+# literal-only scan undercounts.
 _REQUIRED_PLOT_FILES = (
-    "channel_class_crosstab_4models.pdf",
-    "channel_class_crosstab_4models.png",
-    "class_fractions_alpha_ce_5pt.pdf",
-    "class_fractions_alpha_ce_5pt.png",
-    "class_fractions_beta_sweep.pdf",
-    "class_fractions_beta_sweep.png",
-    "class_fractions_sn_engine.pdf",
-    "class_fractions_sn_engine.png",
     "composition_bhns_20models.pdf",
     "composition_bhns_20models.png",
     "composition_bns_20models.pdf",
@@ -109,24 +97,22 @@ _REQUIRED_PLOT_FILES = (
     "delay_time_by_class_per_channel.png",
     "delay_time_distributions.pdf",
     "delay_time_distributions.png",
-    "eos_x_model_matrix_20models.pdf",
-    "eos_x_model_matrix_20models.png",
+    "delay_time_sbgrb_20models.pdf",
+    "delay_time_sbgrb_20models.png",
     "fig15_classification_scheme.pdf",
     "fig15_classification_scheme.png",
     "free_drift_grid_20models.pdf",
     "free_drift_grid_20models.png",
     "kinematic_inputs_free_drift.pdf",
     "kinematic_inputs_free_drift.png",
-    "mass_distributions_by_class.pdf",
-    "mass_distributions_by_class.png",
+    "mass_distributions_rate_weighted.pdf",
+    "mass_distributions_rate_weighted.png",
+    "mass_distributions_rate_weighted_tng_sweep.pdf",
+    "mass_distributions_rate_weighted_tng_sweep.png",
     "mass_plane_bhns.pdf",
     "mass_plane_bhns.png",
     "mass_plane_bns.pdf",
     "mass_plane_bns.png",
-    "metallicity_bhns_by_class_per_channel.pdf",
-    "metallicity_bhns_by_class_per_channel.png",
-    "metallicity_by_class_per_channel.pdf",
-    "metallicity_by_class_per_channel.png",
     "metallicity_dependence.pdf",
     "metallicity_dependence.png",
     "projected_offsets.pdf",
@@ -147,6 +133,10 @@ _REQUIRED_PLOT_FILES = (
     "rate_bns_tng_sweep.png",
     "rate_sbgrb_vs_swift.pdf",
     "rate_sbgrb_vs_swift.png",
+    "rate_tng_data_vs_fit.pdf",
+    "rate_tng_data_vs_fit.png",
+    "tng100_SZz_data_vs_fit.pdf",
+    "tng100_SZz_data_vs_fit.png",
 )
 
 
@@ -509,26 +499,4 @@ def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook, repo_ro
     assert not stale, (
         f"Stale plots/ files (mtime older than pre-run marker): {stale}; "
         f"the notebook may not have regenerated them."
-    )
-
-
-def test_manuscript_figures_exist(repo_root: Path):
-    """Every figure the manuscript includes is present in plots/.
-
-    This runs without executing the notebook, because a missing figure
-    breaks the LaTeX build whatever produced it.  It is the check that
-    catches a figure owned by another notebook, or one whose generating
-    cell was renamed out from under the \\plotone call.
-    """
-    tex = repo_root / "overleaf-paper" / "grb_paper.tex"
-    if not tex.exists():
-        pytest.skip(f"manuscript not present: {tex}")
-
-    included = sorted(set(re.findall(r"plots/([a-z0-9_]+\.pdf)", tex.read_text())))
-    assert included, "no plots/*.pdf references found in grb_paper.tex"
-
-    missing = [f for f in included if not (repo_root / "plots" / f).exists()]
-    assert not missing, (
-        f"grb_paper.tex includes {len(included)} figures; these are absent "
-        f"from plots/ and will break the LaTeX build: {missing}"
     )

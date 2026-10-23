@@ -31,8 +31,8 @@ baryonic-to-gravitational mass conversion (Broekgaarden+ 2021 footnote
 [1.70, 1.76) with 812 systems where Model A has none, so the void is
 specific to the delayed prescription.  Fixing it at the prescription
 level (Mandel & Muller 2020) means re-running COMPAS, which is out of
-scope here, so Model I is the only self-consistent alternative on hand
-and the Section 11.4 engine comparison carries that systematic.
+scope here, so Model I (the rapid engine) is the only self-consistent
+alternative on hand.
 
 The fiducial mass treatment keeps the raw COMPAS masses under
 :func:`cold_stable_ns_mask`.  :func:`remap_ns_masses_double_gaussian`
@@ -535,8 +535,7 @@ def cold_stable_ns_mask(*component_masses, m_tov=M_TOV):
     a cold, non-rotating star under that EOS, so a BNS row containing
     such a component is not a BNS at all and must leave the sample
     before classification.  Passing the EOS-specific ``m_tov`` makes the
-    cut move with the equation of state in an EOS sweep, as the Section 11.6
-    matrix does.
+    cut move with the equation of state in an EOS sweep.
 
     Accepts one array per component (``m1, m2`` for BNS; a single
     ``M_NS`` for the BHNS neutron star) and returns the elementwise AND
@@ -552,6 +551,22 @@ def cold_stable_ns_mask(*component_masses, m_tov=M_TOV):
             raise ValueError("all component-mass arrays must share one shape")
         mask &= m <= m_tov
     return mask
+
+
+def cold_stable_bhns_mask(M_BH, M_NS, m_tov=M_TOV):
+    """BHNS systems whose COMPAS types agree with ``m_tov``: NS at or below
+    it, BH above it.
+
+    The BH test matters only when a run's ``M_NS_max`` sits below
+    ``m_tov`` (Model J, 2.0 Msun, whose BHs start at 2.07).  Such a "BH" is
+    an NS under the adopted EOS, but it cannot be moved into the BNS sample:
+    COMPAS gives NSs and BHs different baryonic-to-gravitational mass
+    relations (Fryer et al. 2012, Eqs. 12 and 13; Broekgaarden et al. 2021,
+    footnote 3), so its mass is not the one an NS would have had.  It is
+    dropped, as BNS rows with a super-``m_tov`` component are.
+    """
+    M_BH = np.asarray(M_BH, dtype=float)
+    return cold_stable_ns_mask(M_NS, m_tov=m_tov) & (m_tov < M_BH)
 
 
 # ---------------------------------------------------------------------------
@@ -861,106 +876,19 @@ or the suppression double-counts."""
 
 
 # ---------------------------------------------------------------------------
-# Gottlieb et al. (2025) Eq. (11) disk-wind ejecta relation
+# Gottlieb et al. (2025) HMNS disk-wind inputs to the breakout model
 # ---------------------------------------------------------------------------
-# Constants and helpers used by ``comparison.ipynb`` to compare BH-engine
-# and HMNS-engine kilonova ejecta predictions against the Rastinejad+24
-# observational sample.  Single source of truth; previously duplicated
-# in the notebook.
-#
 # Reference: Gottlieb et al. 2025, arXiv:2411.13657.
-
-GOTTLIEB25_F_RANGE = (0.01 / 0.5, 0.11 / 0.15)
-"""Range of ``f_code = f_b / epsilon_gamma``, sampled log-uniformly by
-``predict_bh_mc`` in ``comparison.ipynb``.
-
-Gottlieb+25 Eq. (10) writes ``E_iso,gamma = 10 f_{-1} E_j`` with
-``f_{-1} = 0.1 epsilon_gamma / f_b``, ``0.01 <= f_b <= 0.11`` and
-``0.15 <= epsilon_gamma <= 0.5``, deferring to Gottlieb et al. (2023)
-Sec. 2 for both ranges.  There the beaming range is Fong et al. (2015)
-and the efficiency range runs from Panaitescu and Kumar (2002, 0.5) to
-Beniamini et al. (2015, 2016, 0.15).  Those bounds give
-``f_{-1} in [0.136, 5.0]``.  Eq. (11) carries ``f_{-1}^{-1}``, so the
-argument ``gottlieb25_eq11`` expects is ``f_inv = 1 / f_{-1} = f_code / 0.1``,
-spanning [0.2, 7.3].
-"""
-
-GOTTLIEB25_DISK_RANGE = (0.01, 0.10)
-"""Post-merger disk-mass prior for the HMNS engine [Msun].  Kruger and
-Foucart (2020, arXiv:2002.07728) Sec. III describe the numerical BNS disk
-masses as switching sharply between ~0.01 and ~0.1 Msun; this range spans
-that transition."""
 
 GOTTLIEB25_WIND_FRAC = 0.3
 """Disk-wind ejected fraction ``f_wind = M_ej / M_d`` adopted by
 Gottlieb+25 Sec. 3.1 (their weak-field value)."""
 
-GOTTLIEB25_WIND_FRAC_RANGE = (0.3, 0.4)
-"""Gottlieb+25 Sec. 3.1: post-merger disks with weak (strong) magnetic
-fields eject ``M_ej ~ 0.3 (0.4) M_d`` (Christie et al. 2019; Fernandez
-et al. 2019; Nedora et al. 2021; Gottlieb et al. 2023b; Kiuchi et al.
-2023).  Drawn log-uniformly in the ``comparison.ipynb`` HMNS Monte Carlo.
-An earlier [0.2, 0.4] range was attributed to Radice et al. (2018,
-arXiv:1809.11163), a viscous-dynamical-ejecta paper that reports no
-wind fraction."""
-
 GOTTLIEB25_T_HMNS_RANGE = (0.1, 10.0)
 """Long-lived-HMNS lifetime window [s].  Gottlieb+25 Sec. 2.3.2 give
 ``0.1 s <~ t_HMNS <~ 1 s`` for the long-lived HMNSs that power sbGRBs;
 the upper decade to 10 s has no source.  Used as the HMNS launch-delay
-prior in ``grb_rates.breakout_fraction_bns`` and as a guide in
-``comparison.ipynb`` Fig. 1."""
-
-# Long-duration merger-GRB E_iso anchor [erg], tabulated with sources in
-# data/external_lgrb_eiso.csv.  comparison.ipynb draws the BH-engine E_iso for
-# every lb/sb event from this set rather than from each burst's own energy.
-# Two properties limit what it buys.  (1) It is not external to the tested
-# sample: 060614, 211211A and 230307A are all three Rastinejad+ 2024 lbGRBs,
-# leaving two independent events (211227A, 191019A).  (2) The energies are in
-# different bands: 060614, 211227A and 191019A are Swift/BAT 15-150 keV values
-# (Lu et al. 2022; Stratta et al. 2025; Levan et al. 2024 list the same band),
-# while 211211A and 230307A are broadband.  Levan et al. (2024) give 2e51 and
-# 7e51 erg for those two in 15-150 keV, against 1.3e52 and 6.97e52 here.
-LBGRB_EISO_EXTERNAL_ERG = (8.4e50, 1.14e51, 1.70e51, 1.30e52, 6.97e52)
-LBGRB_EISO_EXTERNAL_LOGMEAN = float(np.mean(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
-LBGRB_EISO_EXTERNAL_LOGSTD = float(np.std(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
-
-
-def gottlieb25_eq11(T50, E_iso, alpha=2.0, f_inv=1.0):
-    """Predicted disk-wind kilonova ejecta mass [Msun], BH engine.
-
-    Gottlieb et al. 2025 (arXiv:2411.13657) Eq. (11):
-
-        M_ej = 1e-3 * f_{-1}^{-1} * (E_iso / 2e51 erg) *
-               (T50 / 1 s) ** (alpha - 1)   Msun
-
-    Parameters
-    ----------
-    T50 : array-like
-        50% gamma-ray fluence duration [s].
-    E_iso : array-like
-        Isotropic-equivalent gamma-ray energy [erg].
-    alpha : float, default 2.0
-        Decay index of the BH accretion rate, ``Mdot ~ t^-alpha``, with
-        ``1.5 <~ alpha <~ 2`` (Gottlieb+25 Sec. 2.1).
-    f_inv : float, default 1.0
-        ``f_{-1}^{-1} = f_b / (0.1 epsilon_gamma)``, the inverse of the
-        Gottlieb+25 Eq. (10) ``f_{-1}``.  Eq. (11) scales as ``f_{-1}^{-1}``
-        because ``E_j = E_iso / (10 f_{-1})``.
-    """
-    T50 = np.asarray(T50, dtype=float)
-    E_iso = np.asarray(E_iso, dtype=float)
-    return 1e-3 * f_inv * (E_iso / 2e51) * (T50 / 1.0) ** (alpha - 1.0)
-
-
-def hmns_wind_ejecta(M_d, wind_frac=GOTTLIEB25_WIND_FRAC):
-    """Predicted disk-wind kilonova ejecta mass [Msun], HMNS engine.
-
-    ``M_ej = wind_frac * M_d``.  Independent of T_50 to first order.
-    Default ``wind_frac = 0.3`` from Gottlieb+25 §3.1.
-    """
-    return wind_frac * np.asarray(M_d, dtype=float)
-
+prior in ``grb_rates.breakout_fraction_bns``."""
 
 # ---------------------------------------------------------------------------
 # Pais et al. (2025) BNS jet breakout  [arXiv:2407.19002]
@@ -1081,33 +1009,6 @@ def jet_breaks_out_pais(
     if require_collimation:
         escape = escape & (E_j > pais_collimation_energy(theta, t_e, norm=PAIS_COLL_NORM))
     return escape
-
-
-def _selftest_gottlieb25():
-    """Run on import; verifies that Eq. (11) normalisation and the f_inv
-    derivation from Eq. (10) are consistent with the cited values."""
-    assert np.isclose(gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0), 1e-3), (
-        "Eq. 11 normalisation failed"
-    )
-    assert np.isclose(gottlieb25_eq11(4.0, 2e51, alpha=1.5, f_inv=1.0), 2e-3), (
-        "Eq. 11 alpha=1.5 scaling failed"
-    )
-    f_lo, f_hi = GOTTLIEB25_F_RANGE
-    finv_min, finv_max = 0.1 / f_hi, 0.1 / f_lo
-    assert np.isclose(finv_min, 0.14, atol=0.01), f"f_inv_min should be ~0.14 (got {finv_min:.3f})"
-    assert np.isclose(finv_max, 5.0, atol=0.05), f"f_inv_max should be ~5.0 (got {finv_max:.3f})"
-    lo, hi = hmns_wind_ejecta(np.array(GOTTLIEB25_DISK_RANGE))
-    assert 0 < lo < hi, "HMNS wind-ejecta range ordering failed"
-    fw_lo, fw_hi = GOTTLIEB25_WIND_FRAC_RANGE
-    assert 0 < fw_lo < fw_hi, "HMNS wind-fraction range ordering failed"
-    assert fw_lo <= GOTTLIEB25_WIND_FRAC <= fw_hi, (
-        "GOTTLIEB25_WIND_FRAC must lie inside GOTTLIEB25_WIND_FRAC_RANGE"
-    )
-    t_lo, t_hi = GOTTLIEB25_T_HMNS_RANGE
-    assert 0 < t_lo < t_hi, "HMNS t_range ordering failed"
-
-
-_selftest_gottlieb25()
 
 
 # ---------------------------------------------------------------------------

@@ -41,6 +41,7 @@ from grb_classify import classify_bhns, classify_bns_2024
 from grb_io import METALLICITY_GRID, filter_systems, load_bhns, load_bns
 from grb_physics import (
     M_TOV,
+    cold_stable_bhns_mask,
     cold_stable_ns_mask,
     remap_ns_marginal,
     remap_ns_masses_double_gaussian,
@@ -212,7 +213,7 @@ def test_section_5_draws_every_bin_ungated_on_modelA(bns_a_path, bhns_a_path):
     cold-stability cut, no Alsing remap, which is the fiducial treatment.
     """
     from grb_io import filter_systems
-    from grb_physics import M_TOV, cold_stable_ns_mask
+    from grb_physics import M_TOV, cold_stable_bhns_mask, cold_stable_ns_mask
     from grb_rates import formation_efficiency_binned
 
     grid = np.asarray(METALLICITY_GRID, dtype=float)
@@ -229,7 +230,7 @@ def test_section_5_draws_every_bin_ungated_on_modelA(bns_a_path, bhns_a_path):
     )
 
     bhns = load_bhns(bhns_a_path, expected_model="A", expected_ns_max=2.5)
-    bhns = filter_systems(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
+    bhns = filter_systems(bhns, cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV))
     cbh = classify_bhns(bhns["M_BH"], bhns["M_NS"], a_BH=A_BH_FID)
     res_bhns = formation_efficiency_binned(
         grid,
@@ -471,7 +472,7 @@ def test_cold_stability_cut_tilts_eta_rather_than_rescaling_it(bns_a_path, bhns_
     just its level.  It is also why this is not the quantity in the BHNS
     panel of Broekgaarden+ 2022 Fig. 1, which applies no M_TOV cut.
     """
-    from grb_physics import M_TOV, cold_stable_ns_mask
+    from grb_physics import M_TOV, cold_stable_bhns_mask, cold_stable_ns_mask
 
     grid = np.asarray(METALLICITY_GRID, dtype=float)
     grid = grid[np.concatenate(([True], np.diff(grid) != 0))]
@@ -489,7 +490,7 @@ def test_cold_stability_cut_tilts_eta_rather_than_rescaling_it(bns_a_path, bhns_
         "BHNS": (
             bhns["metallicity"],
             bhns["weights"],
-            cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV),
+            cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV),
             0.761,
             0.185,
         ),
@@ -516,12 +517,12 @@ def test_bhns_high_z_collapse_is_compas_not_the_cold_stability_cut(bhns_a_path):
     plunging near log10 Z = -1.7.  The caption attributes ours to the same
     cause, so pin that the cut is not doing it.
     """
-    from grb_physics import M_TOV, cold_stable_ns_mask
+    from grb_physics import M_TOV, cold_stable_bhns_mask
 
     Z_SUN = 0.0142
     bhns = load_bhns(bhns_a_path, expected_model="A", expected_ns_max=2.5)
     Z, w = bhns["metallicity"], bhns["weights"]
-    keep = cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV)
+    keep = cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV)
 
     grid = np.unique(Z)
     before = grid[np.argmin(np.abs(grid / Z_SUN - 1.39))]
@@ -600,7 +601,9 @@ def test_total_efficiency_absolute_scale_on_modelA(bns_a_path, bhns_a_path):
     bns = load_bns(path=bns_a_path)
     eta_bns, z_bns = _total_eta(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
     bhns = load_bhns(path=bhns_a_path)
-    eta_bhns, z_bhns = _total_eta(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
+    eta_bhns, z_bhns = _total_eta(
+        bhns, cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV)
+    )
 
     # Broekgaarden+ 2021 Sec. 3.3: the BHNS formation efficiency peaks near
     # Z_i ~ Zsun/5.  Accept Zsun/4 to Zsun/6, which spans several native

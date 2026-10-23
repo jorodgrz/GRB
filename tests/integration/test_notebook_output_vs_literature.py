@@ -74,6 +74,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     from grb_physics import (
         M_TOV,
         MISALIGNMENT_SYSTEMATIC_FACTOR,
+        cold_stable_bhns_mask,
         cold_stable_ns_mask,
     )
     from grb_rates import (
@@ -109,7 +110,7 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # BHNS load and Foucart 2018 disk-mass classification at a_BH=0.5.
     # ------------------------------------------------------------------
     bhns = load_bhns_with_kicks(path=bhns_a_path)
-    bhns = filter_systems(bhns, cold_stable_ns_mask(bhns["M_NS"], m_tov=M_TOV))
+    bhns = filter_systems(bhns, cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV))
     BH, NS_bh = bhns["M_BH"], bhns["M_NS"]
     w_bhns = bhns["weights"]
     Z_bhns = bhns["metallicity"]
@@ -123,33 +124,26 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # ------------------------------------------------------------------
     # Cosmic integration (notebook Section 4).
     # ------------------------------------------------------------------
-    from grb_rates import (
-        MSSFR_PARAMS_LEVINA26_TNG100,
-        SFR_PARAMS_LEVINA26_TNG100,
-    )
+    from grb_rates import fine_metallicity_grid, tng_sfr_and_dPdlogZ
 
     redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
         max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
     )
-    sfr = fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
 
     if bns_a_path == DEFAULT_BNS_PATH and bhns_a_path == DEFAULT_BHNS_PATH:
         Z_range = verify_shared_metallicity_prior(DEFAULT_BNS_PATH, DEFAULT_BHNS_PATH)
     else:
         Z_range = (float(min(Z_bns.min(), Z_bhns.min())), float(max(Z_bns.max(), Z_bhns.max())))
 
-    dPdlogZ, metallicities, p_draw = fci.find_metallicity_distribution(
-        redshifts,
-        min_logZ_COMPAS=np.log(Z_range[0]),
-        max_logZ_COMPAS=np.log(Z_range[1]),
-        **MSSFR_PARAMS_LEVINA26_TNG100,
-    )
+    # Notebook fiducial: the TNG100-1 S(Z, z) table, no analytic MSSFR.
+    metallicities, p_draw = fine_metallicity_grid(*Z_range)
+    sfr, dPdlogZ = tng_sfr_and_dPdlogZ(redshifts, metallicities, box="TNG100-1")
 
     expected_rate_bns = read_expected_local_rate(bns_a_path)
     expected_rate_bhns = read_expected_local_rate(bhns_a_path)
 
     # COMPAS ClassMSSFR bin convention (notebook Section 4): the top grid
-    # point absorbs the 28.5 percent of z = 0 star formation above the
+    # point absorbs the 22.1 percent of z = 0 star formation above the
     # Z = 0.03 ceiling, which the pointwise lookup assigns to nothing.
     Z_grid_53 = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
     dPdlogZ = dPdlogZ_binned_to_grid(dPdlogZ, metallicities, Z_grid_53, p_draw)
@@ -351,7 +345,7 @@ def test_bhns_modelA_R0_within_LIGO_O4_BHNS_band(notebook_pipeline):
         f"{ratio:.2f}x the GWTC-5.0 NSBH upper edge {band['R_hi']}, outside "
         f"the documented overshoot band [{lo}, {hi}].  Below {lo} the "
         f"headline tension in Sections 7 and 11.1b has gone away and the "
-        f"manuscript needs rewording; above {hi} something broke in the "
+        f"caption needs rewording; above {hi} something broke in the "
         f"normalisation or the Foucart disk-mass classification."
     )
 

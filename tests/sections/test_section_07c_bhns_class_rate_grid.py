@@ -19,6 +19,8 @@ import os
 import numpy as np
 import pytest
 
+from grb_io import LOADER_SELECTION
+
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 _NB_PATH = os.path.join(_REPO_ROOT, "grb_main.ipynb")
@@ -113,7 +115,7 @@ def test_section_7c_cache_shape_and_content():
     from grb_physics import A_BH_FID
 
     d = np.load(_CACHE, allow_pickle=False)
-    assert str(d["norm"]) == "M_SF_SIM"
+    assert str(d["norm"]) == f"M_SF_SIM|TNG100-1 S(Z,z) data|{LOADER_SELECTION}"
     assert [str(k) for k in d["class_keys"]] == CLASS_KEYS
     assert float(d["a_bh"]) == A_BH_FID
     R = d["R_class"]

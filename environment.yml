@@ -37,3 +37,6 @@ dependencies:
   - pip
   - pip:
       - git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils
+      # Independent cosmic-rate convolution (Hendriks+ 2023), used only by
+      # tests/integration/test_sspc_cross_check.py to cross-check FastCosmicIntegration.
+      - syntheticstellarpopconvolve==0.4

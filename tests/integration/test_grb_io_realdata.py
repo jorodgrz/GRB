@@ -313,7 +313,7 @@ def test_channel_seed_join_recovers_misaligned_model(compas_file):
     columns aligned to the merging DCO subset, finite, with the five
     Broekgaarden channels forming a weight-complete partition.
     """
-    from grb_classify import classify_formation_channels
+    from grb_classify import FORMATION_CHANNEL_INPUTS, classify_formation_channels
     from grb_io import load_bns_with_channels
 
     out = load_bns_with_channels(path=compas_file, expected_model="L")
@@ -322,16 +322,7 @@ def test_channel_seed_join_recovers_misaligned_model(compas_file):
         assert out[key].size == n, f"{key} not aligned to the {n} merging rows"
         assert np.isfinite(out[key]).all()
 
-    chan = classify_formation_channels(
-        dblCE=out["dblCE"],
-        fc_CEE=out["fc_CEE"],
-        fc_mt_p1=out["fc_mt_p1"],
-        fc_mt_s1=out["fc_mt_s1"],
-        fc_mt_p1_K1=out["fc_mt_p1_K1"],
-        fc_mt_p1_K2=out["fc_mt_p1_K2"],
-        fc_mt_s1_K1=out["fc_mt_s1_K1"],
-        fc_mt_s1_K2=out["fc_mt_s1_K2"],
-    )
+    chan = classify_formation_channels(**{k: out[k] for k in FORMATION_CHANNEL_INPUTS})
     w = out["weights"]
     frac = np.array([w[chan[k]].sum() / w.sum() for k in _CH_KEYS])
     assert frac.sum() == pytest.approx(1.0, abs=1e-12)

@@ -21,20 +21,26 @@ Pure module-level invariants over `grb_*.py`. No `data/`, no
 `compas_python_utils`, no notebook coupling. Runs in `make smoke` and
 `make ci`.
 
-| File | Module under test |
+| File | Covers |
 |---|---|
-| `test_classify_asserts.py` | `grb_classify._resolve_m_thresh`, `classify_grid` ns_max validation |
-| `test_grb_io.py` | `grb_io` loaders against synthetic HDF5 |
-| `test_isco.py` | `grb_physics.r_isco` against Bardeen 1972 |
-| `test_palette_and_rcparams.py` | `grb_plot_style` palette + canonical rcParams |
-| `test_phase4_helpers.py` | `marginalize_bh_spin`, `channel_class_crosstab`, offsets vectorisation |
-| `test_physics.py` | Foucart 2018, Kruger-Foucart 2020, MSSFR normalisation |
-| `test_rates.py` | `dPdlogZ`, `compute_merger_rate`, `calibrate_mean_mass_evolved` |
+| `test_grb_{classify,io,offsets,physics,rates}_rigor.py` | Behaviour and edge cases of each module |
+| `test_physics.py` | Foucart 2018, Kruger and Foucart 2020, NS-mass remap support |
+| `test_isco.py` | `r_isco` against Bardeen et al. (1972) |
+| `test_ns_remap_and_hist_pdf.py` | Alsing et al. (2018) remap mechanics; `weighted_hist_pdf` normalisation |
+| `test_classify_asserts.py` | Runtime asserts in `grb_classify` (`m_thresh`, `ns_max`) |
+| `test_class_channel_split.py` | Per-class per-channel split invariants (Sections 6b, 7b) |
+| `test_grb_io.py` | Loaders against synthetic HDF5 |
+| `test_tng_sfrd.py` | TNG S(Z,z) tables as cosmic-integration input |
+| `test_rates.py` | `dPdlogZ`, `compute_merger_rate`, `calibrate_mean_mass_evolved`, smoothing, bootstrap |
+| `test_phase4_helpers.py` | `marginalize_bh_spin`, `channel_class_crosstab`, remap marginals |
 | `test_beaming.py` | `beamed_rate`, `beamed_rate_mixed`, `CLASS_THETA_J` |
-| `test_bns_jet_breakout.py` | `breakout_fraction_bns_eos` and the intrinsic-to-observable rate ladder |
-| `test_eos_sensitivity.py` | `compute_eos_sensitivity` contract on one population |
-| `test_eos_sensitivity_grid.py` | `compute_eos_sensitivity` over NS-mass treatment x EOS |
-| `test_offsets_kick_velocity.py` | kick velocity sets the offset scale in `compute_offsets_mixed_hosts` |
+| `test_bns_jet_breakout.py` | `breakout_fraction_bns_eos` and the intrinsic-to-observable chain |
+| `test_eos_sensitivity.py`, `test_eos_sensitivity_grid.py` | `compute_eos_sensitivity` on one population and over EOS x mass treatment |
+| `test_palette_and_rcparams.py` | Palette and ApJ rcParams |
+| `test_ballistic_offset.py` | Free-drift offsets |
+| `test_birth_radius_truncation.py` | Truncated birth radii renormalise rather than clip |
+| `test_offsets_kick_velocity.py` | Kick velocity sets the offset scale |
+| `test_verlet_integration_duration.py` | Verlet integrator runs for each system's own delay time |
 
 ### `sections/` (one file per notebook section)
 
@@ -44,18 +50,31 @@ Thin smoke tests aligned with the figures in
 
 | Section | File | Notebook figure |
 |---|---|---|
-| 1 | `test_section_01_mass_plane.py` | Mass Plane (BNS and BHNS) |
-| 2 | `test_section_02_component_masses.py` | Component Mass Distributions by GRB Class |
-| 3 | `test_section_03_delay_times.py` | Delay Time Distributions by GRB Class |
-| 4 | `test_section_04_mssfr.py` | Cosmic Integration / MSSFR Grid Setup |
-| 5 | `test_section_05_metallicity_efficiency.py` | Metallicity Dependence of GRB Formation Efficiency |
-| 6 | `test_section_06_bns_rate.py`, `test_section_06_lvk_rate_comparison.py` (+ `06b` channel split and `06b` formation-channel classifier) | BNS Merger Rate R(z) per GRB Class |
-| 7 | `test_section_07_bhns_spin.py`, `test_section_07_lvk_rate_comparison.py` (+ `07b` channel split) | BHNS Merger Rate R(z) with BH Spin Sensitivity |
-| 8 | `test_section_08_offsets.py` | Physical Host-Galaxy Offset Distributions |
-| 8a | `test_section_08a_free_drift.py` | Free-drift check: what the natal kick and drift time are worth with no potential; what the two panels are allowed to claim (the collinear two-leg bound, the isotropic projection factor, and why the joint density is binned over the sample rather than the frame); and the data provenance the figure rests on (the two loaders return the same rows, the drift-baseline identity holds, the columns carry no sentinel values, the assumed units survive a range check, and the file's kick directions are a selected anisotropic sample rather than a bug) |
-| 8c | `test_section_08c_free_drift_grid.py` | Free drift across the 20-model grid: that a weighted median of a fraction keeps its zeros, that the first leg is negligible on the fiducial and dominant on EH, that exactly two models leave the BHNS disk class empty, and that the grid moves the drift time far more than the kick |
-| 8b | `test_section_08b_host_routing.py` | Delay-time host assignment: the sign of the offset shift for prompt and slow populations, and that the elliptical fraction becomes a prediction rather than the assumed 0.25 |
-| 11 | `test_section_11_model_grid_scan.py` | Full 20-model Broekgaarden+ 2021 grid scan (population-synthesis robustness) |
+| 1 | `test_section_01_mass_plane.py` | Mass plane, BNS and BHNS |
+| 3 | `test_section_03_delay_times.py` | Delay-time distributions by class |
+| 3b | `test_section_03b_delay_by_channel.py`, `test_section_03b_channel_rate_shares.py` | Delay time split by channel; channel shares of R(z=0) |
+| 3c | `test_section_03c_sbgrb_delay_grid.py` | sbGRB delay times across the 20 models |
+| 4 | `test_section_04_mssfr.py` | Cosmic-integration setup |
+| 4d | `test_section_04d_tng_data_vs_fit.py` | TNG tables against the Levina fits |
+| 4e | `test_section_04e_tng100_SZz.py` | TNG100-1 S(Z,z) map |
+| 5 | `test_section_05_metallicity_efficiency.py` | eta(Z) per class |
+| 6 | `test_section_06_bns_rate.py`, `test_section_06_lvk_rate_comparison.py` | BNS R(z) per class, against LVK |
+| 6, 7 | `test_section_06_07_rate_quote_smoothing.py` | Quoted R(z=0) come from unsmoothed arrays |
+| 6b | `test_section_06b_bns_class_channel.py`, `test_section_06b_formation_channels.py` | BNS R(z) per class x channel; channel classifier |
+| 6c | `test_section_06c_sbgrb_vs_swift.py` | sbGRB rate against Swift, Du, P&S, LVK |
+| 6d | `test_section_06d_class_rate_grid.py` | BNS R(z) per class across 20 models |
+| 7 | `test_section_07_bhns_spin.py`, `test_section_07_lvk_rate_comparison.py` | BHNS R(z) with spin sweep, against LVK |
+| 7b | `test_section_07b_bhns_class_channel.py` | BHNS R(z) per class x channel |
+| 7c | `test_section_07c_bhns_class_rate_grid.py` | BHNS R(z) per class across 20 models |
+| 7d | `test_section_07d_rate_weighted_masses.py` | Merger-rate-weighted masses by class |
+| 7e | `test_section_07e_mass_redshift_tng_sweep.py` | Rate-weighted masses across redshift and TNG box |
+| 8 | `test_section_08_offsets.py` | Integrated host offsets |
+| 8a | `test_section_08a_free_drift.py` | Free-drift check and its data provenance |
+| 8b | `test_section_08b_host_routing.py` | Delay-time host routing |
+| 8c | `test_section_08c_free_drift_grid.py` | Free drift across 20 models |
+| 11 | `test_section_11_model_grid_scan.py` | 20-model grid scan |
+
+`_model_cache.py` is a shared helper (per-model rate cache), not a test file.
 
 ### `anchors/` (literature audit)
 
@@ -70,15 +89,21 @@ paper citation, this is the file that will tell you.
 Tests that need `data/`, `compas_python_utils`, or notebook execution.
 Runs locally via `make test`; in CI only on manual `workflow_dispatch`.
 
-| File | Why it is integration |
+| File | What it checks |
 |---|---|
-| `test_compas_pin.py` | Imports the upstream `compas_python_utils` pin |
-| `test_comparison_notebook.py` | Reads `data/rastinejad_2024.csv` |
-| `test_cosmic_integration_vs_compas.py` | Bin-for-bin cross-check with COMPAS |
-| `test_grb_io_realdata.py` | Audits real Broekgaarden+ 2021 HDF5 archives |
-| `test_grb_main_notebook.py` | Executes `grb_main.ipynb` via `nbclient` |
-| `test_notebook_output_vs_literature.py` | Class fractions vs published bands |
-| `test_rate_class_shape.py` | R(z) shape on real BNS-A data |
+| `test_broekgaarden21_channels_reproduced.py` | Channels match Broekgaarden+ 2021 system by system |
+| `test_channel_rates_vs_broekgaarden21_w000.py` | Per-channel rates against the `w_000` anchors, 20 models |
+| `test_compas_pin.py` | Imports the pinned `compas_python_utils` |
+| `test_cosmic_integration_vs_compas.py` | Bin-for-bin check against COMPAS; `w_000` reproduction |
+| `test_failed_ce_ejections.py` | Loaders drop failed CE ejections |
+| `test_grb_io_realdata.py` | Audits the real HDF5 archives |
+| `test_grb_main_notebook.py` | Executes `grb_main.ipynb` via `nbclient`; every figure regenerated |
+| `test_model_grid_realdata.py` | `BROEKGAARDEN21_MODELS` against the files on disk |
+| `test_notebook_output_vs_literature.py` | Notebook outputs against published bands |
+| `test_offset_tail_provenance.py` | Origin of the wide offset tail |
+| `test_rate_class_shape.py` | R(z) shape on real Model A data |
+| `test_section_01_mass_plane_realdata.py` | Section 1 panels on real data |
+| `test_sspc_cross_check.py` | R(z) against an independent SSPC convolution |
 
 ## Markers
 
@@ -90,7 +115,7 @@ Defined in [pyproject.toml](../pyproject.toml) under
 | `unit` | folder | Module-level invariant |
 | `anchors` | folder | Literature anchor |
 | `integration` | folder | Heavy / data-bound / notebook |
-| `section_1` ... `section_12` | filename | Notebook-section coupling |
+| `section_<N>` | filename | Notebook-section coupling (one marker per file in `sections/`, registered in `pyproject.toml`) |
 | `slow` | manual | Wall-clock above ~5 s |
 | `requires_data` | manual | Needs `data/COMPASCompactOutput_*.h5` |
 | `requires_compas` | manual | Needs `compas_python_utils` importable |

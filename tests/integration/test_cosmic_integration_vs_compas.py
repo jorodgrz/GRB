@@ -72,7 +72,8 @@ def compas_xcheck_pipeline(bns_a_path):
         compute_merger_rate,
     )
 
-    data = load_bns(path=bns_a_path)
+    # w_000 counts the failed-CE ejections the loaders drop by default.
+    data = load_bns(path=bns_a_path, drop_failed_ce=False)
     Z = data["metallicity"]
     delays = data["delay_time"]
     w = data["weights"]
@@ -416,7 +417,8 @@ def test_run_configuration_mass_reproduces_the_w000_anchor(kind, request):
     )
 
     path = request.getfixturevalue("bns_a_path" if kind == "BNS" else "bhns_a_path")
-    data = (load_bns if kind == "BNS" else load_bhns)(path=path)
+    # w_000 counts the failed-CE ejections the loaders drop by default.
+    data = (load_bns if kind == "BNS" else load_bhns)(path=path, drop_failed_ce=False)
 
     grid = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
     redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(

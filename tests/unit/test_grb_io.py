@@ -82,11 +82,18 @@ def _write_dco_group(
         "tc": tc,
         "tform": tform,
         "stellarType1": st1_values,
+        "seed": np.arange(n_total, dtype=np.int64),
     }
     if extra_cols:
         cols.update(extra_cols)
     for name, arr in cols.items():
         dco.create_dataset(name, data=np.asarray(arr).reshape(-1, 1))
+    # One common-envelope row per system, none flagged as a failed ejection,
+    # so the loaders' commonEnvelopes join finds the group it requires.
+    seed = np.asarray(cols["seed"]).ravel()
+    ce = f.create_group("commonEnvelopes")
+    ce.create_dataset("randomSeed", data=seed.reshape(-1, 1))
+    ce.create_dataset("immediateRLOFAfterCEE", data=np.zeros((seed.size, 1), dtype=bool))
     return dco, n_merging
 
 
@@ -535,7 +542,7 @@ def test_registry_alpha_ce_matches_ce_prescription_constant():
     """Registry alpha_CE agrees with ``CE_PRESCRIPTION_BROEKGAARDEN21``.
 
     ``grb_rates.CE_PRESCRIPTION_BROEKGAARDEN21['alpha_CE']`` is the
-    manuscript-core five-model alpha table.  Where the two overlap they must
+    five-core-model alpha table.  Where the two overlap they must
     carry the same value, so a future edit to one does not silently
     contradict the other.
     """
