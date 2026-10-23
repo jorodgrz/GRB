@@ -1,7 +1,7 @@
 """Validation tests for ``grb_rates.py``.
 
 Anchors the cosmic-rate convolution and the per-class beaming helpers
-to (a) the cited literature (Fong+ 2015, Beniamini and Nakar 2019,
+to (a) the cited literature (Fong+ 2015,
 Neijssel+ 2019, Madau and Dickinson 2014, Wanderman and Piran 2015) and
 (b) the COMPAS reference implementation in
 ``compas_python_utils.cosmic_integration.FastCosmicIntegration``.
@@ -23,14 +23,14 @@ import pytest
 # Beaming round-trip: f_beam = 1 - cos(theta_j); Fong+ 2015 ApJ 815, 102
 # ─────────────────────────────────────────────────────────────────────
 def test_beaming_round_trip_sbgrb():
-    """sbGRB fiducial: theta_j = 13 deg => f_beam ~ 0.0256."""
+    """sbGRB fiducial: theta_j = 16 deg => f_beam ~ 0.0387 (Fong+ 2015 median)."""
     from grb_rates import CLASS_THETA_J, beamed_rate
 
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     expected = 100.0 * (1.0 - np.cos(np.radians(theta_fid)))
     got = beamed_rate(100.0, theta_fid)
     assert np.isclose(got, expected, rtol=1e-12)
-    assert 2.55 < got < 2.58, got
+    assert 3.87 < got < 3.88, got
 
 
 def test_beaming_round_trip_lbgrb():
@@ -85,7 +85,7 @@ def test_beamed_rate_mixed_missing_class_raises():
 # ─────────────────────────────────────────────────────────────────────
 def test_cosmology_planck15_h0():
     """Planck 2015 H0 = 67.74 km/s/Mpc (Planck Collaboration 2016
-    A&A 594, A13).  This is the value the manuscript prose claims and
+    A&A 594, A13).  This is the value the notebook prose claims and
     the value grb_main.ipynb passes to calculate_redshift_related_params
     after the 2026-05-06 cosmology fix.  If a future change reverts the
     notebook to the COMPAS Planck18 default (H0 = 67.4) this test
@@ -283,15 +283,18 @@ def test_calibrate_mean_mass_evolved_redshift_step_invariant():
 # Wanderman and Piran (2015) sGRB R(z), MNRAS 448, 3026 -- Eq. (9)
 # ─────────────────────────────────────────────────────────────────────
 def test_wanderman_piran_2015_peak_at_z_peak():
-    """``wanderman_piran_2015_Rz`` returns R0 at z = z_peak (the
-    piecewise-exponential is C^0 there, so both sides give the same
-    value)."""
+    """``wanderman_piran_2015_Rz`` returns R0 = 45 at z = z_peak = 0.9
+    (WP15 Eq. 9 peak; the piecewise-exponential is C^0 there, so both
+    sides give the same value).  The rate 1sigma band scales
+    proportionally to WP15 Eq. 10's internal-only rho_0 = 4.1 +1.8/-1.4;
+    the SFR2 shape systematic coincides with R_best at the peak."""
     from grb_rates import wanderman_piran_2015_Rz
 
     out = wanderman_piran_2015_Rz(np.array([0.9]))
-    assert np.isclose(out["R_best"][0], 4.1)
-    assert np.isclose(out["R_lo"][0], 2.2)
-    assert np.isclose(out["R_hi"][0], 6.4)
+    assert np.isclose(out["R_best"][0], 45.0)
+    assert np.isclose(out["R_rate_lo"][0], 45.0 * 2.7 / 4.1)
+    assert np.isclose(out["R_rate_hi"][0], 45.0 * 5.9 / 4.1)
+    assert np.isclose(out["R_shape_sfr2"][0], 45.0)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -646,6 +649,73 @@ def test_per_system_rate_weights_matches_fci_formation_column_at_grid_aligned_z_
             "in sync with FastCosmicIntegration."
         ),
     )
+
+
+@pytest.mark.requires_compas
+def test_per_system_rate_weights_equal_fci_merger_rate_rows_with_delays():
+    """With real delays, ``per_system_rate_weights(z_j)`` is FCI's ``merger_rate[:, j]``.
+
+    FCI reads the formation rate at ``ceil(z_form / dz)`` and drops the last
+    admissible slot before ``time_first_SF``.  An earlier version interpolated
+    linearly in z_form and kept that slot, so its weights summed to the rate
+    only to 0.1 to 0.8 percent; a rate-weighted histogram must integrate to the
+    plotted R(z).  The slots tested include the high-z end, where the
+    first-star-formation boundary bites.
+    """
+    fci = pytest.importorskip(
+        "compas_python_utils.cosmic_integration.FastCosmicIntegration",
+        reason="compas_python_utils not installed in this environment",
+    )
+    from astropy.cosmology import Planck15
+
+    from grb_rates import per_system_rate_weights
+
+    redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
+        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
+    )
+    sfr = fci.find_sfr(redshifts)
+    rng = np.random.default_rng(1)
+    Z = np.exp(rng.uniform(np.log(1e-4), np.log(0.03), size=200))
+    delays = 10 ** rng.uniform(-1.0, 4.1, size=Z.size)
+    w = rng.uniform(0.5, 2.0, size=Z.size)
+    dPdlogZ, mets, p_draw = fci.find_metallicity_distribution(
+        redshifts, min_logZ_COMPAS=np.log(1e-4), max_logZ_COMPAS=np.log(0.03)
+    )
+    n_formed = sfr / 1.0e7
+    _, merger_rate_fci = fci.find_formation_and_merger_rates(
+        n_binaries=Z.size,
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=time_first_SF,
+        n_formed=n_formed,
+        dPdlogZ=dPdlogZ,
+        metallicities=mets,
+        p_draw_metallicity=p_draw,
+        COMPAS_metallicites=Z,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=w,
+    )
+    for j in (0, 1, 37, 100, 200, 500, 800, 950, 990, 999):
+        proj = per_system_rate_weights(
+            float(redshifts[j]),
+            redshifts,
+            times,
+            time_first_SF,
+            n_formed,
+            p_draw,
+            dPdlogZ,
+            mets,
+            Z,
+            delays,
+            w,
+        )
+        np.testing.assert_allclose(
+            proj,
+            merger_rate_fci[:, j],
+            rtol=1e-12,
+            atol=0.0,
+            err_msg=f"slot j = {j} (z = {redshifts[j]:.2f})",
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1237,3 +1307,237 @@ def test_breakout_fraction_bns_eos_reproducible_under_fixed_seed():
     for label in masks:
         for k in ("med", "lo", "hi"):
             assert a[label][k] == pytest.approx(b[label][k]), (label, k)
+
+
+def test_smooth_rate_curve_linear_edge_does_not_lift_z0():
+    """A rising curve keeps its z = 0 value under edge='linear'.
+
+    The reflective default lifts R(z=0) on a rising curve, which misplaces
+    the curve against z = 0 markers (Section 6c).  Point reflection through
+    R[0] leaves a linear curve exactly unbiased and a convex one close.
+    """
+    from grb_rates import smooth_rate_curve
+
+    z = np.arange(0.0, 10.0, 0.01)
+    linear = 1.0 + 2.0 * z
+    np.testing.assert_allclose(
+        smooth_rate_curve(linear, edge="linear")[:200], linear[:200], rtol=1e-10
+    )
+    rising = np.exp(z / 2.0)
+    assert smooth_rate_curve(rising)[0] > 1.1 * rising[0]
+    assert abs(smooth_rate_curve(rising, edge="linear")[0] / rising[0] - 1.0) < 0.02
+    with pytest.raises(ValueError):
+        smooth_rate_curve(rising, edge="nearest")
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Weighted power-law index MLE; Section 3c delay-time tail fit.
+# ─────────────────────────────────────────────────────────────────────
+def _draw_truncated_powerlaw(rng, alpha, lo, hi, n):
+    u = rng.uniform(size=n)
+    b = alpha + 1.0
+    if b == 0.0:
+        return lo * np.exp(u * np.log(hi / lo))
+    return (lo**b + u * (hi**b - lo**b)) ** (1.0 / b)
+
+
+@pytest.mark.parametrize("alpha", [-2.0, -1.3, -1.0, -0.5, 0.5])
+def test_powerlaw_index_mle_recovers_injected_index(alpha):
+    """Unweighted draws from dp/dt ~ t^alpha on [100, 1e4] return alpha within 4 sigma."""
+    from grb_rates import powerlaw_index_mle
+
+    rng = np.random.default_rng(3)
+    t = _draw_truncated_powerlaw(rng, alpha, 100.0, 1e4, 50_000)
+    a, s = powerlaw_index_mle(t, np.ones_like(t), 100.0, 1e4)
+    assert abs(a - alpha) < 4 * s, (alpha, a, s)
+    assert 0 < s < 0.02
+
+
+def test_powerlaw_index_mle_uses_the_weights():
+    """Importance weights w ~ t^(alpha - alpha_draw) turn one draw into another index.
+
+    This is the STROOPWAFEL situation: the sampled distribution is not the
+    physical one, and an unweighted fit would return the sampling index.
+    """
+    from grb_rates import powerlaw_index_mle
+
+    rng = np.random.default_rng(4)
+    t = _draw_truncated_powerlaw(rng, -1.0, 100.0, 1e4, 200_000)
+    a_w, s_w = powerlaw_index_mle(t, t**-1.0, 100.0, 1e4)
+    a_u, _ = powerlaw_index_mle(t, np.ones_like(t), 100.0, 1e4)
+    assert abs(a_w - (-2.0)) < 4 * s_w, a_w
+    assert abs(a_u - (-1.0)) < 0.02, a_u
+
+
+def test_powerlaw_index_mle_ignores_systems_outside_the_window():
+    from grb_rates import powerlaw_index_mle
+
+    rng = np.random.default_rng(5)
+    t = _draw_truncated_powerlaw(rng, -1.5, 100.0, 1e4, 20_000)
+    junk = np.array([1.0, 5.0, 2e4, 1e5])
+    a0, _ = powerlaw_index_mle(t, np.ones_like(t), 100.0, 1e4)
+    a1, _ = powerlaw_index_mle(np.r_[t, junk], np.ones(t.size + 4), 100.0, 1e4)
+    assert a1 == pytest.approx(a0, abs=1e-12)
+
+
+def test_powerlaw_index_mle_too_few_systems_returns_nan():
+    from grb_rates import powerlaw_index_mle
+
+    a, s = powerlaw_index_mle(np.array([150.0, 200.0, 5.0]), np.ones(3), 100.0, 1e4)
+    assert np.isnan(a) and np.isnan(s)
+
+
+def test_powerlaw_index_mle_rejects_bad_window():
+    from grb_rates import powerlaw_index_mle
+
+    with pytest.raises(ValueError):
+        powerlaw_index_mle(np.ones(5), np.ones(5), 1e4, 100.0)
+
+
+def test_powerlaw_index_mle_sandwich_error_matches_bootstrap_on_weighted_data():
+    """With importance weights the sandwich error tracks a bootstrap over sampled units."""
+    from grb_rates import powerlaw_index_mle
+
+    rng = np.random.default_rng(11)
+    t = _draw_truncated_powerlaw(rng, -1.0, 100.0, 1e4, 20_000)
+    w = rng.lognormal(0.0, 1.0, t.size) * t**-0.3
+    a, s = powerlaw_index_mle(t, w, 100.0, 1e4)
+    boot = []
+    for _ in range(300):
+        i = rng.integers(0, t.size, t.size)
+        boot.append(powerlaw_index_mle(t[i], w[i], 100.0, 1e4)[0])
+    assert s == pytest.approx(np.std(boot), rel=0.15), (s, np.std(boot))
+
+
+@pytest.mark.requires_compas
+def test_cosmic_sf_mass_fraction_per_grid_point_sums_to_one_and_weights_high_z():
+    """Levina TNG100-1 analytic fit, passed explicitly: fractions sum to 1, and the
+    top cell carries far more than 1/53."""
+    from grb_io import METALLICITY_GRID
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG100,
+        SFR_PARAMS_LEVINA26_TNG100,
+        cosmic_sf_mass_fraction_per_grid_point,
+    )
+
+    grid = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
+    F = cosmic_sf_mass_fraction_per_grid_point(
+        grid, (grid[0], grid[-1]), SFR_PARAMS_LEVINA26_TNG100, MSSFR_PARAMS_LEVINA26_TNG100
+    )
+    assert F.shape == grid.shape
+    assert F.sum() == pytest.approx(1.0, abs=1e-12)
+    assert np.all(F >= 0)
+    assert F[-1] == pytest.approx(0.232, abs=0.005)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Pracchia & Salafia (2026) Eq. 9 forward model; Section 3c.
+# ─────────────────────────────────────────────────────────────────────
+_Z_PS26 = np.linspace(0.0, 3.0, 61)
+
+
+def test_ps26_powerlaw_shapes_match_module_rate_curve():
+    """The grid helper reproduces pracchia_salafia_2026_Rz's Table 2 shapes."""
+    from grb_rates import (
+        madau_fragos_2017_sfr,
+        pracchia_salafia_2026_powerlaw_shapes,
+        pracchia_salafia_2026_Rz,
+    )
+
+    for row, a, t in (("ELF_powerlaw", 3.20, 0.03), ("QUSJ_powerlaw", 3.33, 0.04)):
+        ref = pracchia_salafia_2026_Rz(_Z_PS26, row=row)["R_best"]
+        got = pracchia_salafia_2026_powerlaw_shapes(_Z_PS26, [a], [t], sfr=madau_fragos_2017_sfr)[
+            0, 0
+        ]
+        assert np.allclose(got, ref / ref[0], rtol=1e-3), row
+
+
+def test_sfr_delay_convolution_of_power_law_sample_matches_parametric_shape():
+    """A dense weighted sample of a power law convolves to the parametric shape."""
+    from grb_rates import (
+        madau_fragos_2017_sfr,
+        pracchia_salafia_2026_powerlaw_shapes,
+        sfr_delay_convolution_shape,
+    )
+
+    mf = madau_fragos_2017_sfr
+    tau = np.logspace(np.log10(0.02), np.log10(14.0), 40_000)
+    shape = sfr_delay_convolution_shape(_Z_PS26, tau, tau**-1.5 * np.gradient(tau), sfr=mf)
+    ref = pracchia_salafia_2026_powerlaw_shapes(_Z_PS26, [1.5], [0.02], sfr=mf)[0, 0]
+    assert np.allclose(shape, ref, rtol=2e-3)
+
+
+@pytest.mark.parametrize(
+    "alpha_tau, tau_min, tol", [(1.25, 0.022, 0.0), (2.0, 0.1, 0.0), (3.2, 0.03, 0.15)]
+)
+def test_fit_ps26_powerlaw_recovers_injected_dtd(alpha_tau, tau_min, tol):
+    """Exact at the model indices; steep DTDs trade alpha_tau against tau_min."""
+    from grb_rates import (
+        fit_pracchia_salafia_2026_powerlaw,
+        madau_fragos_2017_sfr,
+        sfr_delay_convolution_shape,
+    )
+
+    mf = madau_fragos_2017_sfr
+    tau = np.logspace(np.log10(tau_min), np.log10(14.0), 40_000)
+    shape = sfr_delay_convolution_shape(_Z_PS26, tau, tau**-alpha_tau * np.gradient(tau), sfr=mf)
+    r = fit_pracchia_salafia_2026_powerlaw(
+        _Z_PS26,
+        shape,
+        np.round(np.arange(0.0, 5.0 + 1e-9, 0.05), 2),
+        np.logspace(np.log10(0.005), 0.0, 121),
+        sfr=mf,
+    )
+    assert abs(r["alpha_tau"] - alpha_tau) <= tol + 1e-9, r
+    assert not r["at_tau_min_floor"]
+
+
+def test_sfr_delay_convolution_rejects_sample_with_no_weight_at_z0():
+    from grb_rates import madau_fragos_2017_sfr, sfr_delay_convolution_shape
+
+    with pytest.raises(ValueError):
+        sfr_delay_convolution_shape(
+            _Z_PS26, np.array([20.0]), np.array([1.0]), sfr=madau_fragos_2017_sfr
+        )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "sfr_delay_convolution_shape",
+        "merger_weighted_mean_delay_Gyr",
+        "pracchia_salafia_2026_powerlaw_shapes",
+        "fit_pracchia_salafia_2026_powerlaw",
+    ],
+)
+def test_sfr_history_helpers_have_no_default_star_formation_history(name):
+    """None of these may fall back to an analytic SFR: the caller names one."""
+    import inspect
+
+    import grb_rates
+
+    p = inspect.signature(getattr(grb_rates, name)).parameters["sfr"]
+    assert p.kind is inspect.Parameter.KEYWORD_ONLY
+    assert p.default is inspect.Parameter.empty
+
+
+def test_merger_weighted_mean_delay_constant_sfr_single_delay():
+    """With one delay and a flat SFR every merger has that delay."""
+    from grb_rates import merger_weighted_mean_delay_Gyr
+
+    r = merger_weighted_mean_delay_Gyr(
+        np.array([0.5]), np.array([1.0]), sfr=lambda z: np.ones_like(z)
+    )
+    assert r["at_z0"] == pytest.approx(0.5) and r["all_mergers"] == pytest.approx(0.5)
+
+
+def test_merger_weighted_mean_delay_below_intrinsic_mean_for_long_tail():
+    """Long delays cannot merge at high z, so the all-mergers mean sits below the
+    intrinsic mean, while mergers at z = 0 favour the long delays."""
+    from grb_rates import madau_fragos_2017_sfr, merger_weighted_mean_delay_Gyr
+
+    tau = np.logspace(np.log10(0.02), np.log10(13.0), 4000)
+    w = tau**-1.0 * np.gradient(tau)
+    r = merger_weighted_mean_delay_Gyr(tau, w, sfr=madau_fragos_2017_sfr)
+    intrinsic = np.average(tau, weights=w)
+    assert r["all_mergers"] < intrinsic < r["at_z0"]

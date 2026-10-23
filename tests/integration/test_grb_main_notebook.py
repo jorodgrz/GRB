@@ -51,53 +51,92 @@ _CLASS_LINE_RE = re.compile(
     re.MULTILINE,
 )
 
-# Section 4 cosmic-integration anchor lines.  rate_label may format the
-# expected rate as either "33" (>= 1) or "0.33" (< 1).
+# Section 4's normalisation audit table.  The w_000 anchor is the first
+# numeric column of each population's row:
+#
+#         w_000 anchor   FCI pointwise   ClassMSSFR bins  binned/config
+#   BNS         33.4         2.804e+09         4.161e+09          0.992
+#   BHNS        43.0         4.053e+09         4.088e+09          0.975
+#
+# The earlier patterns matched a "BNS R_loc expected = ... Gpc^-3 yr^-1"
+# line that Section 4 stopped printing when the audit table replaced it.
+# They went unnoticed because the repo_root fixture resolved one level
+# short, so this whole module skipped rather than ran.  Requiring the
+# exponential second column keeps the BNS pattern off the BHNS row and
+# off the "cut downstream: BNS ...%" line above the table.
 _R_LOC_BNS_RE = re.compile(
-    r"^BNS\s+R_loc expected\s*=\s*([\d.,]+)\s+Gpc\^-3 yr\^-1",
+    r"^ +BNS +([\d,]+\.\d+) +[\d.]+e[+-]\d+",
     re.MULTILINE,
 )
 _R_LOC_BHNS_RE = re.compile(
-    r"^BHNS R_loc expected\s*=\s*([\d.,]+)\s+Gpc\^-3 yr\^-1",
+    r"^ +BHNS +([\d,]+\.\d+) +[\d.]+e[+-]\d+",
+    re.MULTILINE,
+)
+
+# Same table, last column: ClassMSSFR-binned star-forming mass divided by
+# the run-configuration M_SF.  This is the no-free-parameter closure of
+# the rate path, so it is the column with physics in it.
+_NORM_RATIO_RE = re.compile(
+    r"^ +(BNS|BHNS) +[\d,]+\.\d+ +[\d.]+e[+-]\d+ +[\d.]+e[+-]\d+ +([\d.]+) *$",
     re.MULTILINE,
 )
 
 
-# Files the notebook is expected to (re)generate.  Both .pdf (vector,
-# for paper) and .png (raster, 300 dpi, for previews) variants per the
-# project plotting standards.  `channels_x_classes.csv` is included
-# because the Section 11 follow-up cell exports the cross-tab to CSV
-# alongside the heatmap.
+# Every figure grb_main.ipynb writes to plots/, both formats.  Extracted from
+# the savefig targets in the code cells, which include f-string forms
+# (`plots/name.{ext}`) and stems handed to a helper (`outfile + '.pdf'`), so a
+# literal-only scan undercounts.
 _REQUIRED_PLOT_FILES = (
-    "mass_plane_bhns.pdf",
-    "mass_plane_bhns.png",
-    "mass_plane_bns.png",
-    "fig1_bns_mass_plane_modelA.pdf",
-    "mass_distributions_by_class.pdf",
-    "mass_distributions_by_class.png",
+    "composition_bhns_20models.pdf",
+    "composition_bhns_20models.png",
+    "composition_bns_20models.pdf",
+    "composition_bns_20models.png",
+    "delay_time_bhns_by_class_per_channel.pdf",
+    "delay_time_bhns_by_class_per_channel.png",
+    "delay_time_by_class_per_channel.pdf",
+    "delay_time_by_class_per_channel.png",
     "delay_time_distributions.pdf",
     "delay_time_distributions.png",
+    "delay_time_sbgrb_20models.pdf",
+    "delay_time_sbgrb_20models.png",
+    "fig15_classification_scheme.pdf",
+    "fig15_classification_scheme.png",
+    "free_drift_grid_20models.pdf",
+    "free_drift_grid_20models.png",
+    "kinematic_inputs_free_drift.pdf",
+    "kinematic_inputs_free_drift.png",
+    "mass_distributions_rate_weighted.pdf",
+    "mass_distributions_rate_weighted.png",
+    "mass_distributions_rate_weighted_tng_sweep.pdf",
+    "mass_distributions_rate_weighted_tng_sweep.png",
+    "mass_plane_bhns.pdf",
+    "mass_plane_bhns.png",
+    "mass_plane_bns.pdf",
+    "mass_plane_bns.png",
     "metallicity_dependence.pdf",
     "metallicity_dependence.png",
-    "formation_channels_by_grb_class.pdf",
-    "formation_channels_by_grb_class.png",
-    "rate_bns_by_class.pdf",
-    "rate_bns_by_class.png",
-    "rate_bhns_spin_sensitivity.pdf",
-    "rate_bhns_spin_sensitivity.png",
     "projected_offsets.pdf",
     "projected_offsets.png",
-    "rate_beaming_comparison.pdf",
-    "rate_beaming_comparison.png",
-    "eos_sensitivity.pdf",
-    "eos_sensitivity.png",
-    "channels_x_classes.pdf",
-    "channels_x_classes.png",
-    "channels_x_classes.csv",
-    "offset_cdf_by_class.pdf",
-    "offset_cdf_by_class.png",
-    "beamed_class_comparison.pdf",
-    "beamed_class_comparison.png",
+    "rate_bhns_by_class_20models.pdf",
+    "rate_bhns_by_class_20models.png",
+    "rate_bhns_by_class_per_channel.pdf",
+    "rate_bhns_by_class_per_channel.png",
+    "rate_bhns_spin_sensitivity.pdf",
+    "rate_bhns_spin_sensitivity.png",
+    "rate_bns_by_class.pdf",
+    "rate_bns_by_class.png",
+    "rate_bns_by_class_20models.pdf",
+    "rate_bns_by_class_20models.png",
+    "rate_bns_by_class_per_channel.pdf",
+    "rate_bns_by_class_per_channel.png",
+    "rate_bns_tng_sweep.pdf",
+    "rate_bns_tng_sweep.png",
+    "rate_sbgrb_vs_swift.pdf",
+    "rate_sbgrb_vs_swift.png",
+    "rate_tng_data_vs_fit.pdf",
+    "rate_tng_data_vs_fit.png",
+    "tng100_SZz_data_vs_fit.pdf",
+    "tng100_SZz_data_vs_fit.png",
 )
 
 
@@ -158,16 +197,23 @@ def _parse_class_table(stdout: str, header_re: re.Pattern) -> dict[str, float]:
 
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
-    """Project root (parent of `tests/`)."""
-    return Path(__file__).resolve().parent.parent
+    """Project root.
+
+    This file sits in ``tests/integration/``, so the root is two levels
+    up.  It used to be one, which resolved to ``tests/`` and made every
+    data path miss; ``executed_notebook`` then skipped on "required
+    COMPAS file missing" in every environment, including one with a
+    fully populated ``data/``.
+    """
+    return Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="session")
 def required_compas_files(repo_root: Path) -> tuple[Path, ...]:
     """The four COMPAS HDF5 files required by `grb_main.ipynb` (Section 1)."""
     return (
-        repo_root / "Data" / "COMPASCompactOutput_BNS_A.h5",
-        repo_root / "Data" / "COMPASCompactOutput_BHNS_A.h5",
+        repo_root / "data" / "COMPASCompactOutput_BNS_A.h5",
+        repo_root / "data" / "COMPASCompactOutput_BHNS_A.h5",
     )
 
 
@@ -195,7 +241,7 @@ def executed_notebook(repo_root, required_compas_files):
 
     nb = nbformat.read(notebook_path, as_version=4)
 
-    plots_dir = repo_root / "Plots"
+    plots_dir = repo_root / "plots"
     plots_dir.mkdir(exist_ok=True)
     marker = plots_dir / ".smoke_marker"
     marker.write_text(str(time.time()))
@@ -224,16 +270,15 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
     """BNS Model A class fractions must lie in Gottlieb (2024) Fig. 3 bands.
 
     Gottlieb (2024) Fig. 3 (the 2024 hybrid four-class scheme) gives
-    BNS class fractions that depend strongly on the assumed Galactic
-    NS-mass distribution.  After the Alsing-Silva-Berti (2018) remap
-    pulls Model A NS masses toward [1.34, 1.80] Msun, the four
-    classes are roughly comparable in weight, with sbGRB + blue KN
-    (long-lived HMNS, M_tot < 1.2 * M_TOV) typically the smallest
-    bin (10 to 35 percent) and the lbGRB classes plus Faint lbGRB
-    splitting the rest.  The bands below are deliberately loose:
-    they catch catastrophic drift (classifier inversion, NS-mass
-    remap silently disabled, four-class partition broken) but do
-    not regression-pin specific percentages.
+    BNS class fractions that depend strongly on the assumed NS-mass
+    distribution.  On the fiducial raw COMPAS Model A masses (after the
+    cold-stability cut, m_i <= M_TOV), the total-mass distribution peaks
+    near 2.5 to 2.6 Msun, below hmns_split = 1.2 * M_TOV = 2.64 Msun, so
+    sbGRB + blue KN (long-lived HMNS) becomes a leading class rather than
+    the smallest bin it was under the Alsing remap.  The bands below are
+    deliberately loose: they catch catastrophic drift (classifier
+    inversion, cold-stability cut silently disabled, four-class partition
+    broken) but do not regression-pin specific percentages.
     """
     nb = executed_notebook
     stdout = _collect_stdout(nb)
@@ -266,15 +311,17 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
         assert 1.0 <= value <= 75.0, (
             f"BNS {label} fraction = {value:.1f}% outside non-trivial sanity band [1, 75]%."
         )
-    # sbGRB + blue KN must NOT dominate the population for Model A
-    # after the Alsing remap: hmns_split = 1.2 * 2.2 = 2.64 Msun is
-    # below the typical M_tot ~ 2.7-3.0 Msun; if it suddenly does
-    # dominate, the remap or hmns_split is broken.
-    assert sb <= 50.0, (
-        f"sbGRB + blue KN fraction = {sb:.1f}% > 50%; for Model A "
-        f"with Alsing remap, the long-lived HMNS class should be "
-        f"sub-dominant (hmns_split = 1.2 * M_TOV = 2.64 Msun is "
-        f"below typical post-remap M_tot ~ 2.7 to 3.0 Msun)."
+    # sbGRB + blue KN should now be a leading class for raw Model A:
+    # hmns_split = 1.2 * 2.2 = 2.64 Msun sits above the raw M_tot peak
+    # (~2.5 to 2.6 Msun), so the long-lived HMNS class rises well above
+    # its former ~24%.  A drop back to sub-dominance would mean the raw
+    # fiducial or the cut was silently reverted to the remap.
+    assert sb >= 30.0, (
+        f"sbGRB + blue KN fraction = {sb:.1f}% < 30%; for raw Model A "
+        f"the long-lived HMNS class should lead (hmns_split = 1.2 * "
+        f"M_TOV = 2.64 Msun is above the raw M_tot peak ~ 2.5 to 2.6 "
+        f"Msun).  A low value suggests the Alsing remap crept back onto "
+        f"the science path."
     )
 
 
@@ -336,20 +383,24 @@ def test_grb_main_bhns_class_fractions_in_foucart_band(executed_notebook):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_notebook, repo_root: Path):
-    """Section 4 `R_loc expected` lines must equal `read_expected_local_rate`.
+    """Section 4's audit table must carry the file's own `w_000` anchor.
 
-    The notebook prints
+    The first numeric column of each population's row is the
+    Broekgaarden+ (2021) anchor recovered from `weights_intrinsic/w_000`.
+    Checking it against `grb_io.read_expected_local_rate` guards the
+    propagation: the notebook must print the anchor read from the HDF5
+    rather than some other rate.  It is not a physics check, because
+    Section 4 prints that helper's own return value.
 
-        BNS  R_loc expected = ... Gpc^-3 yr^-1, ...
-        BHNS R_loc expected = ... Gpc^-3 yr^-1, ...
-
-    These are the Broekgaarden+ (2021) Table 3 anchors recovered from
-    `weights_intrinsic/w_000` and used to calibrate
-    `MEAN_MASS_EVOLVED`.  The stand-alone helper
-    `grb_io.read_expected_local_rate` reads the same column from the
-    HDF5; this test asserts the printed and module-computed values
-    agree to within 5 percent (the production rate-print uses
-    `rate_label` formatting which rounds to 2 sig figs).
+    The physics lives in the table's last column,
+    ``ClassMSSFR bins / M_SF(run config)``, which is the ratio the
+    no-free-parameter rate path has to land on.  CLAUDE.md records that
+    the binned convention plus the run-configuration star-forming mass
+    reproduce the stored anchors to well under a percent, so the ratio
+    is asserted against 1.0 with 5 percent of slack.  Dropping the
+    metallicity binning (`dPdlogZ_binned_to_grid`) or reverting to a
+    per-population `calibrate_mean_mass_evolved` both move it far
+    outside that band, which is the regression worth catching here.
     """
     import sys
 
@@ -371,8 +422,8 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_noteboo
     R_bns_printed = float(m_bns.group(1).replace(",", ""))
     R_bhns_printed = float(m_bhns.group(1).replace(",", ""))
 
-    R_bns_expected = read_expected_local_rate(repo_root / "Data" / "COMPASCompactOutput_BNS_A.h5")
-    R_bhns_expected = read_expected_local_rate(repo_root / "Data" / "COMPASCompactOutput_BHNS_A.h5")
+    R_bns_expected = read_expected_local_rate(repo_root / "data" / "COMPASCompactOutput_BNS_A.h5")
+    R_bhns_expected = read_expected_local_rate(repo_root / "data" / "COMPASCompactOutput_BHNS_A.h5")
 
     rel_bns = abs(R_bns_printed - R_bns_expected) / R_bns_expected
     rel_bhns = abs(R_bhns_printed - R_bhns_expected) / R_bhns_expected
@@ -387,6 +438,20 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_noteboo
         f"Broekgaarden Table 3 anchor {R_bhns_expected:.2f} by "
         f"{rel_bhns * 100:.1f}% (>5% relative)."
     )
+
+    ratios = {pop: float(v) for pop, v in _NORM_RATIO_RE.findall(stdout)}
+    assert set(ratios) == {"BNS", "BHNS"}, (
+        f"Section 4 audit table did not yield both normalisation ratios; parsed {ratios}"
+    )
+    for pop, ratio in ratios.items():
+        assert abs(ratio - 1.0) < 0.05, (
+            f"Section 4 {pop} ClassMSSFR-binned mass / run-configuration "
+            f"M_SF = {ratio:.3f}, more than 5% off unity.  The rate path "
+            f"is meant to close on the run configuration with no free "
+            f"parameter; check dPdlogZ_binned_to_grid and that the "
+            f"normalisation is simulation_star_forming_mass(), not a "
+            f"per-population calibrate_mean_mass_evolved."
+        )
 
     # Local-rate physical bands per Broekgaarden+ 2021 Sec. 4.
     # BNS: Models A/J/K range 10 to 300 Gpc^-3 yr^-1 across MSSFR /
@@ -412,7 +477,7 @@ def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook, repo_ro
        older than the marker file written before execution).
     """
     nb = executed_notebook
-    plots_dir = repo_root / "Plots"
+    plots_dir = repo_root / "plots"
     marker_mtime = nb._smoke_marker_mtime  # type: ignore[attr-defined]
 
     missing = []

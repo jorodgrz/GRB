@@ -1,4 +1,4 @@
-"""Unit invariants for the Section 7c / 8d per-class per-channel splits.
+"""Unit invariants for the Section 6b / 7b per-class per-channel splits.
 
 The two notebook cells run a Cartesian-product split of the Gottlieb
 GRB class masks and the Broekgaarden formation-channel masks, with an
@@ -16,7 +16,8 @@ Five helpers under test:
 5. ``apply_bhns_misalignment`` commutes with the channel split.
 
 The integration-level versions (with live Model A + COMPAS + MSSFR)
-live in ``tests/sections/test_section_07c_*.py`` and ``..._08d_*.py``.
+live in ``tests/sections/test_section_06b_bns_class_channel.py`` and
+``tests/sections/test_section_07b_bhns_class_channel.py``.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ def _rate_inputs(seed: int = 0):
 
 
 def _per_cell_rate(cl_mask, ch_mask, inputs):
-    """Inline the Section 7c / 8d cell pattern for one (class, channel) cell.
+    """Inline the Section 6b / 7b cell pattern for one (class, channel) cell.
 
     Mirrors the cell verbatim:
 
@@ -109,7 +110,7 @@ def _per_cell_rate(cl_mask, ch_mask, inputs):
 def test_class_channel_split_partition_synthetic():
     """sum_ch per class == per-class total, sum_cl per channel == per-channel total.
 
-    Promotes the in-cell ``assert np.allclose(...)`` tripwires (Section 7c
+    Promotes the in-cell ``assert np.allclose(...)`` tripwires (Section 6b
     cells ~line 32 and ~line 39) to a pytest-level invariant on a
     synthetic 3 x 3 contingency table.  ``compute_merger_rate`` is a pure
     additive accumulator over its ``COMPAS_*`` axis, so disjoint masks
@@ -235,7 +236,7 @@ def test_class_channel_all_cells_nonnegative():
 # 4. CH_PLOT legend filter (drops all-zero channels, preserves order)
 # ─────────────────────────────────────────────────────────────────────
 def test_ch_plot_filter_drops_only_all_zero_channels():
-    """The Section 7c / 8d ``CH_PLOT`` list comprehension.
+    """The Section 6b / 7b ``CH_PLOT`` list comprehension.
 
     The cells filter the legend down to channels with at least one
     nonzero curve in any class via
@@ -271,7 +272,7 @@ def test_ch_plot_filter_drops_only_all_zero_channels():
 def test_misalignment_commutes_with_channel_split():
     """Scalar misalignment factor commutes with the (class, channel) sum.
 
-    Section 8d applies ``apply_bhns_misalignment`` per cell (cell line
+    Section 7b applies ``apply_bhns_misalignment`` per cell (cell line
     ~2580) and the in-cell tripwire then asserts
 
         sum_ch apply_bhns_misalignment(R_intrinsic_cell)

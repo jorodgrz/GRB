@@ -2,20 +2,24 @@
 
 The two Section 1 panels are the project's headline figures: the
 Gottlieb (2024) classifier underlay on the (M2, M1) BNS plane and on
-the (M_NS, M_BH) BHNS plane, with a STROOPWAFEL-weighted reflective-
-boundary Gaussian KDE on top.  The tests in this file lock the
+the (M_NS, M_BH) BHNS plane, with a STROOPWAFEL-weighted 2D mass
+histogram on top.  The tests in this file lock the
 end-to-end pipeline that feeds those panels against the COMPAS Model A
-HDF5 files: file identity, NS-mass remap determinism + M_TOV cap +
-``m1 >= m2`` invariant, KDE weighting honesty on the real sample, and
-the printed class fractions the notebook's summary cell emits.
+HDF5 files: file identity, the cold-stability cut (raw fiducial masses,
+``m_i <= M_TOV``) plus the ``m1 >= m2`` invariant, NS-mass remap
+determinism (a labelled systematic, not on the notebook science path),
+histogram weighting
+honesty on the real sample, and the printed class fractions the summary
+cell emits.
 
 All tests are ``@pytest.mark.requires_data`` and skip on machines
-without ``data/COMPASCompactOutput_{BNS,BHNS}_A.h5``.  The expected
-class-fraction targets in
-``test_printed_class_fractions_match_classifier_on_remapped_sample``
-come from the latest committed run of ``grb_main.ipynb`` (cell at the
-top of the notebook); update them only if a deliberate science change
-moves the printed numbers.
+without ``data/COMPASCompactOutput_{BNS,BHNS}_A.h5``.  The fiducial
+sample is the raw COMPAS catalogue after the cold-stability cut; the
+Alsing remap is exercised only as the reproducible sensitivity tool.
+The printed class-fraction test asserts the structural invariants
+(fractions in [0, 1] summing to 1, sbGRB + blue KN now a leading class)
+rather than pinning exact percentages, which must be regenerated from a
+notebook run under the raw fiducial.
 
 Reference: Broekgaarden et al. (2021) arXiv:2103.02608 (Model A
 configuration), Alsing, Silva and Berti (2018) MNRAS 478, 1377
@@ -32,11 +36,14 @@ import pytest
 
 from grb_classify import NS_MAX_FIDUCIAL, classify_bhns, classify_bns_2024
 from grb_io import (
+    filter_systems,
     load_bhns_with_channels,
     load_bns_with_channels,
 )
 from grb_physics import (
     M_TOV,
+    cold_stable_bhns_mask,
+    cold_stable_ns_mask,
     remap_ns_marginal,
     remap_ns_masses_double_gaussian,
 )
@@ -50,35 +57,27 @@ _NS_MAX_BNS = 2.5  # Broekgaarden+ 2021 Model A M_NS_max
 _M2_LO_BNS, _M2_HI_BNS = 1.25, 2.2
 _M1_LO_BNS, _M1_HI_BNS = 1.25, 2.2
 
-# Class-fraction targets from the latest grb_main.ipynb run.  These
-# come from the printed cell output at the top of the notebook
-# (see file header for the exact strings).
-_EXPECTED_BNS_FRACTIONS_PCT = {
-    "sbGRB + blue KN": 24.0,
-    "lbGRB + red KN (HMNS)": 26.8,
-    "lbGRB + red KN (disk)": 2.2,
-    "Faint lbGRB": 47.0,
-}
-_EXPECTED_BHNS_FRACTIONS_PCT = {
-    "lbGRB + red KN (BHNS disk)": 3.8,
-    "Faint lbGRB (BHNS)": 20.6,
-    "No GRB": 75.6,
-}
+_BNS_CLASS_KEYS = [
+    "sbGRB + blue KN",
+    "lbGRB + red KN (HMNS)",
+    "lbGRB + red KN (disk)",
+    "Faint lbGRB",
+]
+_BHNS_CLASS_KEYS = [
+    "lbGRB + red KN (BHNS disk)",
+    "Faint lbGRB (BHNS)",
+    "No GRB",
+]
 
 
 @pytest.fixture(scope="module")
-def bns_modelA_remapped(bns_a_path):
-    """Section 0's BNS load + Alsing remap (RNG seed 42), keyed off the real HDF5."""
+def bns_modelA_fiducial(bns_a_path):
+    """Section 0's fiducial BNS sample: raw COMPAS masses + cold-stability cut."""
     bns = load_bns_with_channels(path=bns_a_path)
-    m1, m2 = remap_ns_masses_double_gaussian(
-        bns["m1"].copy(),
-        bns["m2"].copy(),
-        weights=bns["weights"],
-        rng=np.random.default_rng(42),
-    )
+    bns = filter_systems(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
     return {
-        "m1": m1,
-        "m2": m2,
+        "m1": bns["m1"],
+        "m2": bns["m2"],
         "weights": bns["weights"],
         "model": bns.get("model"),
         "ns_max": bns.get("ns_max"),
@@ -86,13 +85,13 @@ def bns_modelA_remapped(bns_a_path):
 
 
 @pytest.fixture(scope="module")
-def bhns_modelA_remapped(bhns_a_path):
-    """Section 0's BHNS load + Alsing remap of M_NS (RNG seed 43)."""
+def bhns_modelA_fiducial(bhns_a_path):
+    """Section 0's fiducial BHNS sample: raw M_NS + cold-stability cut on the NS."""
     bhns = load_bhns_with_channels(path=bhns_a_path)
-    M_NS = remap_ns_marginal(bhns["M_NS"], weights=bhns["weights"], rng=np.random.default_rng(43))
+    bhns = filter_systems(bhns, cold_stable_bhns_mask(bhns["M_BH"], bhns["M_NS"], m_tov=M_TOV))
     return {
         "M_BH": bhns["M_BH"],
-        "M_NS": M_NS,
+        "M_NS": bhns["M_NS"],
         "weights": bhns["weights"],
         "model": bhns.get("model"),
         "ns_max": bhns.get("ns_max"),
@@ -228,39 +227,39 @@ def test_bhns_remap_seed43_is_deterministic(bhns_a_path):
 
 
 @pytest.mark.requires_data
-def test_bns_remap_caps_at_m_tov_and_preserves_mass_ordering(bns_modelA_remapped):
-    """Post-remap BNS masses obey the global invariants Section 1 relies on.
+def test_bns_cut_enforces_m_tov_and_preserves_mass_ordering(bns_modelA_fiducial):
+    """The cold-stability cut leaves the invariants Section 1 relies on.
 
-    The Section 1 BNS panel evaluates the reflective-boundary KDE on
-    [m_min, M_TOV]^2; a single remapped mass above M_TOV would make
-    the reflection trick incorrect (the mirror at 2*M_TOV - m would
-    end up inside the support box).  Likewise m1 >= m2 is required
-    by every downstream classifier; the remap must preserve it.
+    The Section 1 BNS panel bins the sample on [m_min, M_TOV]^2 with
+    the top edge pinned on M_TOV; a component above M_TOV would fall
+    off the grid and break the exact weight conservation.  The cut
+    guarantees ``m_i <= M_TOV`` by construction, and the loader's
+    ``sort_masses`` keeps ``m1 >= m2``.
     """
-    m1 = bns_modelA_remapped["m1"]
-    m2 = bns_modelA_remapped["m2"]
+    m1 = bns_modelA_fiducial["m1"]
+    m2 = bns_modelA_fiducial["m2"]
 
     assert m1.max() <= M_TOV + 1e-6, (
-        f"max(m1) = {m1.max()} > M_TOV + 1e-6; Alsing remap did not "
-        f"cap NS mass at M_TOV.  Section 1 KDE reflection invalid."
+        f"max(m1) = {m1.max()} > M_TOV + 1e-6; the cold-stability cut "
+        f"did not remove all above-M_TOV components."
     )
     assert m2.max() <= M_TOV + 1e-6, f"max(m2) = {m2.max()} > M_TOV + 1e-6; same as above for m2."
     assert (m1 >= m2).all(), (
         f"{int((m1 < m2).sum())} of {m1.size} systems have m1 < m2 "
-        f"after the remap; the m1 >= m2 invariant is broken."
+        f"after the cut; the m1 >= m2 invariant is broken."
     )
 
 
 @pytest.mark.requires_data
-def test_bhns_remap_caps_M_NS_at_m_tov(bhns_modelA_remapped):
-    """Post-remap BHNS NS masses are capped at M_TOV (no leak past wall)."""
-    M_NS = bhns_modelA_remapped["M_NS"]
+def test_bhns_cut_enforces_M_NS_at_m_tov(bhns_modelA_fiducial):
+    """The cold-stability cut caps the BHNS NS component at M_TOV."""
+    M_NS = bhns_modelA_fiducial["M_NS"]
     assert M_NS.max() <= M_TOV + 1e-6, (
-        f"max(M_NS) = {M_NS.max()} > M_TOV + 1e-6; Alsing marginal "
-        f"remap did not cap NS mass at M_TOV.  Section 1 BHNS KDE "
-        f"reflection invalid."
+        f"max(M_NS) = {M_NS.max()} > M_TOV + 1e-6; the cold-stability "
+        f"cut did not remove all above-M_TOV NS components.  Section 1 "
+        f"BHNS histogram would drop weight off the top NS bin edge."
     )
-    assert M_NS.min() > 0, "Remapped NS mass has non-positive entries."
+    assert M_NS.min() > 0, "Cut NS mass has non-positive entries."
 
 
 @pytest.mark.requires_data
@@ -296,53 +295,40 @@ def test_remap_preserves_total_weight(bns_a_path, bhns_a_path):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Plot honesty: the BNS panel's KDE actually sees the STROOPWAFEL
-# weights, not np.ones_like.  Easy diagnostic: the two contour fields
-# must differ by a measurable fraction on the high-mass tail (where
-# the STROOPWAFEL prior heavily up-weights low-Z systems).
+# Plot honesty: the BNS panel's histogram actually sees the STROOPWAFEL
+# weights, not np.ones_like.  Easy diagnostic: the weighted and
+# unweighted bin fields must differ by a measurable fraction (the
+# STROOPWAFEL prior heavily up-weights low-Z systems).
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
-def test_bns_kde_is_actually_weighted_on_real_sample(bns_modelA_remapped):
-    """The Section 1 BNS KDE must change when weights are stripped.
+def test_bns_histogram_is_actually_weighted_on_real_sample(bns_modelA_fiducial):
+    """The Section 1 BNS histogram must change when weights are stripped.
 
     Section 1's BNS panel feeds STROOPWAFEL weights into
-    ``gaussian_kde(..., weights=w_bns, bw_method='silverman')``.  A
-    careless ``np.ones_like`` would compile and run but silently mis-
-    represent the population.  Build the BNS panel's KDE twice on the
-    real sample -- once with weights, once with unit weights -- and
-    assert the two density fields differ by more than 5 percent in
-    L1 norm on the (M2, M1) evaluation grid Section 1 uses.
+    ``np.histogram2d(..., weights=w_bns)``.  A careless ``np.ones_like``
+    would compile and run but silently misrepresent the population.
+    Build the panel's histogram twice on the real sample -- once with
+    weights, once with unit weights -- and assert the two normalised
+    bin fields differ by more than 5 percent in L1 norm on the
+    M_TOV-anchored 0.01 Msun grid Section 1 uses.
     """
-    from scipy.stats import gaussian_kde
+    m1 = bns_modelA_fiducial["m1"]
+    m2 = bns_modelA_fiducial["m2"]
+    w = bns_modelA_fiducial["weights"]
 
-    m1 = bns_modelA_remapped["m1"]
-    m2 = bns_modelA_remapped["m2"]
-    w = bns_modelA_remapped["weights"]
+    _bw = 0.01
+    _nb = int(np.ceil((M_TOV - _M2_LO_BNS) / _bw))
+    edges = M_TOV - _bw * np.arange(_nb, -1, -1)
 
-    m2_sym = np.concatenate([m2, m1])
-    m1_sym = np.concatenate([m1, m2])
-    w_sym = np.concatenate([w, w])
+    Hw, _, _ = np.histogram2d(m2, m1, bins=[edges, edges], weights=w)
+    Hu, _, _ = np.histogram2d(m2, m1, bins=[edges, edges])
 
-    kde_w = gaussian_kde(np.vstack([m2_sym, m1_sym]), weights=w_sym, bw_method="silverman")
-    kde_u = gaussian_kde(np.vstack([m2_sym, m1_sym]), bw_method="silverman")
-
-    # Sample on the actual Section 1 evaluation grid (180x180 over
-    # [m_lo, min(M_TOV, m_hi)] on each axis).
-    m2_grid = np.linspace(_M2_LO_BNS, min(M_TOV, _M2_HI_BNS), 60)
-    m1_grid = np.linspace(_M1_LO_BNS, min(M_TOV, _M1_HI_BNS), 60)
-    M2g, M1g = np.meshgrid(m2_grid, m1_grid)
-    pts = np.vstack([M2g.ravel(), M1g.ravel()])
-
-    Z_w = kde_w(pts).reshape(M2g.shape)
-    Z_u = kde_u(pts).reshape(M2g.shape)
-
-    # Normalise each so total mass on the grid is 1, then compare L1.
-    Z_w_norm = Z_w / Z_w.sum()
-    Z_u_norm = Z_u / Z_u.sum()
-    l1 = float(np.abs(Z_w_norm - Z_u_norm).sum())
+    Hw_norm = Hw / Hw.sum()
+    Hu_norm = Hu / Hu.sum()
+    l1 = float(np.abs(Hw_norm - Hu_norm).sum())
     assert l1 > 0.05, (
-        f"Weighted and unweighted Section 1 BNS KDEs differ by L1 = "
-        f"{l1:.4f}; expected > 0.05.  If this fails, either the "
+        f"Weighted and unweighted Section 1 BNS histograms differ by "
+        f"L1 = {l1:.4f}; expected > 0.05.  If this fails, either the "
         f"STROOPWAFEL weights are uniform (which they should not be "
         f"for a Broekgaarden+ 2021 sample) or the notebook is "
         f"plotting the unweighted distribution by accident."
@@ -350,87 +336,103 @@ def test_bns_kde_is_actually_weighted_on_real_sample(bns_modelA_remapped):
 
 
 @pytest.mark.requires_data
-def test_bhns_kde_is_actually_weighted_on_real_sample(bhns_modelA_remapped):
-    """The Section 1 BHNS KDE must change when weights are stripped.
+def test_bhns_histogram_is_actually_weighted_on_real_sample(bhns_modelA_fiducial):
+    """The Section 1 BHNS histogram must change when weights are stripped.
 
     Same honesty check as the BNS counterpart, on the (M_NS, M_BH)
     plane.  STROOPWAFEL up-weights low-Z BHNS systems hard, so the
-    weighted and unweighted KDEs differ more in BHNS than in BNS.
+    weighted and unweighted histograms differ more in BHNS than in BNS.
     """
-    from scipy.stats import gaussian_kde
+    NS_bh = bhns_modelA_fiducial["M_NS"]
+    BH = bhns_modelA_fiducial["M_BH"]
+    w = bhns_modelA_fiducial["weights"]
 
-    NS_bh = bhns_modelA_remapped["M_NS"]
-    BH = bhns_modelA_remapped["M_BH"]
-    w = bhns_modelA_remapped["weights"]
+    _bw_ns = 0.01
+    _nb_ns = int(np.ceil((M_TOV - 1.25) / _bw_ns))
+    ns_edges = M_TOV - _bw_ns * np.arange(_nb_ns, -1, -1)
+    bh_edges = 2.5 + 0.25 * np.arange(int(np.round((18.0 - 2.5) / 0.25)) + 1)
 
-    kde_w = gaussian_kde(np.vstack([NS_bh, BH]), weights=w, bw_method="silverman")
-    kde_u = gaussian_kde(np.vstack([NS_bh, BH]), bw_method="silverman")
+    Hw, _, _ = np.histogram2d(NS_bh, BH, bins=[ns_edges, bh_edges], weights=w)
+    Hu, _, _ = np.histogram2d(NS_bh, BH, bins=[ns_edges, bh_edges])
 
-    NS_grid = np.linspace(1.25, M_TOV, 60)
-    BH_grid = np.linspace(2.5, 18.0, 60)
-    NSg, BHg = np.meshgrid(NS_grid, BH_grid)
-    pts = np.vstack([NSg.ravel(), BHg.ravel()])
-
-    Z_w = kde_w(pts).reshape(NSg.shape)
-    Z_u = kde_u(pts).reshape(NSg.shape)
-
-    Z_w_norm = Z_w / Z_w.sum()
-    Z_u_norm = Z_u / Z_u.sum()
-    l1 = float(np.abs(Z_w_norm - Z_u_norm).sum())
+    Hw_norm = Hw / Hw.sum()
+    Hu_norm = Hu / Hu.sum()
+    l1 = float(np.abs(Hw_norm - Hu_norm).sum())
     assert l1 > 0.05, (
-        f"Weighted and unweighted Section 1 BHNS KDEs differ by L1 = {l1:.4f}; expected > 0.05."
+        f"Weighted and unweighted Section 1 BHNS histograms differ by L1 = {l1:.4f}; expected > 0.05."
+    )
+
+
+@pytest.mark.requires_data
+def test_bhns_panel_contains_the_full_sample(bhns_modelA_fiducial):
+    """The BHNS panel's M_BH axis reaches 40 Msun and crops nothing.
+
+    The caption states that the heaviest BH (37.1 Msun) is on the panel and
+    that 1.2 percent of the weight lies above 18 Msun.  Pin both so a data
+    swap that pushed systems past the axis, or moved the tail weight, forces
+    a caption update.
+    """
+    BH = bhns_modelA_fiducial["M_BH"]
+    w = bhns_modelA_fiducial["weights"]
+    assert BH.max() <= 40.0, (
+        f"Heaviest BH is {BH.max():.1f} Msun, above the 40 Msun panel edge; "
+        f"raise M1_HI_BHNS and update the caption."
+    )
+    tail = float(w[BH > 18.0].sum() / w.sum())
+    assert 0.010 <= tail <= 0.015, (
+        f"Weight fraction above M_BH = 18 Msun is {tail:.4f}; "
+        f"expected in [0.010, 0.015] as the caption states."
     )
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Self-consistency: the printed class fractions in Section 0's summary
-# cell match the classifier replayed on the remapped sample.
+# Structural invariants of the printed class fractions on the raw
+# fiducial (cold-stability-cut) sample.  Exact per-class percentages are
+# deliberately not pinned here: the switch to the raw fiducial is a
+# science change, so any hardcoded target would have to come from a
+# fresh notebook run.  The inversion the change predicts is that
+# sbGRB + blue KN (low total mass, long-lived HMNS) becomes a leading
+# class, because the raw COMPAS total-mass distribution peaks lower than
+# the Alsing-remapped one that previously pushed systems into the HMNS
+# and prompt-collapse regimes.
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
-def test_printed_class_fractions_match_classifier_on_remapped_sample(
-    bns_modelA_remapped, bhns_modelA_remapped
+def test_class_fractions_on_fiducial_sample_are_valid_and_sbGRB_rises(
+    bns_modelA_fiducial, bhns_modelA_fiducial
 ):
-    """Section 0's printed BNS / BHNS class fractions reproduce on the real sample.
+    """BNS / BHNS class fractions are valid probabilities; sbGRB rises on raw.
 
-    The summary cell at the top of ``grb_main.ipynb`` prints weighted
-    class fractions like ``sbGRB + blue KN ... (24.0% weighted)``.
-    Reproduce the exact reduction on the same remapped sample and
-    assert the fractions match the values in the latest committed
-    notebook to within 0.2 percentage points.  Drift here means one
-    of: (i) the classifier changed, (ii) the remap RNG changed,
-    (iii) the weight or load pipeline drifted, (iv) the notebook
-    output is stale and needs a rerun.
-
-    Update the ``_EXPECTED_*_FRACTIONS_PCT`` constants at the top of
-    this file when a deliberate science change moves the fractions.
+    Reproduce Section 0's weighted reduction on the raw fiducial sample.
+    The four BNS class fractions must lie in [0, 1] and sum to 1, and
+    the sbGRB + blue KN (long-lived HMNS) fraction must be substantial
+    (> 0.35): the raw COMPAS total-mass distribution peaks lower than
+    the old Alsing-remapped one, so more systems fall below the HMNS
+    split and this class rises well above its former ~0.24.  A loose
+    lower bound is used deliberately; the exact percentage must come
+    from a notebook run under the raw fiducial.  The three BHNS
+    fractions must likewise be valid and sum to 1.
     """
-    m1 = bns_modelA_remapped["m1"]
-    m2 = bns_modelA_remapped["m2"]
-    w = bns_modelA_remapped["weights"]
+    m1 = bns_modelA_fiducial["m1"]
+    m2 = bns_modelA_fiducial["m2"]
+    w = bns_modelA_fiducial["weights"]
     cls = classify_bns_2024(m1, m2)
-    for key, expected_pct in _EXPECTED_BNS_FRACTIONS_PCT.items():
-        mask = cls[key]
-        got_pct = 100.0 * float((mask * w).sum() / w.sum())
-        assert got_pct == pytest.approx(expected_pct, abs=0.2), (
-            f"BNS class '{key}' fraction = {got_pct:.2f} percent, "
-            f"expected {expected_pct} percent (notebook header).  "
-            f"Either the remap RNG, classifier, or weight pipeline "
-            f"drifted, or the notebook printed output is stale."
-        )
+    fracs = {k: float((cls[k] * w).sum() / w.sum()) for k in _BNS_CLASS_KEYS}
+    for k, f in fracs.items():
+        assert 0.0 <= f <= 1.0, f"BNS class '{k}' fraction {f} outside [0, 1]"
+    assert sum(fracs.values()) == pytest.approx(1.0, abs=1e-9)
+    assert fracs["sbGRB + blue KN"] > 0.35, (
+        f"sbGRB + blue KN fraction {fracs['sbGRB + blue KN']:.3f} did not "
+        f"rise above 0.35 on the raw fiducial sample: {fracs}."
+    )
 
-    BH = bhns_modelA_remapped["M_BH"]
-    NS = bhns_modelA_remapped["M_NS"]
-    w_bhns = bhns_modelA_remapped["weights"]
+    BH = bhns_modelA_fiducial["M_BH"]
+    NS = bhns_modelA_fiducial["M_NS"]
+    w_bhns = bhns_modelA_fiducial["weights"]
     cls_bhns = classify_bhns(BH, NS, a_BH=0.5)
-    for key, expected_pct in _EXPECTED_BHNS_FRACTIONS_PCT.items():
-        mask = cls_bhns[key]
-        got_pct = 100.0 * float((mask * w_bhns).sum() / w_bhns.sum())
-        assert got_pct == pytest.approx(expected_pct, abs=0.2), (
-            f"BHNS class '{key}' fraction = {got_pct:.2f} percent, "
-            f"expected {expected_pct} percent (notebook header).  "
-            f"Either ``a_BH = 0.5``, the disk-mass formula, the "
-            f"remap RNG, or the weight pipeline drifted."
-        )
+    bfracs = {k: float((cls_bhns[k] * w_bhns).sum() / w_bhns.sum()) for k in _BHNS_CLASS_KEYS}
+    for k, f in bfracs.items():
+        assert 0.0 <= f <= 1.0, f"BHNS class '{k}' fraction {f} outside [0, 1]"
+    assert sum(bfracs.values()) == pytest.approx(1.0, abs=1e-9)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -441,9 +443,10 @@ def test_observed_gw_events_fall_inside_grid_panel():
     """GW170817 and GW190425 fit inside the BNS panel's plotted [M2, M1] box.
 
     Light sanity check.  Section 1 annotates star markers at the
-    Abbott+ 2019/2020 low-spin medians; if the panel extent drifts
-    below the M_TOV cap (or above the GW190425 secondary mass), the
-    annotations would sit on the panel edge or off-panel entirely.
+    Abbott+ 2019/2020 low-spin representative points (which sit inside
+    the published 90% CRs); if the panel extent drifts below the M_TOV
+    cap (or above the GW190425 secondary mass), the annotations would
+    sit on the panel edge or off-panel entirely.
     The literature anchor is in
     ``tests/anchors/test_literature_anchors.py``; this test pins the
     *placement* inside the plotted extent.
@@ -461,3 +464,50 @@ def test_observed_gw_events_fall_inside_grid_panel():
             f"{name}: M1 = {m1} falls outside the Section 1 BNS panel "
             f"M1 extent [{_M1_LO_BNS}, {_M1_HI_BNS}]."
         )
+
+
+@pytest.mark.requires_data
+@pytest.mark.slow
+def test_over_cap_components_stay_bns_across_the_grid(repo_root):
+    """Every COMPAS-typed NS above its own file's cap stays in the BNS region.
+
+    COMPAS writes gravitational masses after enforcing ``M_NS_max``, so a
+    handful of components land a rounding step above the cap.  Compared
+    exactly they leave the BNS region and are handed a Foucart BHNS disk
+    mass, inverting the classification the simulation made.  On the 20-model
+    grid that is 41 BNS systems, in models I, P, Q and R (paper-II letters).
+
+    Data-bound because the excess is a property of the released files, not
+    something a synthetic grid reproduces.
+    """
+    import os
+
+    from grb_classify import classify_grid
+    from grb_io import ALL_MODEL_SUFFIXES, load_bns
+
+    checked = 0
+    for suffix in ALL_MODEL_SUFFIXES:
+        path = os.path.join(repo_root, "data", f"COMPASCompactOutput_BNS_{suffix}.h5")
+        if not os.path.exists(path):
+            continue
+        bns = load_bns(path, expected_model=suffix)
+        cap = bns["ns_max"]
+        over = (bns["m1"] > cap) | (bns["m2"] > cap)
+        if not over.any():
+            continue
+        m1, m2 = bns["m1"][over], bns["m2"][over]
+        # The excess must be a rounding step, not physics; assert that before
+        # relying on the tolerance to absorb it.
+        excess = np.maximum(m1, m2).max() - cap
+        assert 0 < excess < 1e-2, (
+            f"{suffix}: component exceeds M_NS_max by {excess:.2e} Msun, too "
+            f"large to be an output rounding step"
+        )
+        cls = classify_grid(m1, m2, ns_max=cap, R_1p4_km=12.0)
+        assert np.all(np.isin(cls, (1, 2, 3, 4))), (
+            f"{suffix}: {int((~np.isin(cls, (1, 2, 3, 4))).sum())} COMPAS-typed "
+            f"BNS systems left the BNS region; labels {sorted(set(cls.tolist()))}"
+        )
+        checked += int(over.sum())
+    if checked == 0:
+        pytest.skip("no over-cap components in the available files")

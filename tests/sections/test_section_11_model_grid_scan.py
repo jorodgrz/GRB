@@ -14,8 +14,12 @@ arrays, and the schema round-trip uses an in-memory NPZ.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+
+from grb_io import LOADER_SELECTION
 
 # Class / channel keys, mirrored from the Section 11 scan cell.  Kept here so
 # a rename in the notebook that breaks the figure cells trips a test.
@@ -33,6 +37,18 @@ CH_KEYS = [
     "IV  Double-core CE",
     "V   Other",
 ]
+
+# Every array the 11.0b scan writes and the figure cells read back.  Mirrored
+# here so a rename in the scan trips a test instead of a NameError mid-notebook.
+GRID_SCAN_KEYS = {
+    "suffixes", "families", "R0_bns", "R0_bhns",
+    "frac_bns", "frac_bhns", "fracerr_bns", "fracerr_bhns",
+    "bootlo_bns", "boothi_bns", "bootlo_bhns", "boothi_bhns",
+    "dropped_bns", "dropped_bhns", "chfrac_bns", "chfrac_bhns",
+    "crosstab_bns", "eos_frac_bns", "eos_frac_bns_kcons", "eos_names",
+    "mbh_hist", "mtot_hist", "mbh_bins", "mtot_bins",
+    "bns_class_keys", "bhns_class_keys", "norm", "ch_keys",
+}  # fmt: skip
 
 
 def test_bns_class_fractions_sum_to_one():
@@ -72,7 +88,7 @@ def test_bhns_class_fractions_sum_to_one():
 def test_channel_class_crosstab_rows_are_conditional_distributions():
     """``normalise='channel'`` rows sum to 1 for every non-empty channel.
 
-    Section 11.5 plots P(class | channel); each populated row must be a
+    The 11.0b scan caches P(class | channel); each populated row must be a
     proper conditional distribution.
     """
     from grb_classify import channel_class_crosstab
@@ -96,18 +112,17 @@ def test_channel_class_crosstab_rows_are_conditional_distributions():
 
 
 def test_grid_scan_npz_schema_roundtrip(tmp_path):
-    """The cached results carry every array the 14.1-14.9 figure cells read.
+    """The cached results carry every array the Section 11 figure cells read.
 
-    Builds a minimal NPZ with the Section 11 schema and asserts the keys and
-    shapes are internally consistent (20 models, 4 BNS classes, 3 BHNS
-    classes, 5 channels, 4 EOS).  This is the contract between the scan cell
-    and the figure cells; a dropped or renamed array fails here rather than in
-    the notebook.
+    Builds an NPZ with the schema the 11.0b scan actually writes and asserts
+    the keys and shapes are internally consistent (20 models, 4 BNS classes,
+    3 BHNS classes, 5 channels, 4 EOS).  This is the contract between the scan
+    cell and the figure cells; a dropped or renamed array fails here rather
+    than in the notebook.
     """
-    n_models = len(BNS_CLASS_KEYS) * 0 + 20
+    n_models = 20
     n_bins = 45
     n_eos = 4
-    n_dt = 256
     path = tmp_path / "grid_scan_results.npz"
     np.savez(
         path,
@@ -117,37 +132,64 @@ def test_grid_scan_npz_schema_roundtrip(tmp_path):
         R0_bhns=np.zeros(n_models),
         frac_bns=np.zeros((n_models, len(BNS_CLASS_KEYS))),
         frac_bhns=np.zeros((n_models, len(BHNS_CLASS_KEYS))),
+        fracerr_bns=np.zeros((n_models, len(BNS_CLASS_KEYS))),
+        fracerr_bhns=np.zeros((n_models, len(BHNS_CLASS_KEYS))),
+        bootlo_bns=np.zeros((n_models, len(BNS_CLASS_KEYS))),
+        boothi_bns=np.zeros((n_models, len(BNS_CLASS_KEYS))),
+        bootlo_bhns=np.zeros((n_models, len(BHNS_CLASS_KEYS))),
+        boothi_bhns=np.zeros((n_models, len(BHNS_CLASS_KEYS))),
+        dropped_bns=np.zeros(n_models),
+        dropped_bhns=np.zeros(n_models),
         chfrac_bns=np.zeros((n_models, len(CH_KEYS))),
         chfrac_bhns=np.zeros((n_models, len(CH_KEYS))),
         crosstab_bns=np.zeros((n_models, len(CH_KEYS), len(BNS_CLASS_KEYS))),
-        eos_hmns=np.zeros((n_models, n_eos)),
-        dtcdf_bns=np.zeros((n_models, n_dt)),
+        eos_frac_bns=np.zeros((n_models, n_eos, len(BNS_CLASS_KEYS))),
+        eos_frac_bns_kcons=np.zeros((n_models, n_eos, len(BNS_CLASS_KEYS))),
         mbh_hist=np.zeros((n_models, n_bins)),
         mtot_hist=np.zeros((n_models, n_bins)),
         mbh_bins=np.linspace(2.0, 25.0, n_bins + 1),
         mtot_bins=np.linspace(2.0, 6.0, n_bins + 1),
-        dt_grid=np.logspace(0.0, np.log10(1.5e4), n_dt),
         eos_names=np.array(["APR4", "SFHo", "LS220", "DD2"]),
         bns_class_keys=np.array(BNS_CLASS_KEYS),
         bhns_class_keys=np.array(BHNS_CLASS_KEYS),
+        norm=np.array(f"M_SF_SIM|TNG100-1 S(Z,z) data|{LOADER_SELECTION}"),
         ch_keys=np.array(CH_KEYS),
     )
     d = np.load(path, allow_pickle=False)
-    required = {
-        "suffixes", "families", "R0_bns", "R0_bhns", "frac_bns", "frac_bhns",
-        "chfrac_bns", "chfrac_bhns", "crosstab_bns", "eos_hmns", "dtcdf_bns",
-        "mbh_hist", "mtot_hist", "mbh_bins", "mtot_bins", "dt_grid",
-        "eos_names", "bns_class_keys", "bhns_class_keys", "ch_keys",
-    }  # fmt: skip
-    assert required <= set(d.files)
+    assert GRID_SCAN_KEYS <= set(d.files)
     assert d["frac_bns"].shape == (n_models, 4)
     assert d["frac_bhns"].shape == (n_models, 3)
     assert d["crosstab_bns"].shape == (n_models, 5, 4)
-    assert d["eos_hmns"].shape == (n_models, n_eos)
-    assert d["dtcdf_bns"].shape[0] == n_models
-    assert d["dtcdf_bns"].shape[1] == d["dt_grid"].shape[0]
+    # The EOS sweep is cached per class, not as a pre-summed HMNS fraction.
+    assert d["eos_frac_bns"].shape == (n_models, n_eos, 4)
+    assert d["eos_frac_bns_kcons"].shape == (n_models, n_eos, 4)
     assert d["eos_names"].shape[0] == n_eos
     assert d["mbh_bins"].shape[0] == d["mbh_hist"].shape[1] + 1
+    assert d["mtot_bins"].shape[0] == d["mtot_hist"].shape[1] + 1
+
+
+def test_cached_grid_scan_on_disk_matches_the_schema():
+    """The tracked npz carries the schema, not just the synthetic one above.
+
+    The roundtrip test builds its own file, so on its own it cannot catch the
+    scan writing a different set of arrays than the figure cells read.  This
+    one reads the checked-in cache when it is present.
+    """
+    path = Path(__file__).resolve().parents[2] / "plots" / "grid_scan_results.npz"
+    if not path.exists():
+        pytest.skip("plots/grid_scan_results.npz not present")
+    d = np.load(path, allow_pickle=False)
+    missing = GRID_SCAN_KEYS - set(d.files)
+    assert not missing, f"cache is missing {sorted(missing)}"
+    n = d["suffixes"].shape[0]
+    assert d["frac_bns"].shape == (n, len(BNS_CLASS_KEYS))
+    assert d["crosstab_bns"].shape == (n, len(CH_KEYS), len(BNS_CLASS_KEYS))
+    assert d["eos_frac_bns"].shape == (n, d["eos_names"].shape[0], len(BNS_CLASS_KEYS))
+    assert d["eos_frac_bns_kcons"].shape == d["eos_frac_bns"].shape
+    # Section 11.1 and 11.0b reject a cache written under the retired per-model
+    # w_000 normalisation or integrated over the Levina fit instead of the
+    # TNG100-1 S(Z, z) table.
+    assert str(d["norm"]) == f"M_SF_SIM|TNG100-1 S(Z,z) data|{LOADER_SELECTION}"
 
 
 def test_scan_suffix_order_matches_registry():
@@ -170,12 +212,13 @@ def test_bns_channel_fractions_sum_to_one():
     rng = np.random.default_rng(11)
     n = 5000
     chan = classify_formation_channels(
-        dblCE=rng.integers(0, 2, size=n),
-        fc_CEE=rng.integers(0, 4, size=n).astype(float),
-        fc_mt_p1=rng.integers(0, 4, size=n).astype(float),
-        fc_mt_s1=rng.integers(0, 4, size=n).astype(float),
-        fc_mt_p1_K1=rng.integers(0, 14, size=n),
-        fc_mt_s1_K2=rng.integers(0, 14, size=n),
+        mt1_star1=rng.integers(0, 2, size=n).astype(bool),
+        mt1_CE=rng.integers(0, 2, size=n).astype(bool),
+        mt1_K1=rng.integers(-1, 14, size=n),
+        mt1_K2=rng.integers(-1, 14, size=n),
+        mt2_star2=rng.integers(0, 2, size=n).astype(bool),
+        mt2_CE=rng.integers(0, 2, size=n).astype(bool),
+        mt2_K2=rng.integers(-1, 14, size=n),
     )
     w = rng.uniform(0.1, 5.0, size=n)
     masks = np.stack([chan[k] for k in CH_KEYS])

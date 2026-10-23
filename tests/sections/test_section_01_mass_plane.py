@@ -5,13 +5,14 @@ meshgrid: every labelled class is reachable, the ``ns_max`` truncation
 matches the requested model, and STROOPWAFEL-weighted class fractions
 sum to 1.  Pure unit-style; runs in CI without ``data/``.
 
-The second block of tests below covers the four ingredients of the
+The second block of tests below covers the ingredients of the
 Section 1 mass-plane figures that are not exercised elsewhere: the
 ``classify_grid`` <-> per-system classifier consistency, the Foucart
 disk-mass iso-contours that the BHNS panel draws at ``MDISK_SHORT`` /
-``MDISK_LONG``, and the two properties of the weighted reflective-
-boundary KDE that the notebook implements inline (mass-partition by
-quantile contour levels, no density smear past the ``M_TOV`` wall).
+``MDISK_LONG``, and the properties of the STROOPWAFEL-weighted 2D mass
+histogram the notebook implements inline (exact weight conservation,
+the ``M_TOV``-anchored bin edge, and the diagonal half-area density
+correction).
 
 Reference: Gottlieb et al. (2024), arXiv:2411.13657; Broekgaarden et
 al. (2021), arXiv:2103.02608, Sec. 3.4 (M_NS_max per model).
@@ -22,7 +23,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from grb_classify import NS_MAX_FIDUCIAL, classify_bhns, classify_bns_2024, classify_grid
+from grb_classify import (
+    NS_MAX_FIDUCIAL,
+    NS_MAX_MASS_TOL,
+    classify_bhns,
+    classify_bns_2024,
+    classify_grid,
+)
 from grb_physics import M_THRESH, M_TOV, MDISK_LONG, MDISK_SHORT, foucart_disk_mass
 
 
@@ -65,6 +72,59 @@ def test_classify_grid_ns_max_truncates_bns_region():
     )
 
 
+def test_classify_grid_tolerates_the_compas_rounding_step_above_ns_max():
+    """A component a rounding step above ``M_NS_max`` stays in the BNS region.
+
+    COMPAS enforces ``M_NS_max`` during evolution and writes the gravitational
+    mass afterwards, so 42 components across the 20-model grid land above
+    their own file's cap, by at most 3.1e-4 Msun.  Compared exactly, each is a
+    COMPAS-typed NS that the BHNS branch would pick up and hand a Foucart disk
+    mass, inverting a classification the simulation already made.
+    """
+    # Just above a 2.5 Msun cap by less than the tolerance, and a companion
+    # well inside it: the pair is a BNS in the run that produced it.
+    m1 = np.array([2.5 + 3.1e-4, 2.5 + 1e-5])
+    m2 = np.array([1.3, 1.4])
+    cls = classify_grid(m1, m2, ns_max=2.5, R_1p4_km=12.0)
+    assert np.all(np.isin(cls, (1, 2, 3, 4))), (
+        f"a component {NS_MAX_MASS_TOL} Msun above the cap left the BNS "
+        f"region and was classified {cls.tolist()}"
+    )
+
+
+def test_classify_grid_ns_max_tolerance_does_not_mask_a_model_mismatch():
+    """The slack is far narrower than the gap between fiducial caps.
+
+    ``strict_ns_max`` exists to catch a population classified at the wrong
+    model's ``M_NS_max``; the adjacent fiducial values differ by 0.5 Msun,
+    500x the tolerance, so a real mismatch still reassigns systems.
+    """
+    assert NS_MAX_MASS_TOL < 0.01
+    gaps = np.diff(np.array(NS_MAX_FIDUCIAL))
+    assert NS_MAX_MASS_TOL < gaps.min() / 100.0
+
+    # A component squarely between two fiducial caps must still move.
+    m1 = np.array([2.7])
+    m2 = np.array([1.3])
+    assert classify_grid(m1, m2, ns_max=3.0, R_1p4_km=12.0)[0] in (1, 2, 3, 4)
+    assert classify_grid(m1, m2, ns_max=2.5, R_1p4_km=12.0)[0] in (0, 5, 6)
+
+
+def test_classify_grid_bns_and_bhns_regions_stay_complementary():
+    """The tolerance is applied to the same cap on both branches.
+
+    Widening only the BNS side would leave a sliver of mass plane that is
+    neither BNS nor a BHNS candidate, which would silently fall to class 0.
+    """
+    edge = 2.5 + NS_MAX_MASS_TOL / 2.0
+    m_heavy = np.array([edge, edge, 2.5 + 2 * NS_MAX_MASS_TOL])
+    m_light = np.array([1.3, edge, 1.3])
+    cls = classify_grid(m_heavy, m_light, ns_max=2.5, R_1p4_km=12.0)
+    # Inside the cap+tol the pair is BNS; beyond it the heavy component is a BH.
+    assert cls[0] in (1, 2, 3, 4) and cls[1] in (1, 2, 3, 4)
+    assert cls[2] in (0, 5, 6)
+
+
 def test_classify_grid_weighted_class_fractions_sum_to_one():
     """STROOPWAFEL-weighted class fractions over a synthetic mass-plane
     sample partition unity to numerical precision."""
@@ -96,13 +156,14 @@ def test_classify_grid_weighted_class_fractions_sum_to_one():
 # ─────────────────────────────────────────────────────────────────────
 # Section 1 plot ingredients (synthetic only).
 #
-# These cover the four pieces the panel draws that are not anchored
+# These cover the pieces the panel draws that are not anchored
 # elsewhere: classify_grid <-> per-system classifier agreement (so the
 # colored underlay actually depicts the same physics as the printed
 # class fractions), the Foucart disk-mass iso-contours plotted at
-# MDISK_SHORT / MDISK_LONG, and the two KDE properties (quantile
-# contour mass partitioning, reflective-boundary no-smear past M_TOV)
-# that determine where the figure's contour levels actually land.
+# MDISK_SHORT / MDISK_LONG, and the weighted 2D mass-histogram
+# properties (exact weight conservation, M_TOV-anchored top edge,
+# diagonal half-area density correction) that determine what the
+# figure's density map shows.
 # ─────────────────────────────────────────────────────────────────────
 
 # classify_grid integer labels (Gottlieb 2024 hybrid).  Pulled from the
@@ -233,215 +294,216 @@ def test_foucart_disk_mass_iso_contours_at_mdisk_thresholds():
         )
 
 
-def _reflective_kde_bns(m2_sample, m1_sample, w_sample, m2_eval, m1_eval, M_TOV_val):
-    """Recreate the BNS panel's reflective-boundary KDE.
+def _bns_mass_histogram(m2, m1, w, m_lo=1.25, m_tov=M_TOV, bw=0.01):
+    """Replicate the Section 1 BNS panel's weighted 2D mass histogram.
 
-    This mirrors the construction in Section 1's BNS panel of
-    grb_main.ipynb (symmetrise in m1 <-> m2, reflect at the two
-    M_TOV walls, factor of 2 to renormalise to the m1 >= m2 half).
-    Kept as a test-local helper so the notebook code stays self-
-    contained but the construction is exercised in CI.
+    Square ``bw`` bins with the top edge pinned on ``m_tov`` and the
+    bottom edge padded below ``m_lo`` so no boundary system is dropped.
+    Only the m1 >= m2 upper triangle is populated; diagonal bins are
+    bisected by the m1 = m2 line and hold half the area of an
+    off-diagonal bin.  Returns ``(edges, Hw, dens, area)`` where
+    ``dens`` is the masked per-bin weighted density with the diagonal
+    half-area correction applied.
     """
-    from scipy.stats import gaussian_kde
-
-    m2_sym = np.concatenate([m2_sample, m1_sample])
-    m1_sym = np.concatenate([m1_sample, m2_sample])
-    w_sym = np.concatenate([w_sample, w_sample])
-
-    kde = gaussian_kde(np.vstack([m2_sym, m1_sym]), weights=w_sym, bw_method="silverman")
-    two_M = 2.0 * M_TOV_val
-    x = np.ravel(m2_eval)
-    y = np.ravel(m1_eval)
-    Z = (
-        kde(np.vstack([x, y]))
-        + kde(np.vstack([two_M - x, y]))
-        + kde(np.vstack([x, two_M - y]))
-        + kde(np.vstack([two_M - x, two_M - y]))
-    ).reshape(np.asarray(m2_eval).shape) * 2.0
-    return Z
+    nb = int(np.ceil((m_tov - m_lo) / bw))
+    edges = m_tov - bw * np.arange(nb, -1, -1)
+    Hw, _, _ = np.histogram2d(m2, m1, bins=[edges, edges], weights=w)
+    i, j = np.indices(Hw.shape)
+    area = bw**2 * np.where(i == j, 0.5, 1.0)
+    dens = np.ma.masked_where((Hw <= 0) | (j < i), (Hw / w.sum()) / area)
+    return edges, Hw, dens, area
 
 
-def _reflective_kde_bhns(NS_sample, BH_sample, w_sample, NS_eval, BH_eval, M_TOV_val):
-    """Recreate the BHNS panel's reflective-boundary KDE.
+def test_bns_mass_histogram_conserves_weight_exactly():
+    """The weighted 2D histogram must recover the full sample weight.
 
-    Only reflects on the NS axis at M_TOV; the BH axis is unbounded.
-    Mirrors the construction at line 50 of the second selection.
-    """
-    from scipy.stats import gaussian_kde
-
-    kde = gaussian_kde(
-        np.vstack([NS_sample, BH_sample]),
-        weights=w_sample,
-        bw_method="silverman",
-    )
-    pts = np.vstack([np.ravel(NS_eval), np.ravel(BH_eval)])
-    pts_refl = np.vstack([2.0 * M_TOV_val - np.ravel(NS_eval), np.ravel(BH_eval)])
-    return (kde(pts) + kde(pts_refl)).reshape(np.asarray(NS_eval).shape)
-
-
-def _quantile_levels(Z, quantiles):
-    """Replica of the notebook's quantile-level function."""
-    flat = Z.compressed() if hasattr(Z, "compressed") else Z.ravel()
-    s = np.sort(flat)[::-1]
-    c = np.cumsum(s) / s.sum()
-    return sorted(s[np.searchsorted(c, q)] for q in quantiles)
-
-
-def test_kde_quantile_levels_partition_mass_correctly():
-    """Quantile contour levels must enclose the labelled cumulative weighted mass.
-
-    Section 1 of grb_main.ipynb computes its colorbar tick positions
-    by sorting the KDE densities and picking the value where the
-    cumulative sum crosses each labelled quantile (5, 10, 25, 50, 68,
-    90, 95, 99 percent).  Reviewers reading the figure assume that
-    the contour returned for a given quantile ``q`` actually encloses
-    ``q`` of the weighted KDE mass; this test confirms that property
-    per-quantile on a small synthetic weighted sample using the same
-    construction the notebook implements inline.
-
-    Note: ``_quantile_levels`` returns ``sorted(...)`` so the order in
-    the returned list is *ascending by density*, not by quantile.
-    This test calls the helper per-quantile so the level-to-quantile
-    pairing is unambiguous; the order-mismatch trap is a real one
-    that the notebook side-steps by labelling colorbar ticks
-    consistently with the sort order.
+    This is the invariant the reflective KDE violated: with reflection
+    on only one of the two hard walls, roughly a fifth of the KDE
+    probability fell below the mass floor.  A histogram cannot leak
+    weight across a bin edge, so the summed bin weight equals the
+    sample weight to machine precision.
     """
     rng = np.random.default_rng(2027)
-    n = 1500
-    m1 = rng.uniform(1.25, 2.15, n)
-    m2 = rng.uniform(1.25, m1)  # m1 >= m2
+    n = 5000
+    raw = rng.uniform(1.26, M_TOV, size=(2, n))
+    m1 = np.maximum(raw[0], raw[1])
+    m2 = np.minimum(raw[0], raw[1])
     w = rng.uniform(0.1, 1.0, n)
 
-    m2_grid = np.linspace(1.25, 2.20, 110)
-    m1_grid = np.linspace(1.25, 2.20, 110)
-    M2g, M1g = np.meshgrid(m2_grid, m1_grid)
-    Z = _reflective_kde_bns(m2, m1, w, M2g, M1g, M_TOV)
-    Z_half = np.ma.array(Z, mask=(M1g < M2g))
+    _edges, Hw, _dens, _area = _bns_mass_histogram(m2, m1, w)
+    assert np.isclose(Hw.sum(), w.sum(), rtol=1e-12), (
+        f"Histogram retains {Hw.sum():.6f} of {w.sum():.6f} sample "
+        f"weight; the bin grid is dropping systems."
+    )
 
-    total = float(Z_half.sum())
-    for q in (0.10, 0.50, 0.90):
-        # Per-quantile so the order-vs-position trap in
-        # ``_quantile_levels`` (sorted by density, not by quantile)
-        # cannot break the test.
-        lvl = _quantile_levels(Z_half, [q])[0]
-        enclosed = float(Z_half[Z_half >= lvl].sum() / total)
-        assert enclosed == pytest.approx(q, abs=0.03), (
-            f"Quantile contour for q = {q:.2f} encloses "
-            f"{enclosed * 100:.1f} percent of the weighted KDE mass on "
-            f"the synthetic sample; expected {q * 100:.0f}.  The "
-            f"notebook colorbar ticks would mislabel the credible "
-            f"region."
+
+def test_bns_mass_histogram_top_edge_is_m_tov():
+    """A system exactly at the cold-stability wall lands in the top bin.
+
+    The top edge is pinned on ``M_TOV`` so the wall coincides with a
+    bin boundary rather than bisecting a bin.  ``np.histogram2d``
+    includes the rightmost edge in the final bin, so a component
+    sitting at ``M_TOV`` (the cut keeps ``m_i <= M_TOV``) is binned in
+    the corner cell, not dropped.
+    """
+    m1 = np.array([M_TOV])
+    m2 = np.array([M_TOV])
+    w = np.array([1.0])
+
+    edges, Hw, _dens, _area = _bns_mass_histogram(m2, m1, w)
+    assert edges[-1] == pytest.approx(M_TOV, abs=1e-12), (
+        f"Top bin edge {edges[-1]} is not pinned on M_TOV = {M_TOV}."
+    )
+    assert np.isclose(Hw.sum(), 1.0), "System at the M_TOV wall was dropped."
+    assert Hw[-1, -1] == pytest.approx(1.0), (
+        "System at (M_TOV, M_TOV) did not land in the corner bin."
+    )
+
+
+def test_bns_mass_histogram_diagonal_half_area_gives_flat_density():
+    """The diagonal half-area correction recovers a flat density.
+
+    A sample uniform over the m1 >= m2 triangle has constant density.
+    Off-diagonal bins are fully inside the triangle; diagonal bins are
+    bisected by the m1 = m2 line and hold half the counts of a
+    full bin.  Dividing by the half-area on the diagonal (and full
+    area off it) must return the same density on both, otherwise the
+    diagonal would read a factor of two low.
+    """
+    rng = np.random.default_rng(7)
+    n = 400_000
+    xy = rng.uniform(1.30, 2.10, size=(2, n))
+    m1 = np.maximum(xy[0], xy[1])
+    m2 = np.minimum(xy[0], xy[1])
+    w = np.ones(n)
+
+    _edges, Hw, dens, _area = _bns_mass_histogram(m2, m1, w)
+    i, j = np.indices(Hw.shape)
+    on_diag = (i == j) & (~dens.mask)
+    off_diag = (j > i) & (~dens.mask)
+
+    ratio = float(dens[on_diag].mean() / dens[off_diag].mean())
+    assert 0.90 < ratio < 1.10, (
+        f"Diagonal / off-diagonal mean density ratio is {ratio:.3f} on "
+        f"a uniform triangular sample; expected ~1.  A missing half-area "
+        f"correction would drive the diagonal to ~0.5."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Region labels on the Section 1 panels
+# ---------------------------------------------------------------------------
+# Both panels carry italic class names placed at hand-chosen data
+# coordinates.  Nothing in the figure derives them from the classifier, so a
+# change to K_THRESH_DEFAULT, HMNS_FACTOR_DEFAULT, A_BH_FID or either disk
+# threshold moves the boundaries out from under the labels and the figure
+# asserts something false without failing.  The notebook keeps the anchors in
+# BNS_REGION_ANCHORS / BHNS_REGION_ANCHORS, keyed by the classifier's own
+# output key; the tests below re-classify every anchor.
+def _notebook_literal(repo_root, name):
+    """The literal assigned to ``name`` in a grb_main.ipynb code cell."""
+    import ast
+    import json
+    import os
+
+    with open(os.path.join(repo_root, "grb_main.ipynb")) as fh:
+        nb = json.load(fh)
+    for cell in nb["cells"]:
+        if cell["cell_type"] != "code":
+            continue
+        src = "".join(cell["source"])
+        if f"{name} = " not in src:
+            continue
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:  # IPython magics, not a cell we care about
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets
+            ):
+                return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} is not assigned in any grb_main.ipynb code cell")
+
+
+def test_bns_region_labels_land_in_the_class_they_name(repo_root):
+    """Every BNS panel label sits in the region it names, with margin.
+
+    The anchor is checked at its own coordinates and over a +/- 0.01 Msun
+    halo, so a label that has drifted onto a boundary fails here rather
+    than becoming ambiguous at the next threshold edit.
+    """
+    anchors = _notebook_literal(repo_root, "BNS_REGION_ANCHORS")
+    keys = set(classify_bns_2024(np.array([1.4]), np.array([1.3])))
+    assert set(anchors) == keys, (
+        f"BNS_REGION_ANCHORS keys {sorted(anchors)} are not the four "
+        f"classify_bns_2024 keys {sorted(keys)}"
+    )
+
+    halo = np.array([-0.01, 0.0, 0.01])
+    d1, d2 = np.meshgrid(halo, halo)
+    for key, ((m2, m1), text) in anchors.items():
+        assert m1 >= m2, f"{text!r} anchor is on the empty m1 < m2 half"
+        assert 1.25 <= m2 <= 2.2 and 1.25 <= m1 <= 2.2, (
+            f"{text!r} anchor is outside the [1.25, 2.2] panel"
+        )
+        m1h = np.maximum(m1 + d1.ravel(), m2 + d2.ravel())
+        m2h = np.minimum(m1 + d1.ravel(), m2 + d2.ravel())
+        cls = classify_bns_2024(m1h, m2h)
+        assert cls[key].all(), (
+            f"BNS label {text!r} is filed under {key!r} but its anchor "
+            f"(M2={m2}, M1={m1}) classifies as "
+            f"{[k for k, v in cls.items() if v[0]]}"
         )
 
 
-def _base_symmetric_kde_bns(m2_sample, m1_sample, w_sample, m2_eval, m1_eval):
-    """Bare symmetric KDE used inside the reflective sum (no mirror, no factor of 2)."""
-    from scipy.stats import gaussian_kde
+def test_bhns_region_labels_land_in_the_class_they_name(repo_root):
+    """Every BHNS panel label sits in the region it names, at ``A_BH_FID``.
 
-    m2_sym = np.concatenate([m2_sample, m1_sample])
-    m1_sym = np.concatenate([m1_sample, m2_sample])
-    w_sym = np.concatenate([w_sample, w_sample])
-    kde = gaussian_kde(np.vstack([m2_sym, m1_sym]), weights=w_sym, bw_method="silverman")
-    return kde(np.vstack([np.ravel(m2_eval), np.ravel(m1_eval)])).reshape(np.asarray(m2_eval).shape)
-
-
-def test_reflective_kde_wall_identity_bns():
-    """At the corner (M_TOV, M_TOV) the 4-point sum collapses to 4 x base KDE.
-
-    Geometric identity that pins all four mirror terms simultaneously
-    on the BNS construction.  Mirror map at the M_TOV walls sends:
-
-        f(x, y)            -> f(M_TOV, M_TOV)
-        f(2M - x, y)       -> f(M_TOV, M_TOV)     (2M - M_TOV = M_TOV)
-        f(x, 2M - y)       -> f(M_TOV, M_TOV)
-        f(2M - x, 2M - y)  -> f(M_TOV, M_TOV)
-
-    so the reflective sum (before the trailing factor of 2) evaluates
-    to exactly four times the base symmetric KDE.  Section 1's
-    factor-of-2 renormalisation then gives 8 * base at the corner.
-    Dropping any single mirror term would shift the corner ratio from
-    8 to 6, which this test detects independently of grid resolution
-    or bandwidth choice -- both cancel in the ratio.
-
-    Similarly at an edge point (m2 < M_TOV, m1 = M_TOV) two of the
-    four mirror evaluations collapse to the same input and two
-    evaluate at (m2, M_TOV) and (m2, M_TOV) again -- the construction
-    gives 4 * base at the edge.  Both anchor values are checked.
+    The halo is wider on the BH axis (+/- 0.05 Msun) because the panel bins
+    M_BH at 0.25 Msun, so a 0.01 Msun tolerance there would be far below the
+    resolution a reader can judge the placement at.
     """
-    rng = np.random.default_rng(2028)
-    n = 200
-    raw = rng.uniform(1.25, M_TOV - 0.05, size=(2, n))
-    m1 = np.maximum(raw[0], raw[1])
-    m2 = np.minimum(raw[0], raw[1])
-    w = np.ones(n)
+    from grb_physics import A_BH_FID
 
-    # Corner identity: reflective(M_TOV, M_TOV) = 8 * base(M_TOV, M_TOV).
-    corner_m2 = np.array([M_TOV])
-    corner_m1 = np.array([M_TOV])
-    Z_refl = _reflective_kde_bns(m2, m1, w, corner_m2, corner_m1, M_TOV)
-    Z_base = _base_symmetric_kde_bns(m2, m1, w, corner_m2, corner_m1)
-    ratio_corner = float(Z_refl[0] / Z_base[0])
-    assert ratio_corner == pytest.approx(8.0, rel=1e-10), (
-        f"Reflective / base ratio at the (M_TOV, M_TOV) corner is "
-        f"{ratio_corner}; expected exactly 8 (= 4 mirror terms * "
-        f"factor-of-2 renormalisation).  A regression that dropped "
-        f"a mirror term would shift this ratio to 6."
+    anchors = _notebook_literal(repo_root, "BHNS_REGION_ANCHORS")
+    keys = set(classify_bhns(np.array([8.0]), np.array([1.4]))) - {"M_disk"}
+    assert set(anchors) == keys, (
+        f"BHNS_REGION_ANCHORS keys {sorted(anchors)} are not the three "
+        f"classify_bhns class keys {sorted(keys)}"
     )
 
-    # Edge identity: reflective(m2_int, M_TOV) = 4 * base(m2_int, M_TOV).
-    # At m1 = M_TOV the (x, 2M - y) and (2M - x, 2M - y) mirrors map
-    # to (x, M_TOV) and (2M - x, M_TOV) -- two pairs of identical
-    # evaluations -- so the reflective sum is 2 * (base + mirror_x),
-    # times the factor of 2.  In the limit where the data sits far
-    # from the m2 = M_TOV wall, mirror_x is negligible and the ratio
-    # tends to 4 from below.
-    edge_m2 = np.array([1.5])  # interior on the m2 axis
-    edge_m1 = np.array([M_TOV])
-    Z_refl_edge = _reflective_kde_bns(m2, m1, w, edge_m2, edge_m1, M_TOV)
-    Z_base_edge = _base_symmetric_kde_bns(m2, m1, w, edge_m2, edge_m1)
-    ratio_edge = float(Z_refl_edge[0] / Z_base_edge[0])
-    # The mirror_x term contributes < 1e-4 with the sample placed
-    # far from the m2 = M_TOV wall and Silverman bandwidth at N=200;
-    # the algebraic identity gives 4 - eps, so a 3.95 floor suffices.
-    assert 3.95 < ratio_edge <= 4.05, (
-        f"Reflective / base ratio at the (m2 = 1.5, m1 = M_TOV) "
-        f"edge is {ratio_edge}; expected close to 4 (two pairs of "
-        f"identical mirror evaluations * factor-of-2 renormalisation, "
-        f"with negligible cross-mirror contribution from far-side "
-        f"data).  Mirror count or factor-of-2 renormalisation drift."
-    )
+    d_ns, d_bh = np.meshgrid(np.array([-0.01, 0.0, 0.01]), np.array([-0.05, 0.0, 0.05]))
+    for key, ((m_ns, m_bh), text) in anchors.items():
+        assert 1.25 <= m_ns <= 2.2, f"{text!r} anchor is off the M_NS axis"
+        assert 2.5 <= m_bh <= 40.0, f"{text!r} anchor is off the M_BH axis"
+        cls = classify_bhns(m_bh + d_bh.ravel(), m_ns + d_ns.ravel(), a_BH=A_BH_FID)
+        assert cls[key].all(), (
+            f"BHNS label {text!r} is filed under {key!r} but its anchor "
+            f"(M_NS={m_ns}, M_BH={m_bh}) gives M_disk="
+            f"{cls['M_disk'][4]:.4g} and classifies as "
+            f"{[k for k, v in cls.items() if k != 'M_disk' and v[4]]}"
+        )
 
 
-def test_reflective_kde_wall_identity_bhns():
-    """At the NS wall (M_TOV, BH) the 2-point sum collapses to 2 x base KDE.
+def test_tidal_disruption_locus_is_not_the_bhns_class_boundary():
+    """The dashed M_disk > 0 curve sits above the No GRB / Faint boundary.
 
-    Same algebraic identity as the BNS edge test but on the BHNS
-    construction.  Mirror map at M_NS = M_TOV sends:
-
-        f(NS, BH)        -> f(M_TOV, BH)
-        f(2M - NS, BH)   -> f(M_TOV, BH)         (2M - M_TOV = M_TOV)
-
-    so the reflective sum at any (M_TOV, BH) point evaluates to
-    exactly 2 * base.  Dropping the NS-axis mirror would collapse
-    this ratio to 1.
+    The BHNS panel draws three curves and only the lower two are class
+    edges.  A reader who takes the topmost curve as the edge of the
+    classified region overstates the Faint lbGRB area, so the ordering is
+    pinned here and stated in the legend and the caption.
     """
-    rng = np.random.default_rng(2029)
-    n = 200
-    NS = rng.uniform(1.25, M_TOV - 0.05, size=n)
-    BH = rng.uniform(3.0, 12.0, size=n)
-    w = np.ones(n)
+    m_bh = np.linspace(2.5, 18.0, 20_000)
+    for m_ns in (1.3, 1.5, 1.8):
+        disk = foucart_disk_mass(m_bh, np.full_like(m_bh, m_ns), a_BH=0.5)
 
-    from scipy.stats import gaussian_kde
+        def _highest(threshold, disk=disk):
+            hit = np.where(disk > threshold)[0]
+            return m_bh[hit.max()] if hit.size else np.nan
 
-    NS_eval = np.array([M_TOV])
-    BH_eval = np.array([6.0])
-    Z_refl = _reflective_kde_bhns(NS, BH, w, NS_eval, BH_eval, M_TOV)
-
-    kde = gaussian_kde(np.vstack([NS, BH]), weights=w, bw_method="silverman")
-    Z_base = kde(np.vstack([NS_eval, BH_eval]))
-    ratio = float(Z_refl[0] / Z_base[0])
-    assert ratio == pytest.approx(2.0, rel=1e-10), (
-        f"Reflective / base ratio at the NS wall (M_TOV, BH=6) is "
-        f"{ratio}; expected exactly 2.  Dropping the NS-axis mirror "
-        f"would shift this ratio to 1."
-    )
+        onset, faint = _highest(0.0), _highest(MDISK_SHORT)
+        assert onset > faint, (
+            f"At M_NS={m_ns} the M_disk > 0 locus ({onset:.2f}) does not sit "
+            f"above the M_disk = {MDISK_SHORT} boundary ({faint:.2f})"
+        )

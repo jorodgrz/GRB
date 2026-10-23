@@ -234,10 +234,11 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
       (b) the sum of the four class rates equals
           ``read_expected_local_rate(...)`` exactly (sum-of-parts identity).
 
-    The remap to the Alsing-Silva-Berti (2018) Galactic-NS double
-    Gaussian is applied to mirror the figure-pipeline state in
-    ``grb_main.ipynb``; the remap is rank-preserving and weight-conserving
-    so the total rate is invariant under it (the per-class split is not).
+    ``w_000`` counts the failed common-envelope ejections the loaders drop
+    by default, so the sample is loaded with ``drop_failed_ce=False`` to stay
+    row-aligned with it.  The Alsing-Silva-Berti (2018) remap is applied as a
+    labelled systematic; it is rank-preserving and weight-conserving, so the
+    total rate is invariant under it (the per-class split is not).
     """
     import h5py as h5
 
@@ -245,7 +246,7 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
     from grb_io import load_bns, read_expected_local_rate
     from grb_physics import remap_ns_masses_double_gaussian
 
-    bns = load_bns(path=bns_a_path)
+    bns = load_bns(path=bns_a_path, drop_failed_ce=False)
     m1_remap, m2_remap = remap_ns_masses_double_gaussian(
         bns["m1"],
         bns["m2"],
@@ -347,3 +348,130 @@ def test_chirp_mass_scalar_array_parity():
     assert s == pytest.approx(float(a[0]), rel=1e-15)
     expected = (m1 * m2) ** 0.6 / (m1 + m2) ** 0.2
     assert s == pytest.approx(expected, rel=1e-15)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# NS-mass remap as a sensitivity tool (not the fiducial path)
+# ─────────────────────────────────────────────────────────────────────
+def test_remap_fabricates_support_in_1p65_to_1p80_msun_gap():
+    """`remap_ns_masses_double_gaussian` must populate the [1.65, 1.80] Msun gap.
+
+    The Fryer et al. (2012) delayed engine under-populates the 1.65 to
+    1.80 Msun interval, inherited from the baryonic-to-gravitational
+    conversion (Fryer 2012 Eq. 12-13; Broekgaarden+ 2021 footnote 3).
+    In the real Model A catalogue that interval still holds a few
+    percent of the weight, with a narrow genuinely-empty void at
+    [1.70, 1.76) Msun; the rapid engine (Model I) populates the same
+    interval, so the void is delayed-specific.
+    The Alsing, Silva and Berti (2018) double-Gaussian is non-zero across
+    the whole interval, so remapping onto it inflates the weight there
+    beyond what the simulation assigned.
+
+    This is why the remap is a sensitivity tool rather than the fiducial:
+    it fabricates support beyond the simulation's.  To make the effect
+    unambiguous the test constructs a synthetic worst case with a true
+    zero-density gap in [1.65, 1.80] and asserts the post-remap density in
+    the gap is well above the raw (zero) density.
+    """
+    from grb_physics import remap_ns_masses_double_gaussian
+
+    rng = np.random.default_rng(2026)
+    n_low = 5000
+    n_high = 1500
+    m_low = rng.uniform(1.10, 1.65, size=n_low)
+    m_high = rng.uniform(1.80, 2.20, size=n_high)
+    m_raw = np.concatenate([m_low, m_high])
+    m1_raw = m_raw[: len(m_raw) // 2]
+    m2_raw = m_raw[len(m_raw) // 2 :]
+
+    n_pair = min(m1_raw.size, m2_raw.size)
+    m1_raw = m1_raw[:n_pair]
+    m2_raw = m2_raw[:n_pair]
+    m1_raw, m2_raw = np.maximum(m1_raw, m2_raw), np.minimum(m1_raw, m2_raw)
+
+    m1, m2 = remap_ns_masses_double_gaussian(
+        m1_raw.copy(),
+        m2_raw.copy(),
+        weights=np.ones(n_pair),
+        rng=rng,
+    )
+
+    raw_in_gap = ((m1_raw >= 1.65) & (m1_raw <= 1.80)).sum() + (
+        (m2_raw >= 1.65) & (m2_raw <= 1.80)
+    ).sum()
+    new_in_gap = ((m1 >= 1.65) & (m1 <= 1.80)).sum() + ((m2 >= 1.65) & (m2 <= 1.80)).sum()
+
+    assert raw_in_gap == 0, (
+        f"Synthetic Fryer-gap input has {raw_in_gap} NSs in the "
+        f"[1.65, 1.80] gap; test setup is broken."
+    )
+    assert new_in_gap >= 0.05 * 2 * n_pair, (
+        f"Alsing remap left only {new_in_gap}/{2 * n_pair} NSs in the "
+        f"[1.65, 1.80] gap; expected at least 5 percent of total to "
+        f"populate the previously empty interval."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Cold-stability cut: M_TOV vs COMPAS M_NS_max reconciliation
+# ─────────────────────────────────────────────────────────────────────
+def test_cold_stable_ns_mask_bns_two_components():
+    """A BNS row survives only if BOTH components are at or below M_TOV."""
+    from grb_physics import cold_stable_ns_mask
+
+    m1 = np.array([1.3, 2.4, 1.5, 2.2])
+    m2 = np.array([1.2, 1.3, 2.6, 2.2])
+    mask = cold_stable_ns_mask(m1, m2, m_tov=2.2)
+    # row 0 both below; row 1 m1>M_TOV; row 2 m2>M_TOV; row 3 both == M_TOV.
+    np.testing.assert_array_equal(mask, np.array([True, False, False, True]))
+
+
+def test_cold_stable_ns_mask_single_component_boundary():
+    """Single-array (BHNS NS) form; the boundary m == M_TOV is inclusive."""
+    from grb_physics import cold_stable_ns_mask
+
+    m_ns = np.array([1.2, 2.20, 2.2001, 3.0])
+    mask = cold_stable_ns_mask(m_ns, m_tov=2.2)
+    np.testing.assert_array_equal(mask, np.array([True, True, False, False]))
+
+
+def test_cold_stable_ns_mask_default_m_tov_is_module_M_TOV():
+    """Default cut uses the module M_TOV = 2.2 (Raaijmakers+ 2021)."""
+    from grb_physics import cold_stable_ns_mask
+
+    m1 = np.array([2.1, 2.3])
+    m2 = np.array([1.4, 1.4])
+    np.testing.assert_array_equal(
+        cold_stable_ns_mask(m1, m2), cold_stable_ns_mask(m1, m2, m_tov=M_TOV)
+    )
+
+
+def test_cold_stable_ns_mask_shape_mismatch_raises():
+    """Component arrays of different shape are a bug, not a broadcast."""
+    from grb_physics import cold_stable_ns_mask
+
+    with pytest.raises(ValueError):
+        cold_stable_ns_mask(np.array([1.3, 1.4]), np.array([1.2]))
+
+
+def test_cold_stable_ns_mask_no_args_raises():
+    from grb_physics import cold_stable_ns_mask
+
+    with pytest.raises(ValueError):
+        cold_stable_ns_mask()
+
+
+def test_cold_stable_bhns_mask_keeps_only_types_that_agree_with_m_tov():
+    """NS at or below M_TOV and BH strictly above it, both required.
+
+    Row 2 is Model J's case: a COMPAS "BH" of 2.1 Msun is an NS under
+    M_TOV = 2.2 and is dropped, not moved to BNS.
+    """
+    from grb_physics import cold_stable_bhns_mask
+
+    m_bh = np.array([8.0, 8.0, 2.1, 2.2, 2.2001])
+    m_ns = np.array([1.4, 2.3, 1.4, 1.4, 2.2])
+    np.testing.assert_array_equal(
+        cold_stable_bhns_mask(m_bh, m_ns, m_tov=2.2),
+        np.array([True, False, False, False, True]),
+    )

@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_dir = os.path.join(repo_root, "Data")
+    data_dir = os.path.join(repo_root, "data")
     if not os.path.isdir(data_dir):
         print(f"Data directory not found: {data_dir}", file=sys.stderr)
         return 2

@@ -33,7 +33,6 @@ import pytest
 from grb_physics import (
     _MEAN_MASS_EVOLVED_VALUE,
     EOS_MODELS,
-    GOTTLIEB25_WIND_FRAC,
     M_TOV,
     NS_REMAP_M_MIN,
     _compactness,
@@ -44,8 +43,6 @@ from grb_physics import (
     effective_aligned_spin,
     foucart_disk_mass,
     foucart_remnant_mass,
-    gottlieb25_eq11,
-    hmns_wind_ejecta,
     mcrit_to_r14,
     ns_radius,
     ns_radius_from_eos,
@@ -376,43 +373,6 @@ def test_bns_dynamical_ejecta_gw170817_finite_and_in_kf2020_band():
     d = float(bns_dynamical_ejecta(1.46, 1.27, R_1p4_km=12.0))
     assert np.isfinite(d)
     assert 1e-3 < d < 2e-2
-
-
-# ---------------------------------------------------------------------------
-# gottlieb25_eq11 and hmns_wind_ejecta
-# ---------------------------------------------------------------------------
-def test_gottlieb25_eq11_canonical_normalisation():
-    """Eq. 11 normalisation at the reference point
-    ``(T50 = 1 s, E_iso = 2e51 erg, alpha = 2, f_inv = 1)``
-    returns exactly ``1e-3 Msun`` (the prefactor in the equation)."""
-    M_ej = float(gottlieb25_eq11(T50=1.0, E_iso=2e51, alpha=2.0, f_inv=1.0))
-    assert M_ej == pytest.approx(1e-3, rel=1e-12)
-
-
-def test_gottlieb25_eq11_alpha_scaling_at_T50_4s():
-    """At ``T50 = 4 s, alpha = 1.5``, the ``(T50)^(alpha - 1)`` factor
-    is ``4 ** 0.5 = 2``; combined with the reference normalisation
-    gives ``2e-3 Msun``.  Matches the inline ``_selftest_gottlieb25``."""
-    M_ej = float(gottlieb25_eq11(T50=4.0, E_iso=2e51, alpha=1.5, f_inv=1.0))
-    assert M_ej == pytest.approx(2e-3, rel=1e-12)
-
-
-def test_gottlieb25_eq11_E_iso_linear_scaling():
-    """``gottlieb25_eq11`` is linear in ``E_iso`` at fixed
-    ``(T50, alpha, f_inv)``: doubling ``E_iso`` doubles ``M_ej``."""
-    base = float(gottlieb25_eq11(T50=1.0, E_iso=2e51, alpha=2.0, f_inv=1.0))
-    doubled = float(gottlieb25_eq11(T50=1.0, E_iso=4e51, alpha=2.0, f_inv=1.0))
-    assert doubled == pytest.approx(2.0 * base, rel=1e-12)
-
-
-def test_hmns_wind_ejecta_linear_in_disk_mass():
-    """HMNS-engine ejecta is ``f_wind * M_d``.  Linearity must hold
-    for both scalar and array inputs; the default
-    ``f_wind = GOTTLIEB25_WIND_FRAC = 0.3``."""
-    assert float(hmns_wind_ejecta(0.05)) == pytest.approx(GOTTLIEB25_WIND_FRAC * 0.05, rel=1e-12)
-    arr = hmns_wind_ejecta(np.array([0.01, 0.05, 0.1]))
-    np.testing.assert_allclose(arr, GOTTLIEB25_WIND_FRAC * np.array([0.01, 0.05, 0.1]), rtol=1e-12)
-    assert float(hmns_wind_ejecta(0.05, wind_frac=0.25)) == pytest.approx(0.0125, rel=1e-12)
 
 
 # ---------------------------------------------------------------------------

@@ -51,14 +51,19 @@ def _build_tng_sweep_setup(bns_a_path):
         find_sfr,
     )
 
-    from grb_io import METALLICITY_GRID, load_bns, read_expected_local_rate
+    from grb_io import METALLICITY_GRID, filter_systems, load_bns
+    from grb_physics import M_TOV, cold_stable_ns_mask
     from grb_rates import (
         LEVINA26_TNG_VARIANTS,
-        calibrate_mean_mass_evolved,
         compute_merger_rate,
+        dPdlogZ_binned_to_grid,
+        simulation_star_forming_mass,
     )
 
+    # Section 0 cold-stability cut, so the sample here is the one Section 4b
+    # integrates rather than the uncut catalogue.
     data = load_bns(path=bns_a_path)
+    data = filter_systems(data, cold_stable_ns_mask(data["m1"], data["m2"], m_tov=M_TOV))
     Z = data["metallicity"]
     delays = data["delay_time"]
     w = data["weights"]
@@ -68,18 +73,12 @@ def _build_tng_sweep_setup(bns_a_path):
         redshift_step=0.05,
         cosmology=Planck15,
     )
-    expected_local_rate = read_expected_local_rate(bns_a_path)
-    mean_mass = calibrate_mean_mass_evolved(
-        redshifts,
-        times,
-        time_first_SF,
-        Z,
-        delays,
-        w,
-        expected_local_rate,
-        Z_min_COMPAS=METALLICITY_GRID[0],
-        Z_max_COMPAS=METALLICITY_GRID[-1],
-    )
+    # Run-configuration star-forming mass, the notebook's normalisation: one
+    # number for every model and both populations, nothing fitted.  The three
+    # TNG variants share it, so the ordering below is a statement about the
+    # MSSFR alone.
+    Z_grid_53 = METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))]
+    mean_mass = simulation_star_forming_mass(n_metallicities=Z_grid_53.size)
 
     R_per_tng = {}
     for name, (sfr_p, mssfr_p) in LEVINA26_TNG_VARIANTS.items():
@@ -90,6 +89,10 @@ def _build_tng_sweep_setup(bns_a_path):
             max_logZ_COMPAS=np.log(METALLICITY_GRID[-1]),
             **mssfr_p,
         )
+        # Same ClassMSSFR bin convention as Section 4: the top grid point
+        # absorbs star formation above Z_max, which the three variants supply
+        # in different amounts because their <Z>(z) normalisations differ.
+        dPdlogZ_v = dPdlogZ_binned_to_grid(dPdlogZ_v, mets_v, Z_grid_53, p_draw_v)
         R_per_tng[name] = compute_merger_rate(
             redshifts,
             times,

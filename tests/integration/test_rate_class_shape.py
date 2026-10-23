@@ -50,8 +50,9 @@ import pytest
 
 def _build_setup(bns_a_path):
     """Mirror Section 7 of grb_main.ipynb up to the ``compute_merger_rate``
-    call: load BNS A, apply the Alsing+ 2018 NS-mass remap, build the
-    sbGRB + blue KN mask, and prep the cosmic-integration plumbing
+    call: load BNS A, apply the cold-stability cut on the raw COMPAS
+    masses (the fiducial NS-mass treatment), build the sbGRB + blue KN
+    mask, and prep the cosmic-integration plumbing
     (``compas_python_utils.FastCosmicIntegration`` is required here)."""
     fci = pytest.importorskip(
         "compas_python_utils.cosmic_integration.FastCosmicIntegration",
@@ -65,17 +66,16 @@ def _build_setup(bns_a_path):
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
     from grb_classify import classify_bns_2024
-    from grb_io import load_bns, read_expected_local_rate
-    from grb_physics import remap_ns_masses_double_gaussian
-    from grb_rates import calibrate_mean_mass_evolved
+    from grb_io import METALLICITY_GRID, filter_systems, load_bns, read_expected_local_rate
+    from grb_physics import M_TOV, cold_stable_ns_mask
 
     bns = load_bns(path=bns_a_path)
-    # Alsing, Silva and Berti (2018) double-Gaussian remap; rng seed 42
-    # matches grb_main.ipynb so the sbGRB mask reproduces the cyan curve
-    # the production plot actually shows.
-    m1, m2 = remap_ns_masses_double_gaussian(
-        bns["m1"].copy(), bns["m2"].copy(), weights=bns["weights"], rng=np.random.default_rng(42)
-    )
+    # Fiducial raw COMPAS masses after the cold-stability cut (m_i <= M_TOV);
+    # matches grb_main.ipynb Section 0 so the sbGRB mask reproduces the cyan
+    # curve the production plot shows.  filter_systems keeps Z / delays /
+    # weights aligned with the masses.
+    bns = filter_systems(bns, cold_stable_ns_mask(bns["m1"], bns["m2"], m_tov=M_TOV))
+    m1, m2 = bns["m1"], bns["m2"]
 
     Z = bns["metallicity"]
     delays = bns["delay_time"]
@@ -86,6 +86,10 @@ def _build_setup(bns_a_path):
     mask = cls["sbGRB + blue KN"]
     assert mask.any(), "sbGRB + blue KN class is empty on BNS A; setup is broken"
 
+    # The COMPAS prior bounds, not the empirical range of this sample.  In
+    # some models the extreme metallicity bins hold no merging systems, so
+    # the empirical range is narrower than the range the sampler drew from,
+    # and p_draw would come out wrong.
     return SimpleNamespace(
         fci=fci,
         Planck15=Planck15,
@@ -93,42 +97,39 @@ def _build_setup(bns_a_path):
         delays=delays,
         w=w,
         Z_grid=Z_grid,
+        Z_prior=(float(METALLICITY_GRID[0]), float(METALLICITY_GRID[-1])),
+        Z_grid_53=METALLICITY_GRID[np.concatenate(([True], np.diff(METALLICITY_GRID) != 0))],
         mask=mask,
         expected_local_rate=read_expected_local_rate(bns_a_path),
-        calibrate_mean_mass_evolved=calibrate_mean_mass_evolved,
     )
 
 
 def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
     """Run the FastCosmicIntegration plumbing at a chosen redshift step
-    using Levina+ 2026 TNG100-1 parameters.
+    over the notebook fiducial S(Z, z), the TNG100-1 table.
     """
     from grb_rates import (
-        MSSFR_PARAMS_LEVINA26_TNG100,
-        SFR_PARAMS_LEVINA26_TNG100,
+        dPdlogZ_binned_to_grid,
+        fine_metallicity_grid,
+        simulation_star_forming_mass,
+        tng_sfr_and_dPdlogZ,
     )
 
     redshifts, _, times, time_first_SF, _, _ = setup.fci.calculate_redshift_related_params(
         max_redshift=max_redshift, redshift_step=redshift_step, cosmology=setup.Planck15
     )
-    sfr = setup.fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
-    dPdlogZ, mets, p_draw = setup.fci.find_metallicity_distribution(
-        redshifts,
-        min_logZ_COMPAS=np.log(setup.Z.min()),
-        max_logZ_COMPAS=np.log(setup.Z.max()),
-        **MSSFR_PARAMS_LEVINA26_TNG100,
-    )
-    mean_mass = setup.calibrate_mean_mass_evolved(
-        redshifts,
-        times,
-        time_first_SF,
-        setup.Z,
-        setup.delays,
-        setup.w,
-        setup.expected_local_rate,
-        Z_min_COMPAS=setup.Z.min(),
-        Z_max_COMPAS=setup.Z.max(),
-    )
+    mets, p_draw = fine_metallicity_grid(*setup.Z_prior)
+    sfr, dPdlogZ = tng_sfr_and_dPdlogZ(redshifts, mets, box="TNG100-1")
+    # COMPAS ClassMSSFR bin convention (notebook Section 4): the top and
+    # bottom grid points absorb the star formation off the ends of the
+    # simulated grid, which the pointwise lookup drops entirely.
+    dPdlogZ = dPdlogZ_binned_to_grid(dPdlogZ, mets, setup.Z_grid_53, p_draw)
+    # Run-configuration star-forming mass: a property of the sampler, so it
+    # is one constant rather than a per-population fit.  Using the constant
+    # also makes the redshift-step invariance test below a statement about
+    # compute_merger_rate alone, instead of one that folds in the
+    # dz-dependence of a calibration step.
+    mean_mass = simulation_star_forming_mass(n_metallicities=setup.Z_grid_53.size)
     n_formed = sfr / mean_mass
     return SimpleNamespace(
         redshifts=redshifts,
@@ -186,7 +187,7 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
     ``calibrate_mean_mass_evolved`` (back-derives MEAN_MASS_EVOLVED
     from the Neijssel z=0 anchor).
 
-    The science-path forward pass uses Levina TNG100-1 and so produces
+    The science-path forward pass uses the TNG100-1 S(Z, z) table and so produces
     a different absolute R(z=0); that is a physics outcome, not a
     calibration drift, and is exercised in
     ``test_section_07_*`` integration tests instead.

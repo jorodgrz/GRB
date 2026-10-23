@@ -36,10 +36,11 @@ build/
 .pdf_extract/
 CLAUDE.md
 COMPAS/
+# Local copy of the Levina et al. Fit_SFRD_TNG files (tables also live in data/)
+TNG_S(Z,z)/
 
-# Data products (only the observational comparison CSV is tracked)
+# Data products (COMPAS HDF5 files, TNG tables; nothing in data/ is tracked)
 data/*
-!data/rastinejad_2024.csv
 
 # Download cache for tools/download_compas_data.py (Zenodo zips and
 # parsed manifests).  Already covered by data/* above, but called out
@@ -66,6 +67,12 @@ council/
 # Smoke-test marker written by tests/test_grb_main_notebook.py
 plots/.smoke_marker
 
+# Section 6d / 7c per-class R(z) grid caches.  Unlike the Section 11 and
+# 6c caches these are not tracked: nothing else reads them, and the cells
+# rebuild them from data/ in about four minutes each when absent.
+plots/rate_bns_by_class_per_model.npz
+plots/rate_bhns_by_class_per_model.npz
+
 # Coverage.py / pytest-cov outputs
 .coverage
 .coverage.*
@@ -74,18 +81,6 @@ coverage.xml
 
 # Notebook-run cache/logs (nbrun execution artifacts)
 .nbrun/
-
-# LaTeX build artifacts (track sources .tex/.bib/.cls/.bst, not build products)
-*.aux
-*.log
-*.out
-*.blg
-*.bbl
-*.fdb_latexmk
-*.fls
-*.synctex.gz
-overleaf-paper/*.pdf
-overleaf-paper/overleaf_grb_paper.zip
 
 # Stray scratch file
 zisHCU3D

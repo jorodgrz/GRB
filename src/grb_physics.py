@@ -23,12 +23,23 @@ Supernova engine
 The COMPAS simulations (Broekgaarden et al. 2021, all five Tier-1 models
 A, F, G, J, K) use the Fryer et al. (2012) *delayed* supernova
 explosion mechanism (Broekgaarden+ 2021 Table 1; the rapid prescription
-is Model I, a variation).  Both delayed and rapid produce a ~1.7 Msun
-NS gravitational-mass deficit inherited from the Fryer 2012 Eq. 12-13
+is Model I, a variation).  The delayed engine under-populates NS
+gravitational masses from 1.65 to 1.80 Msun and leaves [1.70, 1.76)
+Msun exactly empty, inherited from the Fryer 2012 Eq. 12-13
 baryonic-to-gravitational mass conversion (Broekgaarden+ 2021 footnote
-3); :func:`remap_ns_masses_double_gaussian` and
-:func:`remap_ns_marginal` close this gap by quantile-remapping to the
-Alsing+ 2018 Galactic-NS PDF, following Mandel & Muller (2020).
+3).  The rapid engine does not share the void: Model I populates
+[1.70, 1.76) with 812 systems where Model A has none, so the void is
+specific to the delayed prescription.  Fixing it at the prescription
+level (Mandel & Muller 2020) means re-running COMPAS, which is out of
+scope here, so Model I (the rapid engine) is the only self-consistent
+alternative on hand.
+
+The fiducial mass treatment keeps the raw COMPAS masses under
+:func:`cold_stable_ns_mask`.  :func:`remap_ns_masses_double_gaussian`
+and :func:`remap_ns_marginal` quantile-remap onto the Alsing+ 2018
+Galactic-NS PDF, but they inflate the weight across the deficit rather
+than recovering it, so no notebook figure applies them; they are here for
+an explicit sensitivity run only.
 
 Jet efficiency caveat
 ---------------------
@@ -50,6 +61,21 @@ import numpy as np
 from scipy.special import erf
 
 # ---------------------------------------------------------------------------
+# Cosmology
+# ---------------------------------------------------------------------------
+# The values pinned by COMPAS ``FastCosmicIntegration`` (Planck 2015, see the
+# module docstring).  They live here as constants so that code converting
+# angular to physical scales (grb_offsets) uses the same numbers the rate
+# integration does rather than re-deriving them from prose.
+H0_PLANCK15 = 67.74  # km/s/Mpc
+OMEGA_M_PLANCK15 = 0.3089
+OMEGA_L_PLANCK15 = 0.6911
+
+# Solar metallicity, Asplund et al. (2009) photospheric Z.  Only ever used to
+# put a metallicity axis in Z/Zsun; no COMPAS quantity depends on it.
+Z_SUN = 0.0142
+
+# ---------------------------------------------------------------------------
 # Classification thresholds
 # ---------------------------------------------------------------------------
 # Disk-mass cuts (MDISK_SHORT, MDISK_LONG) come from Gottlieb et al. (2023,
@@ -63,6 +89,16 @@ M_CRIT_BNS = 2.8  # BNS prompt-collapse total mass [Msun]; literature anchor (Go
 Q_THRESH_BNS = 1.2  # BNS mass ratio q = M_max / M_min >= 1 (Gottlieb 2023, Sec. 3)
 MDISK_SHORT = 0.01  # BHNS Faint-lbGRB / lbGRB-disk split [Msun] (Gottlieb 2023 Fig. 6)
 MDISK_LONG = 0.1  # BHNS lbGRB + red KN (BHNS disk) [Msun] (Gottlieb 2023 Fig. 6)
+
+A_BH_FID = 0.5
+"""Fiducial dimensionless BH spin for the BHNS classification.
+
+A project choice, not a measured or published value: it sits mid-range in the
+Foucart et al. (2018) calibration interval chi_BH in [-0.5, 0.9] and is the
+central point of the standard sweep {0.0, 0.3, 0.5, 0.7, 0.9}.  Every BHNS
+result quoted at a single spin uses it, and Section 7 marginalises over the
+sweep rather than relying on it.  Nothing in the literature prefers 0.5; treat
+a result that changes qualitatively across the sweep as spin-limited."""
 
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2024) additions
@@ -116,15 +152,26 @@ _MEAN_MASS_EVOLVED_VALUE = 77708655
 # ---------------------------------------------------------------------------
 # EOS reference models
 # ---------------------------------------------------------------------------
-# M_crit : BNS prompt-collapse total-mass threshold [Msun]
-#          Bauswein et al. (2013, arXiv:1307.5191) Table I
-# R_1p4  : NS radius at 1.4 Msun [km]  (Read et al. 2009, Table III)
-# M_TOV  : maximum non-rotating NS mass [Msun]  (Read et al. 2009)
+# M_crit : BNS prompt-collapse threshold binary mass [Msun].  Bauswein et al.
+#          (2020, arXiv:2004.00846) Table I, M_thres(q = 1).  That table is the
+#          right source rather than the earlier Bauswein et al. (2013) Table I:
+#          it is one self-consistent study covering all four EOS used here
+#          (APR4 appears there as "APR"), it surveys 40 EOS rather than 12, and
+#          it resolves asymmetric binaries.  The 2013 table does not contain
+#          APR at all, so it cannot source a value for it.
+# R_1p4  : NS radius at 1.4 Msun [km].  Standard published values per EOS:
+#          APR4 from Read et al. (2009); SFHo from Steiner, Hempel and Fischer
+#          (2013); LS220 from Lattimer and Swesty (1991); DD2 from Typel et al.
+#          (2010).  Bauswein tabulates R_1.6, not R_1.4, so it is not the
+#          source for this column.
+# M_TOV  : maximum non-rotating NS mass [Msun], same per-EOS sources, and
+#          consistent with the Bauswein (2020) Table I M_max column to under
+#          one percent for all four (2.187, 2.056, 2.041, 2.419).
 EOS_MODELS = {
-    "APR4": {"M_crit": 2.88, "R_1p4": 11.1, "M_TOV": 2.20},
-    "SFHo": {"M_crit": 2.60, "R_1p4": 11.9, "M_TOV": 2.06},
-    "LS220": {"M_crit": 2.72, "R_1p4": 12.7, "M_TOV": 2.04},
-    "DD2": {"M_crit": 3.35, "R_1p4": 13.2, "M_TOV": 2.42},
+    "APR4": {"M_crit": 2.825, "R_1p4": 11.1, "M_TOV": 2.20},
+    "SFHo": {"M_crit": 2.875, "R_1p4": 11.9, "M_TOV": 2.06},
+    "LS220": {"M_crit": 2.975, "R_1p4": 12.7, "M_TOV": 2.04},
+    "DD2": {"M_crit": 3.325, "R_1p4": 13.2, "M_TOV": 2.42},
 }
 
 
@@ -250,9 +297,10 @@ def ns_radius_from_eos(M_NS, eos_name):
 def mcrit_to_r14(mc):
     """Linear interpolation from M_crit [Msun] to R_{1.4} [km].
 
-    Anchored at APR4 (M_crit=2.88, R_{1.4}=11.1 km) and
-    DD2 (M_crit=3.35, R_{1.4}=13.2 km), matching ``EOS_MODELS``
-    (M_crit from Bauswein et al. 2013; R_{1.4} from Read et al. 2009).
+    Anchored at APR4 (M_crit=2.825, R_{1.4}=11.1 km) and DD2
+    (M_crit=3.325, R_{1.4}=13.2 km), read off ``EOS_MODELS`` so the two
+    move together (M_crit from Bauswein et al. 2020 Table I; R_{1.4} from
+    the per-EOS sources listed with that table).
     """
     apr4 = EOS_MODELS["APR4"]
     dd2 = EOS_MODELS["DD2"]
@@ -331,7 +379,7 @@ def remap_ns_marginal(
 
     ``target_cdf`` overrides the default Alsing+ 2018 target with an
     arbitrary ``cdf(x, m_min, m_max)`` callable (e.g. a uniform prior),
-    used by the Section 2b remap-dependence test to quantify how much of
+    used by the remap-dependence tests to quantify how much of
     the BNS demographics is set by the imposed mass function rather than
     by COMPAS.  When ``None`` the Alsing double Gaussian is used.
     """
@@ -375,11 +423,13 @@ def remap_ns_masses_double_gaussian(
 
     The Broekgaarden et al. (2021) COMPAS catalogues use the Fryer
     (2012) *delayed* SN engine (their Table 1; Model A is the fiducial,
-    Model I is the rapid variation).  Both delayed and rapid produce a
-    NS gravitational-mass deficit near 1.7 Msun, inherited from the
+    Model I is the rapid variation).  The delayed engine leaves a NS
+    gravitational-mass deficit near 1.7 Msun, inherited from the
     Fryer (2012) Eq. 12-13 baryonic-to-gravitational mass conversion
     (Broekgaarden+ 2021 footnote 3; see also Mandel & Muller 2020 MNRAS
-    499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  This helper
+    499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  The rapid
+    engine does not, so the deficit is a property of the delayed
+    prescription and not of the conversion alone.  This helper
     performs a weighted, rank-preserving quantile transform from the
     empirical COMPAS NS-mass distribution to the Alsing, Silva & Berti
     (2018) MNRAS 478, 1377 double-Gaussian fit to Galactic NSs:
@@ -437,7 +487,7 @@ def remap_ns_masses_double_gaussian(
         Override the Alsing+ 2018 target with an arbitrary
         ``cdf(x, m_min, m_max)`` (e.g. ``uniform_mass_cdf``).  Passed
         through to both per-component :func:`remap_ns_marginal` calls.
-        Used by the Section 2b remap-dependence test.
+        Used by the remap-dependence tests.
     """
     if rng is None:
         rng = np.random.default_rng(0)
@@ -472,6 +522,51 @@ def remap_ns_masses_double_gaussian(
     m1_new = np.maximum(m1_remap, m2_remap)
     m2_new = np.minimum(m1_remap, m2_remap)
     return m1_new, m2_new
+
+
+def cold_stable_ns_mask(*component_masses, m_tov=M_TOV):
+    """Boolean mask of systems whose every NS component is cold-stable.
+
+    COMPAS types a remnant as a neutron star up to its own ``M_NS_max``
+    (2.5 Msun for Model A; 2.0 / 3.0 for Models J / K), a run-time
+    configuration knob that is unrelated to, and larger than, the
+    cold-stability limit ``M_TOV = 2.2`` adopted here (Raaijmakers et
+    al. 2021).  A "neutron star" heavier than ``M_TOV`` cannot exist as
+    a cold, non-rotating star under that EOS, so a BNS row containing
+    such a component is not a BNS at all and must leave the sample
+    before classification.  Passing the EOS-specific ``m_tov`` makes the
+    cut move with the equation of state in an EOS sweep.
+
+    Accepts one array per component (``m1, m2`` for BNS; a single
+    ``M_NS`` for the BHNS neutron star) and returns the elementwise AND
+    of ``m_i <= m_tov`` across all of them.  All inputs must share one
+    shape.
+    """
+    if not component_masses:
+        raise ValueError("cold_stable_ns_mask needs at least one mass array")
+    arrs = [np.asarray(m, dtype=float) for m in component_masses]
+    mask = np.ones(arrs[0].shape, dtype=bool)
+    for m in arrs:
+        if m.shape != mask.shape:
+            raise ValueError("all component-mass arrays must share one shape")
+        mask &= m <= m_tov
+    return mask
+
+
+def cold_stable_bhns_mask(M_BH, M_NS, m_tov=M_TOV):
+    """BHNS systems whose COMPAS types agree with ``m_tov``: NS at or below
+    it, BH above it.
+
+    The BH test matters only when a run's ``M_NS_max`` sits below
+    ``m_tov`` (Model J, 2.0 Msun, whose BHs start at 2.07).  Such a "BH" is
+    an NS under the adopted EOS, but it cannot be moved into the BNS sample:
+    COMPAS gives NSs and BHs different baryonic-to-gravitational mass
+    relations (Fryer et al. 2012, Eqs. 12 and 13; Broekgaarden et al. 2021,
+    footnote 3), so its mass is not the one an NS would have had.  It is
+    dropped, as BNS rows with a super-``m_tov`` component are.
+    """
+    M_BH = np.asarray(M_BH, dtype=float)
+    return cold_stable_ns_mask(M_NS, m_tov=m_tov) & (m_tov < M_BH)
 
 
 # ---------------------------------------------------------------------------
@@ -781,117 +876,19 @@ or the suppression double-counts."""
 
 
 # ---------------------------------------------------------------------------
-# Gottlieb et al. (2025) Eq. (11) disk-wind ejecta relation
+# Gottlieb et al. (2025) HMNS disk-wind inputs to the breakout model
 # ---------------------------------------------------------------------------
-# Constants and helpers used by ``comparison.ipynb`` to compare BH-engine
-# and HMNS-engine kilonova ejecta predictions against the Rastinejad+24
-# observational sample.  Single source of truth; previously duplicated
-# in the notebook.
-#
 # Reference: Gottlieb et al. 2025, arXiv:2411.13657.
 
-GOTTLIEB25_F_RANGE = (0.02, 0.71)
-"""Range of the dimensionless ratio ``f_code = f_b / epsilon_gamma``,
-which the notebook samples log-uniformly to marginalise the BH-engine
-prediction in ``predict_bh_mc``.
-
-Gottlieb+25 Eq. (10) defines
-
-    E_iso,gamma = (epsilon_gamma / f_b) * E_j = 10 * f_{-1} * E_j,
-    f_{-1} = 0.1 * epsilon_gamma / f_b,
-
-with ``0.01 <= f_b <= 0.11`` (beaming fraction, Berger 2014,
-ARA&A 52, 43) and ``0.15 <= epsilon_gamma <= 0.5`` (gamma-ray
-radiative efficiency, Beniamini & Granot 2015).  Combining the
-boundary values gives ``f_{-1} in [0.14, 5.0]``.
-
-The notebook stores the inverse, ``f_code = f_b / epsilon_gamma``, so
-that ``f_inv = 0.1 / f_code`` reproduces the paper's ``f_{-1}``.
-Algebraically ``f_code in [0.01/0.5, 0.11/0.15] = [0.02, 0.733]``;
-the upper bound is rounded down to 0.71 here, which compresses the
-high-``f_code`` (low-``f_inv``) tail by about 3% relative to the strict
-algebraic limit and is a deliberate cosmetic choice, not a derived
-value."""
-
-GOTTLIEB25_DISK_RANGE = (0.01, 0.10)
-"""Post-merger accretion-disk-mass prior for the HMNS / magnetar engine
-[Msun].  Anchored on the BNS disk-mass fit of Kruger & Foucart 2020
-(arXiv:2002.07728, Eq. 4), which gives ``M_disk <~ 0.1 Msun`` for
-``R_NS ~ 12 km``.  The upper edge is consistent with Gottlieb+25 §3.1
-(sbGRB-producing HMNSs have "less massive disks" than the ~0.1 Msun
-lbGRB benchmark) and with the disk masses sampled by the Radice+18 NR
-simulations (arXiv:1809.11163)."""
-
 GOTTLIEB25_WIND_FRAC = 0.3
-"""Disk-wind ejected fraction ``f_wind = M_ej / M_disk``.  Gottlieb+25
-§3.1, line 474; consistent with ``f_wind ~ 0.2-0.4`` in Radice+18
-GRMHD simulations (arXiv:1809.11163).
-
-Point value retained for the Fig. 1 visual band in
-``comparison.ipynb``; the Fig. 2 / Fig. 3 Monte-Carlo path samples
-``GOTTLIEB25_WIND_FRAC_RANGE`` log-uniformly instead, so that the
-HMNS-engine prediction reflects the GRMHD scatter."""
-
-GOTTLIEB25_WIND_FRAC_RANGE = (0.2, 0.4)
-"""Disk-wind ejected fraction range, ``f_wind in [0.2, 0.4]``.  Radice
-et al. 2018 GRMHD simulations (arXiv:1809.11163, Table 2) give
-``f_wind ~ 0.2-0.4`` across the BNS post-merger disk-mass range; this
-range is drawn log-uniformly in the HMNS-engine MC.  The point value
-``GOTTLIEB25_WIND_FRAC = 0.3`` is the geomean and is retained for the
-Fig. 1 visual band only."""
+"""Disk-wind ejected fraction ``f_wind = M_ej / M_d`` adopted by
+Gottlieb+25 Sec. 3.1 (their weak-field value)."""
 
 GOTTLIEB25_T_HMNS_RANGE = (0.1, 10.0)
-"""Long-lived-HMNS lifetime window [s].  Set by magnetar spin-down and
-viscous timescales (Lippuner+17, Fujibayashi+18, Metzger 2019).  Used
-as a *guide for the eye* in Fig. 1 of ``comparison.ipynb``; Gottlieb+25
-§3.1 does not claim the HMNS engine predicts T_50 directly."""
-
-# External long-duration merger-GRB E_iso anchor [erg].  Literature isotropic
-# gamma-ray energies of long-duration GRBs with kilonova / compact-merger
-# evidence (the Gottlieb 2024 "lbGRB" engine class).  Used to de-circularize
-# the BH-engine null in comparison.ipynb: the BH track was previously anchored
-# on the in-sample Rastinejad+ 2024 lbGRBs it is then compared against, so the
-# lbGRB residual was partly internal to its own anchor.  Anchoring on this
-# external set makes the short-vs-long separation anchor-independent.  Sources
-# are tabulated in data/external_lgrb_eiso.csv (one primary analysis per event).
-LBGRB_EISO_EXTERNAL_ERG = (8.4e50, 1.14e51, 1.70e51, 1.30e52, 6.97e52)
-LBGRB_EISO_EXTERNAL_LOGMEAN = float(np.mean(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
-LBGRB_EISO_EXTERNAL_LOGSTD = float(np.std(np.log10(LBGRB_EISO_EXTERNAL_ERG)))
-
-
-def gottlieb25_eq11(T50, E_iso, alpha=2.0, f_inv=1.0):
-    """Predicted disk-wind kilonova ejecta mass [Msun], BH engine.
-
-    Gottlieb et al. 2025 (arXiv:2411.13657) Eq. (11):
-
-        M_ej = 1e-3 * f_{-1}^{-1} * (E_iso / 2e51 erg) *
-               (T50 / 1 s) ** (alpha - 1)   Msun
-
-    Parameters
-    ----------
-    T50 : array-like
-        50% gamma-ray fluence duration [s].
-    E_iso : array-like
-        Isotropic-equivalent gamma-ray energy [erg].
-    alpha : float, default 2.0
-        Power-law index of the prompt luminosity function.
-    f_inv : float, default 1.0
-        Inverse GRB radiative efficiency normalised to f = 0.1:
-        ``f_inv = (f / 0.1) ** -1``.
-    """
-    T50 = np.asarray(T50, dtype=float)
-    E_iso = np.asarray(E_iso, dtype=float)
-    return 1e-3 * f_inv * (E_iso / 2e51) * (T50 / 1.0) ** (alpha - 1.0)
-
-
-def hmns_wind_ejecta(M_d, wind_frac=GOTTLIEB25_WIND_FRAC):
-    """Predicted disk-wind kilonova ejecta mass [Msun], HMNS engine.
-
-    ``M_ej = wind_frac * M_d``.  Independent of T_50 to first order.
-    Default ``wind_frac = 0.3`` from Gottlieb+25 §3.1.
-    """
-    return wind_frac * np.asarray(M_d, dtype=float)
-
+"""Long-lived-HMNS lifetime window [s].  Gottlieb+25 Sec. 2.3.2 give
+``0.1 s <~ t_HMNS <~ 1 s`` for the long-lived HMNSs that power sbGRBs;
+the upper decade to 10 s has no source.  Used as the HMNS launch-delay
+prior in ``grb_rates.breakout_fraction_bns``."""
 
 # ---------------------------------------------------------------------------
 # Pais et al. (2025) BNS jet breakout  [arXiv:2407.19002]
@@ -1012,33 +1009,6 @@ def jet_breaks_out_pais(
     if require_collimation:
         escape = escape & (E_j > pais_collimation_energy(theta, t_e, norm=PAIS_COLL_NORM))
     return escape
-
-
-def _selftest_gottlieb25():
-    """Run on import; verifies that Eq. (11) normalisation and the f_inv
-    derivation from Eq. (10) are consistent with the cited values."""
-    assert np.isclose(gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0), 1e-3), (
-        "Eq. 11 normalisation failed"
-    )
-    assert np.isclose(gottlieb25_eq11(4.0, 2e51, alpha=1.5, f_inv=1.0), 2e-3), (
-        "Eq. 11 alpha=1.5 scaling failed"
-    )
-    f_lo, f_hi = GOTTLIEB25_F_RANGE
-    finv_min, finv_max = 0.1 / f_hi, 0.1 / f_lo
-    assert np.isclose(finv_min, 0.14, atol=0.01), f"f_inv_min should be ~0.14 (got {finv_min:.3f})"
-    assert np.isclose(finv_max, 5.0, atol=0.05), f"f_inv_max should be ~5.0 (got {finv_max:.3f})"
-    lo, hi = hmns_wind_ejecta(np.array(GOTTLIEB25_DISK_RANGE))
-    assert 0 < lo < hi, "HMNS wind-ejecta range ordering failed"
-    fw_lo, fw_hi = GOTTLIEB25_WIND_FRAC_RANGE
-    assert 0 < fw_lo < fw_hi, "HMNS wind-fraction range ordering failed"
-    assert fw_lo <= GOTTLIEB25_WIND_FRAC <= fw_hi, (
-        "GOTTLIEB25_WIND_FRAC must lie inside GOTTLIEB25_WIND_FRAC_RANGE"
-    )
-    t_lo, t_hi = GOTTLIEB25_T_HMNS_RANGE
-    assert 0 < t_lo < t_hi, "HMNS t_range ordering failed"
-
-
-_selftest_gottlieb25()
 
 
 # ---------------------------------------------------------------------------

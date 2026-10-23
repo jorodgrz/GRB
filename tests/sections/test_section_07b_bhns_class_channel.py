@@ -5,14 +5,14 @@ End-to-end checks on the live Model A pipeline at fiducial BH spin
 [tests/sections/test_section_06b_bns_class_channel.py](tests/sections/test_section_06b_bns_class_channel.py),
 with two BHNS-specific additions:
 
-- ``apply_bhns_misalignment`` is applied per cell (matching the cell
-  pattern at ``grb_main.ipynb`` line ~2580); a dedicated test verifies
-  the per-cell rate equals the half-intrinsic rate so the misalignment
-  factor cannot drift to the wrong level (rate-level vs sample-level)
-  without tripping a clear failure;
+- ``apply_bhns_misalignment`` is applied per cell to the two GRB classes
+  only, as in Sections 7 and 7c: a No-GRB system swallows its NS and
+  launches no jet, so there is nothing to misalign.  A dedicated test
+  checks the GRB cells are half the intrinsic rate and the No-GRB cells
+  equal it, so the factor cannot drift to the wrong class or level;
 - the dominant-channel anchor for the No-GRB class is Channel I (Stable
-  MT + CE), reflecting the Broekgaarden+ 2022 finding that the BHNS
-  population is dominated by stable mass transfer.
+  MT + CE), reflecting the Broekgaarden+ 2021 (Sec. 3.3, 4.1.3) finding
+  that the classic channel dominates the BHNS population.
 
 Both reuse the shared ``_model_cache.get_model("A")`` and the new
 ``bhns_ch`` slot added there for the per-channel BHNS sample.
@@ -21,8 +21,7 @@ Marker stack: ``requires_data`` + ``requires_compas`` + ``slow``.
 
 References: Gottlieb et al. (2023), arXiv:2309.00038, Sec. 4 (BHNS
 disk-mass cuts); Broekgaarden et al. (2021), arXiv:2103.02608, Sec. 5
-(channels I-V); Broekgaarden et al. (2022), arXiv:2112.05763, Sec. 4.2
-(BHNS Channel I dominance); Fragos et al. (2010), ApJL 719, L79;
+(channels I-V) and Sec. 3.3, 4.1.3 (BHNS Channel I dominance); Fragos et al. (2010), ApJL 719, L79;
 Kawaguchi et al. (2015), ApJ 807, 95 (BHNS misalignment).
 """
 
@@ -40,7 +39,11 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from grb_classify import classify_bhns, classify_formation_channels  # noqa: E402
+from grb_classify import (  # noqa: E402
+    FORMATION_CHANNEL_INPUTS,
+    classify_bhns,
+    classify_formation_channels,
+)
 from grb_rates import apply_bhns_misalignment, compute_merger_rate  # noqa: E402
 from tests.sections._model_cache import get_model as _get_model  # noqa: E402
 
@@ -62,27 +65,29 @@ _CHANNEL_KEYS = [
     "V   Other",
 ]
 
-# Per-(class, channel) misalignment-corrected R(z = 0) in Gpc^-3 yr^-1
-# for Model A at A_BH_FID = 0.5 under Levina+ 2026 TNG100-1 MSSFR +
-# Planck 2015 cosmology, ``smooth_sigma = 0``.  Pinned against the
-# project's COMPAS commit ``81722d4``.  Channels III and V are empty
-# for BHNS in this run.  See ``_assert_pinned`` for tolerance rules.
+# Per-(class, channel) R(z = 0) as drawn, in Gpc^-3 yr^-1 (x0.5 misalignment
+# on the two GRB classes, intrinsic for No GRB; the No-GRB pins doubled on
+# 2026-10-22 when the halving was removed from that class) for Model A at A_BH_FID = 0.5 under the TNG100-1 S(Z, z) table +
+# Planck 2015 cosmology, ``smooth_sigma = 0``.  Channels follow
+# Broekgaarden+ 2021 Sec. 3.1 as reproduced in ``classify_formation_channels``
+# (re-pinned 2026-10-21; the earlier pins predated the TNG100-1 table).
+# See ``_assert_pinned`` for tolerance rules.
 _R0_PINS_BHNS = {
-    ("No GRB", "I  Stable MT + CE"): 29.7408,
-    ("No GRB", "II  Stable MT only"): 0.504796,
-    ("No GRB", "III Single-core CE"): 0.0,
-    ("No GRB", "IV  Double-core CE"): 0.135121,
-    ("No GRB", "V   Other"): 0.0,
-    ("Faint lbGRB (BHNS)", "I  Stable MT + CE"): 8.79915,
-    ("Faint lbGRB (BHNS)", "II  Stable MT only"): 0.947377,
-    ("Faint lbGRB (BHNS)", "III Single-core CE"): 0.0,
-    ("Faint lbGRB (BHNS)", "IV  Double-core CE"): 0.155602,
-    ("Faint lbGRB (BHNS)", "V   Other"): 0.0,
-    ("lbGRB + red KN (BHNS disk)", "I  Stable MT + CE"): 1.34086,
-    ("lbGRB + red KN (BHNS disk)", "II  Stable MT only"): 0.538304,
-    ("lbGRB + red KN (BHNS disk)", "III Single-core CE"): 0.0,
-    ("lbGRB + red KN (BHNS disk)", "IV  Double-core CE"): 0.0685578,
-    ("lbGRB + red KN (BHNS disk)", "V   Other"): 0.0,
+    ("No GRB", "I  Stable MT + CE"): 47.2274,
+    ("No GRB", "II  Stable MT only"): 1.41755,
+    ("No GRB", "III Single-core CE"): 3.03421,
+    ("No GRB", "IV  Double-core CE"): 0.378848,
+    ("No GRB", "V   Other"): 2.97784,
+    ("Faint lbGRB (BHNS)", "I  Stable MT + CE"): 5.29523,
+    ("Faint lbGRB (BHNS)", "II  Stable MT only"): 0.494472,
+    ("Faint lbGRB (BHNS)", "III Single-core CE"): 0.643221,
+    ("Faint lbGRB (BHNS)", "IV  Double-core CE"): 0.010384,
+    ("Faint lbGRB (BHNS)", "V   Other"): 0.0360843,
+    ("lbGRB + red KN (BHNS disk)", "I  Stable MT + CE"): 0.626756,
+    ("lbGRB + red KN (BHNS disk)", "II  Stable MT only"): 0.567003,
+    ("lbGRB + red KN (BHNS disk)", "III Single-core CE"): 0.354838,
+    ("lbGRB + red KN (BHNS disk)", "IV  Double-core CE"): 0.00091036,
+    ("lbGRB + red KN (BHNS disk)", "V   Other"): 0.00337726,
 }
 
 
@@ -96,6 +101,14 @@ def _assert_pinned(value: float, pinned: float, name: str) -> None:
         assert abs(value - pinned) < 1e-3, (
             f"{name} = {value:.6g} drifted from near-zero pin {pinned:.6g} by more than 1e-3 (atol)"
         )
+
+
+_MISALIGNED = {"Faint lbGRB (BHNS)", "lbGRB + red KN (BHNS disk)"}
+
+
+def _misalign(cl, R):
+    """The 0.5x jet-misalignment factor, on the two GRB classes only."""
+    return apply_bhns_misalignment(R) if cl in _MISALIGNED else R
 
 
 def _build_per_cell_rates(mod):
@@ -118,14 +131,7 @@ def _build_per_cell_rates(mod):
     )
 
     classes = classify_bhns(bhns_ch["M_BH"], bhns_ch["M_NS"], a_BH=A_BH_FID)
-    channels = classify_formation_channels(
-        dblCE=bhns_ch["dblCE"],
-        fc_CEE=bhns_ch["fc_CEE"],
-        fc_mt_p1=bhns_ch["fc_mt_p1"],
-        fc_mt_s1=bhns_ch["fc_mt_s1"],
-        fc_mt_p1_K1=bhns_ch["fc_mt_p1_K1"],
-        fc_mt_s1_K2=bhns_ch["fc_mt_s1_K2"],
-    )
+    channels = classify_formation_channels(**{k: bhns_ch[k] for k in FORMATION_CHANNEL_INPUTS})
 
     def _R_intrinsic(mask):
         if not mask.any():
@@ -142,13 +148,18 @@ def _build_per_cell_rates(mod):
         for cl in _CLASS_KEYS
     }
     R_cell = {
-        cl: {ch: apply_bhns_misalignment(R_cell_intrinsic[cl][ch]) for ch in _CHANNEL_KEYS}
+        cl: {ch: _misalign(cl, R_cell_intrinsic[cl][ch]) for ch in _CHANNEL_KEYS}
         for cl in _CLASS_KEYS
     }
     R_per_class_intrinsic = {cl: _R_intrinsic(classes[cl]) for cl in _CLASS_KEYS}
-    R_per_class = {cl: apply_bhns_misalignment(R_per_class_intrinsic[cl]) for cl in _CLASS_KEYS}
+    R_per_class = {cl: _misalign(cl, R_per_class_intrinsic[cl]) for cl in _CLASS_KEYS}
+    # Each channel integrated whole, then the No-GRB part restored to
+    # intrinsic: 0.5 R(ch) + 0.5 R(ch & No GRB).  Built from different
+    # integrations than R_cell, so tripwire B checks additivity for real.
     R_per_channel = {
-        ch: apply_bhns_misalignment(_R_intrinsic(channels[ch])) for ch in _CHANNEL_KEYS
+        ch: apply_bhns_misalignment(_R_intrinsic(channels[ch]))
+        + (1.0 - apply_bhns_misalignment(1.0)) * _R_intrinsic(classes["No GRB"] & channels[ch])
+        for ch in _CHANNEL_KEYS
     }
 
     return {
@@ -174,15 +185,14 @@ def bhns_class_channel_rates():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channel_sum_equals_misalignment_corrected_per_class_total(
+def test_section_07b_channel_sum_equals_misalignment_corrected_per_class_total(
     bhns_class_channel_rates,
 ):
-    """sum_ch R_cell[cl][ch] == apply_bhns_misalignment(R_per_class_intrinsic[cl]).
+    """sum_ch R_cell[cl][ch] equals the class total, corrected the same way.
 
-    Mirrors the in-cell ``assert np.allclose(R_sum, apply_bhns_misalignment(...))``
-    tripwire at notebook line ~2596.  Holds at rtol = 1e-12 because the
-    misalignment correction is a scalar multiplier (Fragos+ 2010,
-    Kawaguchi+ 2015) and therefore commutes with the per-channel sum.
+    Holds at rtol = 1e-12 because the misalignment correction is a scalar
+    multiplier per class (Fragos+ 2010, Kawaguchi+ 2015) and therefore
+    commutes with the per-channel sum.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
     R_per_class = bhns_class_channel_rates["R_per_class"]
@@ -203,12 +213,12 @@ def test_section_08d_channel_sum_equals_misalignment_corrected_per_class_total(
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_class_sum_equals_per_channel_total(bhns_class_channel_rates):
+def test_section_07b_class_sum_equals_per_channel_total(bhns_class_channel_rates):
     """sum_cl R_cell[cl][ch] == R_per_channel[ch] at rtol = 1e-12 for every channel.
 
     The Gottlieb three-class BHNS scheme is exhaustive over the BHNS
     sample, so disjoint class masks within a channel sum to the
-    per-channel total.  Both sides are misalignment-corrected.
+    per-channel total.  Both sides carry the factor on the GRB classes only.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
     R_per_channel = bhns_class_channel_rates["R_per_channel"]
@@ -229,7 +239,7 @@ def test_section_08d_class_sum_equals_per_channel_total(bhns_class_channel_rates
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
+def test_section_07b_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
     """Every (class, channel) curve >= 0 at every redshift.
 
     Same motivation as Section 6b: log-scaled y-axis hides negative
@@ -243,13 +253,17 @@ def test_section_08d_all_cells_nonnegative_everywhere(bhns_class_channel_rates):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 4. Per-cell rate equals half the intrinsic per-cell rate
+# 4. GRB cells are half the intrinsic rate; No-GRB cells are intrinsic
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_each_cell_equals_half_intrinsic(bhns_class_channel_rates):
-    """R_cell[cl][ch] == MISALIGNMENT_FACTOR * R_cell_intrinsic[cl][ch].
+def test_section_07b_misalignment_only_on_grb_classes(bhns_class_channel_rates):
+    """R_cell = MISALIGNMENT_FACTOR x intrinsic for the two GRB classes, and
+    R_cell = intrinsic for No GRB, which launches no jet to misalign.
+
+    An earlier version halved No GRB too, drawing that panel a factor 2 low
+    against Sections 7 and 7c.
 
     Catches a future regression where the misalignment correction
     drifts from the rate level (population-averaged factor of 0.5) to
@@ -265,31 +279,33 @@ def test_section_08d_each_cell_equals_half_intrinsic(bhns_class_channel_rates):
     R_cell = bhns_class_channel_rates["R_cell"]
     R_cell_intrinsic = bhns_class_channel_rates["R_cell_intrinsic"]
     for cl in _CLASS_KEYS:
+        factor = MISALIGNMENT_SYSTEMATIC_FACTOR if cl in _MISALIGNED else 1.0
         for ch in _CHANNEL_KEYS:
             np.testing.assert_allclose(
                 R_cell[cl][ch],
-                MISALIGNMENT_SYSTEMATIC_FACTOR * R_cell_intrinsic[cl][ch],
+                factor * R_cell_intrinsic[cl][ch],
                 rtol=1e-12,
                 atol=0,
-                err_msg=(
-                    f"({cl!r}, {ch!r}) misalignment-corrected rate does "
-                    f"not equal MISALIGNMENT_FACTOR x intrinsic"
-                ),
+                err_msg=f"({cl!r}, {ch!r}) rate is not {factor} x intrinsic",
             )
+    assert "No GRB" not in _MISALIGNED
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 5. Channels III + V together negligible in every BHNS class
+# 5. Channel III is material in every BHNS class
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channels_III_V_together_negligible(bhns_class_channel_rates):
-    """(f_III + f_V) / f_total < 1e-2 in every BHNS class at z = 0.
+def test_section_07b_channel_III_material(bhns_class_channel_rates):
+    """Channel III carries a real share of every populated BHNS class.
 
-    Channels III (single-core CE) and V (catch-all "Other") carry no
-    measurable BHNS weight in Model A; CH_PLOT filter in
-    ``grb_main.ipynb`` Section 7b drops both from the legend.
+    It reads as empty whenever the single-core CE is missed, and
+    Broekgaarden+ 2021 Table 5 puts f_III between 2.1 and 60 per cent of the
+    detectable BHNS rate across their 420 variations, so an exactly-zero
+    channel III is a bug signature rather than a result.  Channel V is not
+    empty: it holds Case A first transfers and the secondary-first systems
+    (Broekgaarden+ 2021 Sec. 3.1.5), 5.4 percent of the No GRB class.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
     R_per_class = bhns_class_channel_rates["R_per_class"]
@@ -299,10 +315,9 @@ def test_section_08d_channels_III_V_together_negligible(bhns_class_channel_rates
         if R_total <= 0.0:
             continue
         f_III = float(R_cell[cl]["III Single-core CE"][iz0]) / R_total
-        f_V = float(R_cell[cl]["V   Other"][iz0]) / R_total
-        assert (f_III + f_V) < 1e-2, (
-            f"Channels III + V are non-negligible in {cl!r}: "
-            f"f_III + f_V = {f_III + f_V:.3e} >= 1e-2"
+        assert f_III > 1e-2, (
+            f"Channel III is negligible in {cl!r}: f_III = {f_III:.3e}.  "
+            f"Below 1 per cent the single-core CE is almost certainly being missed."
         )
 
 
@@ -312,17 +327,16 @@ def test_section_08d_channels_III_V_together_negligible(bhns_class_channel_rates
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
+def test_section_07b_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
     """Channel I weight in the No-GRB class > 0.5 of that class total at z = 0.
 
-    Anchor: Broekgaarden+ 2022 Sec. 4.2 finds that Channel I (stable MT
-    followed by a CE) dominates the BHNS population in Model A, by an
-    order of magnitude over the next-largest channel.  The No-GRB
+    Anchor: Broekgaarden+ 2021 Sec. 3.3 and 4.1.3 find that Channel I (stable
+    MT followed by a CE) dominates the BHNS yield, with f_I > 50 percent of
+    the detectable rate in every model except their B, C and D.  The No-GRB
     cell holds the bulk of the BHNS rate (NS swallowed whole, no
     accretion disk), so this is the cleanest place to pin the
-    population-level dominance: 41 / (41 + 0.65 + 0.19) ~ 0.98 from the
-    notebook print table.  Threshold of 0.5 keeps the test robust to
-    small drifts in the calibration chain.
+    population-level dominance: f_I = 0.86 on Model A.  Threshold of 0.5
+    keeps the test robust to small drifts in the calibration chain.
     """
     R_cell = bhns_class_channel_rates["R_cell"]
     R_per_class = bhns_class_channel_rates["R_per_class"]
@@ -332,7 +346,7 @@ def test_section_08d_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
     f_I = float(R_cell[cl]["I  Stable MT + CE"][iz0]) / R_total
     assert f_I > 0.5, (
         f"Channel I no longer dominates the No-GRB BHNS class: "
-        f"f_I = {f_I:.3f} <= 0.5.  Broekgaarden+ 2022 picture is broken."
+        f"f_I = {f_I:.3f} <= 0.5, against Broekgaarden+ 2021 Sec. 4.1.3."
     )
 
 
@@ -342,8 +356,8 @@ def test_section_08d_channel_I_dominates_no_grb_class(bhns_class_channel_rates):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_section_08d_R0_per_cell_pinned_to_model_A(bhns_class_channel_rates):
-    """Per-(class, channel) misalignment-corrected R(z = 0) within 5 percent of pin.
+def test_section_07b_R0_per_cell_pinned_to_model_A(bhns_class_channel_rates):
+    """Per-(class, channel) R(z = 0), as drawn, within 5 percent of pin.
 
     Same idiom as 7c: 5 percent relative above 1e-3 Gpc^-3 yr^-1, 1e-3
     absolute below.  Pinned against COMPAS commit ``81722d4`` + Levina+

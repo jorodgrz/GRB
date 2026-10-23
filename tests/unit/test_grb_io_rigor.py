@@ -15,7 +15,7 @@ the Broekgaarden+ 2021 COMPAS column layout.
 
 References cited inline per test: Broekgaarden et al. (2021,
 arXiv:2103.02608) Sec. 3.2 (metallicity prior; HDF5 schema);
-Abbott et al. (2019 PRX 9, 011001; 2020 ApJL 892, L3) for
+Abbott et al. (2019 PRX 9, 031040; 2020 ApJL 892, L3) for
 ``OBSERVED_GW_EVENTS`` (pinned separately in
 ``tests/anchors/test_literature_anchors.py``).
 """
@@ -74,6 +74,12 @@ def _write_dco_group(
         cols.update(extra_cols)
     for name, arr in cols.items():
         dco.create_dataset(name, data=np.asarray(arr).reshape(-1, 1))
+    # One common-envelope row per system, none flagged as a failed ejection,
+    # so the loaders' commonEnvelopes join finds the group it requires.
+    seed = np.asarray(cols["seed"]).ravel()
+    ce = f.create_group("commonEnvelopes")
+    ce.create_dataset("randomSeed", data=seed.reshape(-1, 1))
+    ce.create_dataset("immediateRLOFAfterCEE", data=np.zeros((seed.size, 1), dtype=bool))
     return dco, n_merging
 
 
@@ -90,13 +96,38 @@ def _write_formation_channels_group(f, n_total, *, fc_mt_p1=None, fc_CEE=None):
         "m_randomSeed": np.arange(n_total, dtype=np.int64),
         "mt_primary_ep1": fc_mt_p1 if fc_mt_p1 is not None else np.full(n_total, 3.0),
         "mt_primary_ep1_K1": np.zeros(n_total, dtype=int),
+        "mt_primary_ep1_K2": np.zeros(n_total, dtype=int),
         "mt_secondary_ep1": np.zeros(n_total),
+        "mt_secondary_ep1_K1": np.zeros(n_total, dtype=int),
         "mt_secondary_ep1_K2": np.zeros(n_total, dtype=int),
         "CEE": fc_CEE if fc_CEE is not None else np.full(n_total, 5.0),
     }
     for name, arr in arrays.items():
         fc.create_dataset(name, data=np.asarray(arr).reshape(-1, 1))
     return fc
+
+
+def _write_rlof_group(f, rows):
+    """Add an ``RLOF`` group from ``(seed, eventCounter, time, flagRLOF1,
+    flagRLOF2, flagCEE, type1Prev, type2Prev)`` rows, in the given order."""
+    names = (
+        "randomSeed",
+        "eventCounter",
+        "time",
+        "flagRLOF1",
+        "flagRLOF2",
+        "flagCEE",
+        "type1Prev",
+        "type2Prev",
+    )
+    dtypes = (np.int64, np.int64, float, bool, bool, bool, np.int64, np.int64)
+    g = f.create_group("RLOF")
+    for i, (name, dt) in enumerate(zip(names, dtypes)):
+        g.create_dataset(name, data=np.array([r[i] for r in rows], dtype=dt).reshape(-1, 1))
+
+
+def _one_stable_episode_per_seed(n_total):
+    return [(s, 0, 10.0, True, False, False, 2, 1) for s in range(n_total)]
 
 
 def _write_supernovae_group(f, dco_seeds, *, last_vsys=None):
@@ -185,7 +216,7 @@ def test_validate_hdf5_metadata_warning_emits_once_per_path(tmp_path):
     """A second call on the same un-annotated path must not re-warn.
 
     The ``_METADATA_WARN_CACHE`` set deduplicates per-path warnings so
-    the Section 14 grid scan over all 20 models does not spam the
+    the Section 11 grid scan over all 20 models does not spam the
     notebook log.
     """
     from grb_io import _METADATA_WARN_CACHE, _validate_hdf5_metadata
@@ -370,7 +401,9 @@ def test_read_metallicity_range_returns_min_max_floats(tmp_path):
 # ---------------------------------------------------------------------------
 # load_bns_with_channels body
 # ---------------------------------------------------------------------------
-def _write_bns_channels_file(path, *, n_total=6, n_merging=4, masses=None, fc_mt_p1=None):
+def _write_bns_channels_file(
+    path, *, n_total=6, n_merging=4, masses=None, fc_mt_p1=None, rlof_rows=None
+):
     """Write a BNS HDF5 with the formationChannels group attached."""
     with h5.File(path, "w") as f:
         _write_metadata(f, kind="BNS", model="A", ns_max=2.5)
@@ -385,9 +418,11 @@ def _write_bns_channels_file(path, *, n_total=6, n_merging=4, masses=None, fc_mt
                 "doubleCommonEnvelopeFlag": np.zeros(n_total, dtype=int),
                 "SemiMajorAxisPreCEE": np.full(n_total, 1e10),
                 "SemiMajorAxisPostCEE": np.full(n_total, 1e8),
+                "separationInitial": np.full(n_total, 5.0),
             },
         )
         _write_formation_channels_group(f, n_total, fc_mt_p1=fc_mt_p1)
+        _write_rlof_group(f, rlof_rows or _one_stable_episode_per_seed(n_total))
 
 
 def test_load_bns_with_channels_returns_full_key_set(tmp_path):
@@ -410,16 +445,63 @@ def test_load_bns_with_channels_returns_full_key_set(tmp_path):
         "dblCE",
         "sep_preCE",
         "sep_postCE",
+        "a_zams",
         "fc_mt_p1",
         "fc_mt_p1_K1",
+        "fc_mt_p1_K2",
         "fc_mt_s1",
+        "fc_mt_s1_K1",
         "fc_mt_s1_K2",
         "fc_CEE",
+        *(f"mt{n}_{k}" for n in (1, 2) for k in ("star1", "star2", "CE", "K1", "K2")),
         "population",
         "model",
         "ns_max",
     }
     assert expected <= set(out.keys()), f"Missing keys: {expected - set(out.keys())}"
+
+
+def test_first_two_rlof_reads_episodes_by_event_counter(tmp_path):
+    """Episode n is the row with ``eventCounter = n - 1`` for that seed.
+
+    Seed 0 has two episodes written in order, seed 1 one, seed 2 none (it
+    must read False / -1 so no channel accepts it), and seed 3 has its
+    history written twice, row for row, the way Model L writes three of its
+    systems; the first copy is used.
+    """
+    from grb_io import load_bns_with_channels
+
+    rows = [
+        (0, 0, 10.0, True, False, False, 2, 1),
+        (0, 1, 12.0, False, True, True, 13, 4),
+        (1, 0, 11.0, True, False, True, 5, 4),
+        (3, 0, 9.0, True, False, False, 4, 1),
+        (3, 1, 9.5, False, True, False, 13, 2),
+        (3, 0, 9.0, True, False, False, 4, 1),
+        (3, 1, 9.5, False, True, False, 13, 2),
+    ]
+    path = tmp_path / "bns_rlof.h5"
+    _write_bns_channels_file(path, rlof_rows=rows)
+    out = load_bns_with_channels(path=str(path))
+
+    np.testing.assert_array_equal(out["mt1_star1"], [True, True, False, True])
+    np.testing.assert_array_equal(out["mt1_CE"], [False, True, False, False])
+    np.testing.assert_array_equal(out["mt1_K1"], [2, 5, -1, 4])
+    np.testing.assert_array_equal(out["mt2_star2"], [True, False, False, True])
+    np.testing.assert_array_equal(out["mt2_CE"], [True, False, False, False])
+    np.testing.assert_array_equal(out["mt2_K2"], [4, -1, -1, 2])
+
+
+def test_first_two_rlof_rejects_a_duplicate_that_disagrees(tmp_path):
+    """A seed whose episode is written twice with different contents has no
+    defined first episode, so the loader raises rather than pick one."""
+    from grb_io import load_bns_with_channels
+
+    rows = _one_stable_episode_per_seed(6) + [(2, 0, 10.0, True, False, True, 2, 1)]
+    path = tmp_path / "bns_rlof_dup.h5"
+    _write_bns_channels_file(path, rlof_rows=rows)
+    with pytest.raises(ValueError, match="more than once"):
+        load_bns_with_channels(path=str(path))
 
 
 def test_load_bns_with_channels_sort_masses_true_enforces_m1_ge_m2(tmp_path):
@@ -479,9 +561,13 @@ def _write_bhns_channels_file(path, *, st1=None, masses=None):
             extra_cols={
                 "doubleCommonEnvelopeFlag": np.zeros(n_total, dtype=int),
                 "SemiMajorAxisPreCEE": np.full(n_total, 1e10),
+                "M1ZAMS": np.full(n_total, 30.0),
+                "M2ZAMS": np.full(n_total, 10.0),
+                "separationInitial": np.full(n_total, 5.0),
             },
         )
         _write_formation_channels_group(f, n_total)
+        _write_rlof_group(f, _one_stable_episode_per_seed(n_total))
 
 
 def test_load_bhns_with_channels_returns_full_key_set(tmp_path):
@@ -501,11 +587,17 @@ def test_load_bhns_with_channels_returns_full_key_set(tmp_path):
         "mask_merging",
         "dblCE",
         "sep_preCE",
+        "m1zams",
+        "m2zams",
+        "a_zams",
         "fc_mt_p1",
         "fc_mt_p1_K1",
+        "fc_mt_p1_K2",
         "fc_mt_s1",
+        "fc_mt_s1_K1",
         "fc_mt_s1_K2",
         "fc_CEE",
+        *(f"mt{n}_{k}" for n in (1, 2) for k in ("star1", "star2", "CE", "K1", "K2")),
         "population",
         "model",
         "ns_max",
@@ -596,7 +688,7 @@ def test_load_bns_with_kicks_v_sys_matches_match_sn_to_dco(tmp_path):
     last_vsys, n_merging = _write_kicks_file(path, kind="BNS")
     out = load_bns_with_kicks(path=str(path))
     with h5.File(path, "r") as f:
-        vsys_full = _match_sn_to_dco(f)
+        vsys_full = _match_sn_to_dco(f)["v_sys_2"]
     np.testing.assert_array_equal(out["v_sys"], vsys_full[:n_merging])
 
 
@@ -639,7 +731,7 @@ def test_load_bhns_with_kicks_v_sys_matches_match_sn_to_dco(tmp_path):
     last_vsys, n_merging = _write_kicks_file(path, kind="BHNS", st1=st1, masses=(m1, m2))
     out = load_bhns_with_kicks(path=str(path))
     with h5.File(path, "r") as f:
-        vsys_full = _match_sn_to_dco(f)
+        vsys_full = _match_sn_to_dco(f)["v_sys_2"]
     np.testing.assert_array_equal(out["v_sys"], vsys_full[:n_merging])
 
 
@@ -807,3 +899,72 @@ def test_save_rates_includes_redshifts_row(tmp_path):
     np.testing.assert_array_equal(loaded[0], redshifts)
     np.testing.assert_array_equal(loaded[1], rate_dict["All"])
     np.testing.assert_array_equal(loaded[2], rate_dict["Class A"])
+
+
+# ---------------------------------------------------------------------------
+# Failed common-envelope ejections (Broekgaarden+ 2021 Sec. 2).
+# ---------------------------------------------------------------------------
+def _write_failed_ce_file(path, ce_seed, ce_flag, *, n_total=6, n_merging=4):
+    """BNS file whose commonEnvelopes rows are given explicitly."""
+    with h5.File(path, "w") as f:
+        _write_dco_group(f, n_total=n_total, n_merging=n_merging)
+        del f["commonEnvelopes"]
+        ce = f.create_group("commonEnvelopes")
+        ce.create_dataset("randomSeed", data=np.asarray(ce_seed).reshape(-1, 1))
+        ce.create_dataset(
+            "immediateRLOFAfterCEE", data=np.asarray(ce_flag, dtype=bool).reshape(-1, 1)
+        )
+        wi = f.create_group("weights_intrinsic")
+        wi.create_dataset("SEED", data=np.arange(n_total, dtype=np.int64).reshape(-1, 1))
+        wi.create_dataset("w_000", data=np.arange(1.0, n_total + 1.0).reshape(-1, 1))
+        _write_metadata(f, kind="BNS")
+
+
+def test_loaders_drop_failed_ce_ejections_and_report_their_weight(tmp_path):
+    """Seeds 1 and 4 are flagged; seed 4 is not merging, so only seed 1 leaves
+    the merging sample, and the reported share is its weight over the merging
+    weight.  A system with several CE rows is flagged if any one of them is."""
+    from grb_io import load_bns
+
+    path = tmp_path / "failed_ce.h5"
+    _write_failed_ce_file(path, ce_seed=[0, 1, 1, 2, 4], ce_flag=[False, False, True, False, True])
+    w = np.linspace(0.1, 1.0, 6)
+
+    d = load_bns(path=str(path), sort_masses=False)
+    raw = load_bns(path=str(path), sort_masses=False, drop_failed_ce=False)
+
+    np.testing.assert_array_equal(raw["mask_merging"], [True, True, True, True, False, False])
+    np.testing.assert_array_equal(d["mask_merging"], [True, False, True, True, False, False])
+    np.testing.assert_array_equal(d["weights"], w[[0, 2, 3]])
+    assert d["failed_ce_frac"] == pytest.approx(w[1] / w[:4].sum())
+    assert raw["failed_ce_frac"] == d["failed_ce_frac"]
+    assert d["drop_failed_ce"] and not raw["drop_failed_ce"]
+
+
+def test_failed_ce_shares_reports_weight_and_w000(tmp_path):
+    from grb_io import failed_ce_shares
+
+    path = tmp_path / "failed_ce_shares.h5"
+    _write_failed_ce_file(path, ce_seed=[1, 4], ce_flag=[True, True])
+    w = np.linspace(0.1, 1.0, 6)
+    w000 = np.arange(1.0, 7.0)
+    weight_share, w000_share = failed_ce_shares(str(path))
+    assert weight_share == pytest.approx(w[1] / w[:4].sum())
+    assert w000_share == pytest.approx((w000[1] + w000[4]) / w000.sum())
+
+
+def test_failed_ce_join_raises_on_missing_group_or_unknown_seed(tmp_path):
+    from grb_io import load_bns
+
+    path = tmp_path / "no_ce.h5"
+    with h5.File(path, "w") as f:
+        _write_dco_group(f)
+        del f["commonEnvelopes"]
+        _write_metadata(f, kind="BNS")
+    with pytest.raises(KeyError):
+        load_bns(path=str(path))
+
+    path = tmp_path / "unknown_seed.h5"
+    _write_failed_ce_file(path, ce_seed=[99], ce_flag=[True])
+    with pytest.raises(KeyError, match="absent from doubleCompactObjects"):
+        load_bns(path=str(path))

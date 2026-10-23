@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 
 from grb_physics import (
+    A_BH_FID,
     HMNS_FACTOR_DEFAULT,
     M_THRESH,
     M_TOV,
@@ -166,7 +167,9 @@ def bns_boundary_lines(
 # ═══════════════════════════════════════════════════════════════════════════
 # BHNS classification from disk mass
 # ═══════════════════════════════════════════════════════════════════════════
-def classify_bhns(M_BH, M_NS, a_BH=0.5, md_short=MDISK_SHORT, md_long=MDISK_LONG, **foucart_kw):
+def classify_bhns(
+    M_BH, M_NS, a_BH=A_BH_FID, md_short=MDISK_SHORT, md_long=MDISK_LONG, **foucart_kw
+):
     """Classify BHNS mergers by Foucart disk mass under the Gottlieb 2024 hybrid.
 
     Disk-mass thresholds (0.01, 0.1 Msun) are Gottlieb (2023) Sec. 4 / Fig. 6;
@@ -203,7 +206,7 @@ def classify_bhns_spins(M_BH, M_NS, spins=(0.0, 0.3, 0.5, 0.7, 0.9), **kw):
 GRID_CLASS_LABELS = {
     1: "Faint lbGRB (BNS)",
     2: "lbGRB + red KN (HMNS)",
-    3: "sbGRB + blue KN",
+    3: "sbGRB + blue KN (HMNS)",
     4: "lbGRB + red KN (BNS disk)",
     5: "Faint lbGRB (BHNS)",
     6: "lbGRB + red KN (BHNS disk)",
@@ -222,6 +225,24 @@ NS_MAX_FIDUCIAL = (2.0, 2.5, 3.0)
 """Fiducial COMPAS ``M_NS_max`` values per Broekgaarden+ 2021
 (arXiv:2103.02608): Model J = 2.0, Model A = 2.5, Model K = 3.0 Msun.
 ``classify_grid`` rejects any other value unless ``strict_ns_max=False``."""
+
+
+NS_MAX_MASS_TOL = 1e-3
+"""Tolerance [Msun] on the ``ns_max`` comparison in ``classify_grid``.
+
+COMPAS applies its ``M_NS_max`` cut during evolution and writes the
+gravitational mass out afterwards, so a remnant the run typed as an NS can
+land a rounding step above the cap in the file.  Across the 20-model
+Broekgaarden+ 2021 grid, 42 components sit above their own file's
+``M_NS_max``, by at most 3.1e-4 Msun.  Compared exactly, each of those is a
+COMPAS-typed NS that ``classify_grid`` would hand to the BHNS branch and
+give a Foucart disk mass, inverting the classification the simulation
+already made.
+
+CODE HEURISTIC; no paper sets this.  1e-3 Msun clears the observed excess by
+a factor of three and stays three orders of magnitude below the 0.5 Msun gap
+between adjacent ``NS_MAX_FIDUCIAL`` entries, so it cannot hide the
+model-mismatch error that ``strict_ns_max`` exists to catch."""
 
 
 def classify_grid(
@@ -354,7 +375,12 @@ def classify_grid(
     # The BNS class is symmetric in (m_heavy, m_light) so we do not
     # require any ordering on the input; mirror cells across the
     # m1=m2 diagonal receive identical classifications.
-    is_bns = (m_heavy <= ns_max) & (m_light <= ns_max) & (m_light > 0)
+    # Compare against the cap with NS_MAX_MASS_TOL of slack: COMPAS writes
+    # gravitational masses that can sit a rounding step above the M_NS_max it
+    # enforced during evolution, and an exact comparison sends those
+    # COMPAS-typed NSs into the BHNS branch below.
+    ns_cap = ns_max + NS_MAX_MASS_TOL
+    is_bns = (m_heavy <= ns_cap) & (m_light <= ns_cap) & (m_light > 0)
     hmns_split = hmns_factor * m_tov
 
     cls[is_bns & (m_tot < hmns_split)] = 3
@@ -367,7 +393,8 @@ def classify_grid(
     # Cells with 0 < m_light < ns_min are excluded (left at class 0)
     # and a warning is emitted; pass ns_min lower (e.g. 0.8 for ECSN/
     # USSN) to include them.
-    bhns_candidate = (m_heavy > ns_max) & (m_light <= ns_max)
+    # Same cap on both sides, so the BNS and BHNS regions stay complementary.
+    bhns_candidate = (m_heavy > ns_cap) & (m_light <= ns_cap)
     excluded = bhns_candidate & (m_light > 0) & (m_light < ns_min)
     if np.any(excluded):
         n_excl = int(np.sum(excluded))
@@ -411,41 +438,64 @@ def classify_grid(
 # ═══════════════════════════════════════════════════════════════════════════
 # Formation channel classification (Broekgaarden et al.)
 # ═══════════════════════════════════════════════════════════════════════════
-def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1, fc_mt_p1_K1, fc_mt_s1_K2):
-    """Event-sequence formation channel classification.
+BROEKGAARDEN21_CHANNEL_CODE = (
+    "https://github.com/FloorBroekgaarden/DCO_FormationChannels/blob/"
+    "2779b913b1090ea9265cd800bfb25f6cbdab114e/Scripts/formation_channels.py"
+)
+"""Reference implementation of the Broekgaarden+ 2021 Sec. 3.1 channels.
+Pinned at the 2021-04 commit; the 2022-07 revision is identical.  The
+2022-09 revision adds a Case A branch that is not part of the paper and
+labels every Case A system "only stable", common envelope or not."""
 
-    Parameters are 1-D arrays over the merging subset.
+FORMATION_CHANNEL_INPUTS = (
+    "mt1_star1",
+    "mt1_CE",
+    "mt1_K1",
+    "mt1_K2",
+    "mt2_star2",
+    "mt2_CE",
+    "mt2_K2",
+)
+"""Loader keys ``classify_formation_channels`` reads, for
+``classify_formation_channels(**{k: d[k] for k in FORMATION_CHANNEL_INPUTS})``."""
 
-    Returns
-    -------
-    dict of boolean arrays:
-        'I  Stable MT + CE', 'II  Stable MT only', 'III Single-core CE',
-        'IV  Double-core CE', 'V   Other'
+# Hurley+ 2000 stellar types; 0 and 1 are the main sequence.
+_HG, _FGB, _TPAGB, _HE_MS = 2, 3, 6, 7
+
+
+def classify_formation_channels(*, mt1_star1, mt1_CE, mt1_K1, mt1_K2, mt2_star2, mt2_CE, mt2_K2):
+    """Broekgaarden+ 2021 (Sec. 3.1) formation channels from the first two
+    mass-transfer episodes.
+
+    Reproduces ``BROEKGAARDEN21_CHANNEL_CODE`` system by system.  Inputs are
+    the first (``mt1_*``) and second (``mt2_*``) rows of the COMPAS ``RLOF``
+    group: ``star1`` / ``star2`` say which star overflowed (star 1 is the
+    initially more massive primary), ``CE`` whether the episode became a
+    common envelope, ``K1`` / ``K2`` the Hurley types just before it.
+
+    I classic: the primary transfers stably with a core-envelope structure
+      (HG to TPAGB) onto a main-sequence secondary, then the unstripped
+      secondary overflows into a CE.
+    II only stable: as I, but the second episode is stable.
+    III single-core CE: the first episode is a CE from a giant primary
+      (FGB to TPAGB) onto a main-sequence secondary.
+    IV double-core CE: the same with a giant secondary.
+    V other: everything else, including Case A first transfer (their
+      Sec. 3.1.5), a secondary that overflows first, a Hertzsprung-gap donor
+      entering a CE, and systems with no mass transfer.
+
+    The second episode is the second RLOF row whatever it is, so a stable
+    case BB transfer before the secondary's CE also sends a system to V.
     """
-    has_p1 = fc_mt_p1 > 0
-    has_s1 = fc_mt_s1 > 0
-    first_is_primary = has_p1 & (~has_s1 | (fc_mt_p1 < fc_mt_s1))
-    first_is_secondary = has_s1 & (~has_p1 | (fc_mt_s1 < fc_mt_p1))
-    no_stable_mt = ~has_p1 & ~has_s1
+    classic_mt1 = mt1_star1 & ~mt1_CE & (mt1_K1 >= _HG) & (mt1_K1 <= _TPAGB) & (mt1_K2 <= 1)
+    secondary_mt2 = mt2_star2 & (mt2_K2 < _HE_MS)
+    ce_mt1 = mt1_star1 & mt1_CE & (mt1_K1 >= _FGB) & (mt1_K1 <= _TPAGB)
 
-    # Case A donors (donor Hurley K = 0 or 1 at first RLOF) are folded into
-    # I or II based on whether a CE follows, matching Broekgaarden+ 2022
-    # Sec. 3.2 convention.  Donor stellar type at first RLOF is preserved on
-    # fc_mt_p1_K1 / fc_mt_s1_K2 if a downstream analysis needs to slice on
-    # it; the unused intermediate is dropped from this routine.
-    had_CE = fc_CEE > 0
-
-    first_rlof_time = np.where(
-        first_is_primary, fc_mt_p1, np.where(first_is_secondary, fc_mt_s1, 999)
-    )
-    ce_first = had_CE & (no_stable_mt | (fc_CEE < first_rlof_time))
-
-    ch_IV = dblCE == 1
-    ch_other = ~ch_IV & no_stable_mt & ~had_CE
-    ch_II = ~ch_IV & ~ch_other & ~had_CE
-    ch_III = ~ch_IV & ~ch_other & ce_first
-    ch_I = ~ch_IV & ~ch_other & had_CE & ~ce_first
-    ch_other = ch_other | ~(ch_I | ch_II | ch_III | ch_IV)
+    ch_I = classic_mt1 & secondary_mt2 & mt2_CE
+    ch_II = classic_mt1 & secondary_mt2 & ~mt2_CE
+    ch_III = ce_mt1 & (mt1_K2 <= 1)
+    ch_IV = ce_mt1 & (mt1_K2 >= _FGB) & (mt1_K2 <= _TPAGB)
+    ch_other = ~(ch_I | ch_II | ch_III | ch_IV)
 
     return {
         "I  Stable MT + CE": ch_I,
@@ -522,97 +572,3 @@ def channel_class_crosstab(channel_masks, class_masks, weights, normalise=None):
             f"normalise must be None, 'channel', 'class', or 'total'; got {normalise!r}"
         )
     return crosstab
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Observational classifier (Rastinejad et al. 2024 component decompositions)
-# ═══════════════════════════════════════════════════════════════════════════
-KN_RED_FRAC_BLUE_MAX = 0.30
-"""Boundary between blue-dominated (sbGRB + blue KN) and mixed kilonova
-ejecta in ``classify_observed_mergers``.  CODE HEURISTIC, not a value
-published by Gottlieb (2024) or Rastinejad et al. (2024).  Below this
-red-fraction the kilonova is interpreted as blue-dominated (long-lived
-HMNS engine, no significant red-component lanthanide-rich ejecta)."""
-
-KN_RED_FRAC_RED_MIN = 0.70
-"""Boundary between mixed and red-dominated kilonova ejecta in
-``classify_observed_mergers``.  CODE HEURISTIC; chosen symmetric
-about ``KN_RED_FRAC_BLUE_MAX``.  Above this red-fraction the kilonova
-is interpreted as red-dominated (post-merger disk wind from a prompt-
-collapse remnant)."""
-
-KN_M_EJ_FAINT_MAX = 0.01
-"""Total ejecta-mass threshold below which the source is mapped to
-'Faint lbGRB' [Msun].  Aligned with ``MDISK_SHORT`` (Gottlieb 2023,
-Sec. 4): below 0.01 Msun of available mass there is no engine fuel for
-a bright GRB or a detectable kilonova."""
-
-
-def classify_observed_mergers(
-    M_B,
-    M_P,
-    M_R,
-    red_max_for_blue=KN_RED_FRAC_BLUE_MAX,
-    red_min_for_red=KN_RED_FRAC_RED_MIN,
-    m_ej_faint=KN_M_EJ_FAINT_MAX,
-):
-    """Map Rastinejad et al. (2024) ejecta decompositions to Gottlieb (2024) classes.
-
-    .. warning::
-        This is a phenomenological mapping that uses the kilonova
-        ejecta colour decomposition (M_B blue, M_P purple, M_R red) as
-        a proxy for the Gottlieb (2024) four-class engine taxonomy.
-        The thresholds ``KN_RED_FRAC_BLUE_MAX = 0.30``,
-        ``KN_RED_FRAC_RED_MIN = 0.70``, and ``KN_M_EJ_FAINT_MAX = 0.01``
-        are CODE HEURISTICS, not values published by Gottlieb (2024)
-        or Rastinejad et al. (2024).  Override per-call to test the
-        sensitivity of any class-fraction comparison to the choice.
-
-    Used by ``comparison.ipynb`` to overlay observed-sample class
-    fractions on the model class-fraction predictions.
-
-    Parameters
-    ----------
-    M_B, M_P, M_R : array-like
-        Per-source posterior medians (or single-sample values) of the
-        blue / purple / red kilonova ejecta components [Msun],
-        following the Rastinejad et al. (2024, ApJ 979, 190) Table 3
-        column convention.  Negative or NaN entries are passed through
-        as NaN class labels.
-    red_max_for_blue : float, optional
-        Upper bound on the red fraction to count as 'sbGRB + blue KN'.
-    red_min_for_red : float, optional
-        Lower bound on the red fraction to count as 'lbGRB + red KN
-        (disk)'.  Must satisfy ``red_min_for_red > red_max_for_blue``.
-    m_ej_faint : float, optional
-        Total ejecta below which the source is 'Faint lbGRB' [Msun].
-
-    Returns
-    -------
-    dict of boolean arrays keyed by Gottlieb (2024) class label, plus
-    'M_ej_total' and 'f_red' diagnostic arrays.
-    """
-    if not red_min_for_red > red_max_for_blue:
-        raise ValueError(
-            f"red_min_for_red ({red_min_for_red}) must exceed "
-            f"red_max_for_blue ({red_max_for_blue})."
-        )
-    M_B = np.asarray(M_B, dtype=float)
-    M_P = np.asarray(M_P, dtype=float)
-    M_R = np.asarray(M_R, dtype=float)
-    M_ej = M_B + M_P + M_R
-    f_red = np.where(M_ej > 0, M_R / M_ej, np.nan)
-
-    is_faint = M_ej < m_ej_faint
-    is_blue_dom = (~is_faint) & (f_red < red_max_for_blue)
-    is_red_dom = (~is_faint) & (f_red >= red_min_for_red)
-    is_mixed = (~is_faint) & ~is_blue_dom & ~is_red_dom
-
-    return {
-        "sbGRB + blue KN": is_blue_dom,
-        "lbGRB + red KN (HMNS)": is_mixed,
-        "lbGRB + red KN (disk)": is_red_dom,
-        "Faint lbGRB": is_faint,
-        "M_ej_total": M_ej,
-        "f_red": f_red,
-    }

@@ -130,6 +130,43 @@ def test_match_sn_to_dco_no_nan_on_merging_subset(compas_file, capsys):
     )
 
 
+@pytest.mark.requires_data
+@pytest.mark.parametrize("compas_file", _AUDIT_FILES, indirect=True)
+def test_sn_timing_columns_are_ordered_and_close_the_delay_time(compas_file):
+    """The two-leg SN-timing columns are self-consistent with the delay time.
+
+    The second supernova forms the DCO, so its time must equal the DCO
+    formation time ``tform = delay_time - t_inspiral``, the two SNe must be
+    time-ordered (``t_sn1 <= t_sn2``), and ``v_sys`` must alias ``v_sys_2``.
+    These pin the ``_match_sn_to_dco`` SN1/SN2 pairing the kinematic two-leg
+    integrator relies on.
+    """
+    import os as _os
+
+    from grb_io import load_bhns_with_kicks, load_bns_with_kicks
+
+    name = _os.path.basename(compas_file)
+    kind = _KIND_BY_FILE[name]
+    loader = load_bns_with_kicks if kind == "BNS" else load_bhns_with_kicks
+    out = loader(path=compas_file)
+
+    finite = (
+        np.isfinite(out["t_sn1"])
+        & np.isfinite(out["t_sn2"])
+        & np.isfinite(out["t_inspiral"])
+        & np.isfinite(out["delay_time"])
+    )
+    assert finite.any(), "no matched SN rows to check"
+
+    t_sn1 = out["t_sn1"][finite]
+    t_sn2 = out["t_sn2"][finite]
+    tform = out["delay_time"][finite] - out["t_inspiral"][finite]
+
+    assert np.all(t_sn1 <= t_sn2 + 1e-6), "SN times are not ordered (t_sn1 > t_sn2)"
+    np.testing.assert_allclose(t_sn2, tform, rtol=1e-6, atol=1e-6)
+    np.testing.assert_array_equal(out["v_sys"], out["v_sys_2"])
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 3. METALLICITY_GRID provenance vs actual data
 # ─────────────────────────────────────────────────────────────────────
@@ -276,7 +313,7 @@ def test_channel_seed_join_recovers_misaligned_model(compas_file):
     columns aligned to the merging DCO subset, finite, with the five
     Broekgaarden channels forming a weight-complete partition.
     """
-    from grb_classify import classify_formation_channels
+    from grb_classify import FORMATION_CHANNEL_INPUTS, classify_formation_channels
     from grb_io import load_bns_with_channels
 
     out = load_bns_with_channels(path=compas_file, expected_model="L")
@@ -285,14 +322,7 @@ def test_channel_seed_join_recovers_misaligned_model(compas_file):
         assert out[key].size == n, f"{key} not aligned to the {n} merging rows"
         assert np.isfinite(out[key]).all()
 
-    chan = classify_formation_channels(
-        dblCE=out["dblCE"],
-        fc_CEE=out["fc_CEE"],
-        fc_mt_p1=out["fc_mt_p1"],
-        fc_mt_s1=out["fc_mt_s1"],
-        fc_mt_p1_K1=out["fc_mt_p1_K1"],
-        fc_mt_s1_K2=out["fc_mt_s1_K2"],
-    )
+    chan = classify_formation_channels(**{k: out[k] for k in FORMATION_CHANNEL_INPUTS})
     w = out["weights"]
     frac = np.array([w[chan[k]].sum() / w.sum() for k in _CH_KEYS])
     assert frac.sum() == pytest.approx(1.0, abs=1e-12)

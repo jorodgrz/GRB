@@ -5,7 +5,7 @@ detected_rate / calibrate_mean_mass_evolved / Wanderman-Piran /
 Kroupa / Kish / beaming round-trips),
 ``tests/unit/test_phase4_helpers.py`` (marginalize_bh_spin /
 observed_frame_rate / compute_eos_sensitivity / beamed_class_comparison),
-``tests/sections/test_section_10_beaming.py`` (beaming + CLASS_THETA_J),
+``tests/unit/test_beaming.py`` (beaming + CLASS_THETA_J),
 ``tests/sections/test_section_05_metallicity_efficiency.py``
 (formation_efficiency real-data), and the literature-anchor block in
 ``tests/anchors/test_literature_anchors.py``.
@@ -246,9 +246,9 @@ def test_formation_efficiency_masks_none_returns_only_total_key():
     """
     from grb_rates import formation_efficiency, metallicity_prior_mass_fraction
 
-    metallicityGrid = np.array([0.001, 0.005, 0.01])
-    Z_all = np.array([0.001, 0.001, 0.005, 0.01])
-    w_all = np.array([1.0, 1.0, 1.0, 1.0])
+    metallicityGrid = np.geomspace(0.001, 0.01, 3)  # log-uniform design grid
+    Z_all = np.repeat(metallicityGrid, [2, 1, 1])
+    w_all = np.ones(4)
     mme = 4.0
     eff = formation_efficiency(metallicityGrid, Z_all, w_all, mean_mass_evolved=mme)
     assert set(eff.keys()) == {"total"}
@@ -277,32 +277,52 @@ def test_metallicity_prior_mass_fraction_normalizes_and_preserves_order():
     np.testing.assert_allclose(f_rev[::-1], f, rtol=1e-12)
 
 
-def test_metallicity_prior_mass_fraction_log_uniform_grid_is_flat():
-    """A log-uniform grid gives equal interior mass fractions.
+def test_metallicity_prior_mass_fraction_is_flat_including_the_edges():
+    """Every grid point carries the same star-forming mass, edges included.
 
-    Under uniform-in-ln Z sampling the prior mass per grid point is the
-    log-Z cell width, so a log-uniform grid yields f_i = 1/(N-1) for the
-    interior points and a half-cell at each edge (default bounds clamp to
-    the grid min/max).
+    Broekgaarden+ 2021 Table 1 samples the same ~10^6 binaries at each grid
+    metallicity, so f_i = 1/N everywhere.  The edges are the discriminating
+    case: a cell-width convention would hand them half the mass of an
+    interior point and inflate eta there by a factor two.
     """
     from grb_rates import metallicity_prior_mass_fraction
 
     n = 11
-    grid = np.geomspace(1e-4, 1e-1, n)
-    f = metallicity_prior_mass_fraction(grid)
-    np.testing.assert_allclose(f[1:-1], 1.0 / (n - 1), rtol=1e-12)
-    assert f[0] == pytest.approx(0.5 / (n - 1), rel=1e-12)
-    assert f[-1] == pytest.approx(0.5 / (n - 1), rel=1e-12)
+    f = metallicity_prior_mass_fraction(np.geomspace(1e-4, 1e-1, n))
+    np.testing.assert_allclose(f, 1.0 / n, rtol=1e-12)
 
 
-def test_metallicity_prior_mass_fraction_rejects_bad_bounds():
-    """Empty grid and inverted bounds raise ``ValueError``."""
+def test_metallicity_prior_mass_fraction_is_insensitive_to_rounded_grid_values():
+    """Rounding the published grid must not move f_i.
+
+    The stored COMPAS grid is rounded to two significant figures at the
+    low-Z end, which makes its apparent ln Z cell widths jitter by a factor
+    2.54.  Equal mass per point is a statement about the run configuration,
+    so it cannot depend on that rounding.
+    """
+    from grb_rates import metallicity_prior_mass_fraction
+
+    design = np.geomspace(1e-4, 0.03, 53)
+    rounded = np.array([float(f"{z:.2g}") for z in design])
+    np.testing.assert_allclose(
+        metallicity_prior_mass_fraction(rounded),
+        metallicity_prior_mass_fraction(design),
+        rtol=1e-12,
+    )
+
+
+def test_metallicity_prior_mass_fraction_rejects_bad_grids():
+    """Empty, non-positive, and non-log-uniform grids raise ``ValueError``."""
     from grb_rates import metallicity_prior_mass_fraction
 
     with pytest.raises(ValueError):
         metallicity_prior_mass_fraction(np.array([]))
     with pytest.raises(ValueError):
-        metallicity_prior_mass_fraction(np.geomspace(1e-4, 0.03, 5), z_min=0.03, z_max=1e-4)
+        metallicity_prior_mass_fraction(np.array([0.0, 1e-3, 1e-2]))
+    # Equal mass per point is only the right convention on the uniform-in-log
+    # design grid the simulation used.
+    with pytest.raises(ValueError, match="uniform in log"):
+        metallicity_prior_mass_fraction(np.array([1e-4, 2e-4, 3e-4, 0.03]))
 
 
 # ---------------------------------------------------------------------------
@@ -456,17 +476,74 @@ def test_compute_eos_sensitivity_single_eos_subset_returns_one_row():
     assert list(table.index) == ["APR4"]
 
 
+def test_compute_eos_sensitivity_dropped_weight_frac_matches_cold_stable_cut():
+    """``dropped_weight_frac`` equals the weight above each EOS's M_TOV."""
+    from grb_rates import compute_eos_sensitivity
+
+    # One system has a 2.3 Msun component: dropped by APR4/SFHo/LS220
+    # (M_TOV <= 2.2) but retained by DD2 (M_TOV = 2.42).
+    m1 = np.array([1.4, 2.3, 1.5])
+    m2 = np.array([1.3, 1.3, 1.4])
+    w = np.array([1.0, 3.0, 1.0])
+    table = compute_eos_sensitivity(m1, m2, w, require_cold_stable=True)
+    assert table.loc["APR4", "dropped_weight_frac"] == pytest.approx(3.0 / 5.0)
+    assert table.loc["DD2", "dropped_weight_frac"] == pytest.approx(0.0)
+    # Class fractions still normalise to 1 over the retained weight.
+    class_cols = [c for c in table.columns if "KN" in c or "GRB" in c]
+    np.testing.assert_allclose(table[class_cols].sum(axis=1), 1.0, rtol=1e-12)
+
+
+def test_compute_eos_sensitivity_require_cold_stable_false_drops_nothing():
+    """With the cut off, no weight is discarded and fractions still sum to 1."""
+    from grb_rates import compute_eos_sensitivity
+
+    m1 = np.array([1.4, 2.6, 1.5])
+    m2 = np.array([1.3, 1.3, 1.4])
+    w = np.array([1.0, 1.0, 1.0])
+    table = compute_eos_sensitivity(m1, m2, w, require_cold_stable=False)
+    np.testing.assert_allclose(table["dropped_weight_frac"], 0.0)
+    class_cols = [c for c in table.columns if "KN" in c or "GRB" in c]
+    np.testing.assert_allclose(table[class_cols].sum(axis=1), 1.0, rtol=1e-12)
+
+
+def test_compute_eos_sensitivity_all_dropped_raises():
+    """If every system exceeds M_TOV the row cannot normalise; raise."""
+    from grb_rates import compute_eos_sensitivity
+
+    m1 = np.array([3.0, 3.0])
+    m2 = np.array([3.0, 3.0])
+    w = np.array([1.0, 1.0])
+    single = {"APR4": {"M_TOV": 2.2, "M_crit": 2.8, "R_1p4": 11.3}}
+    with pytest.raises(ValueError, match="cold-stable weight"):
+        compute_eos_sensitivity(m1, m2, w, eos_models=single, require_cold_stable=True)
+
+
 # ---------------------------------------------------------------------------
 # wanderman_piran_2015_Rz and observed_frame_rate shape preservation
 # ---------------------------------------------------------------------------
 def test_wanderman_piran_2015_Rz_shape_preserved_for_array_input():
-    """A length-N array input returns length-N ``'R_best'`` / ``'R_lo'`` / ``'R_hi'``."""
+    """A length-N array input returns length-N arrays for all four bands."""
     from grb_rates import wanderman_piran_2015_Rz
 
     z = np.linspace(0.0, 3.0, 10)
     out = wanderman_piran_2015_Rz(z)
-    for key in ("R_best", "R_lo", "R_hi"):
+    for key in ("R_best", "R_rate_lo", "R_rate_hi", "R_shape_sfr2"):
         assert out[key].shape == z.shape
+
+
+def test_pracchia_salafia_2026_Rz_shape_preserved_for_array_input():
+    """Length-N array input returns length-N arrays for the three bands."""
+    from grb_rates import pracchia_salafia_2026_Rz
+
+    z = np.linspace(0.0, 3.0, 10)
+    out = pracchia_salafia_2026_Rz(z, row="ELF_powerlaw")
+    for key in ("R_best", "R_rate_lo", "R_rate_hi"):
+        assert out[key].shape == z.shape
+        assert np.all(np.isfinite(out[key]))
+        assert np.all(out[key] >= 0.0)
+    # 90 percent CR ordering: rate_lo <= R_best <= rate_hi at every z.
+    assert np.all(out["R_rate_lo"] <= out["R_best"])
+    assert np.all(out["R_best"] <= out["R_rate_hi"])
 
 
 def test_observed_frame_rate_shape_preserved_for_array_input():
@@ -536,6 +613,177 @@ def test_observed_rates_by_class_bounds_lo_le_obs_le_hi_where_finite():
         assert lo <= ob <= hi, (
             f"OBSERVED_RATES_BY_CLASS[{label!r}] bound order broken: lo={lo}, obs={ob}, hi={hi}"
         )
+
+
+# ---------------------------------------------------------------------------
+# formation_efficiency_binned
+# ---------------------------------------------------------------------------
+def _binned_inputs(n_sys=20000, seed=0):
+    grid = np.geomspace(1e-4, 0.03, 53)
+    rng = np.random.default_rng(seed)
+    Z = rng.choice(grid, size=n_sys)
+    w = rng.exponential(size=n_sys)
+    return grid, Z, w
+
+
+def test_formation_efficiency_binned_is_additive_over_disjoint_masks():
+    """Class curves sum to the total bin by bin (one shared denominator)."""
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    a = np.arange(Z.size) % 3 == 0
+    masks = {"a": a, "b": ~a}
+    res = formation_efficiency_binned(grid, Z, w, masks, mean_mass_evolved=1e9, n_bins=15)
+    np.testing.assert_allclose(res["eta"]["a"] + res["eta"]["b"], res["eta"]["total"], rtol=1e-12)
+
+
+def test_formation_efficiency_binned_is_independent_of_the_bin_count():
+    """eta is intensive: pooling more grid points per bin must not move it.
+
+    A denominator that did not pool alongside the numerator would scale with
+    the number of native points in each coarse bin.
+    """
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    # One system per grid point per unit weight makes eta flat, so the two
+    # binnings are directly comparable without interpolating.
+    Z_flat = np.repeat(grid, 40)
+    w_flat = np.ones(Z_flat.size)
+    a = formation_efficiency_binned(grid, Z_flat, w_flat, mean_mass_evolved=1e9, n_bins=10)
+    b = formation_efficiency_binned(grid, Z_flat, w_flat, mean_mass_evolved=1e9, n_bins=53)
+    np.testing.assert_allclose(a["eta"]["total"].mean(), b["eta"]["total"].mean(), rtol=1e-12)
+
+
+def test_formation_efficiency_binned_gates_on_count_and_ess_only():
+    """``ok`` is the precision gate; ``Z_cut`` flags and never rejects.
+
+    Keeping the two separate is what lets a caller draw the artefact range
+    rather than crop it, so a regression that folds ``Z_cut`` back into ``ok``
+    would silently delete a fifth of the BNS sample from the figure again.
+    """
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    kw = dict(mean_mass_evolved=1e9, n_bins=15)
+
+    open_gate = formation_efficiency_binned(grid, Z, w, n_min=0, ess_min=0.0, **kw)
+    assert open_gate["ok"]["total"].all()
+    assert not open_gate["artifact"].any(), "no Z_cut given, so nothing is flagged"
+
+    assert not formation_efficiency_binned(grid, Z, w, ess_min=1e12, **kw)["ok"]["total"].any()
+
+    cut = formation_efficiency_binned(grid, Z, w, Z_cut=0.0105, n_min=0, ess_min=0.0, **kw)
+    np.testing.assert_array_equal(cut["artifact"], cut["Z_hi"] >= 0.0105)
+    assert cut["ok"]["total"].all(), "Z_cut must not touch the precision gate"
+
+
+def test_formation_efficiency_binned_error_is_the_weighted_poisson_sigma():
+    """``eta_err`` is sqrt(sum w^2)/M_SF, so eta/eta_err is sqrt(Kish ESS)."""
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    res = formation_efficiency_binned(grid, Z, w, mean_mass_evolved=1e9, n_bins=15)
+    eta, err, ess = (res[k]["total"] for k in ("eta", "eta_err", "ess"))
+    live = eta > 0
+    np.testing.assert_allclose(eta[live] / err[live], np.sqrt(ess[live]), rtol=1e-12)
+
+
+def test_formation_efficiency_binned_poisson_bars_stay_above_zero():
+    """The asymmetric bars never reach the axis, and converge to ``eta_err``.
+
+    A log ordinate cannot draw the lower half of a symmetric +/- 100 per
+    cent bar, which is what sqrt(sum w^2) gives a bin holding one system.
+    The Poisson pair has to stay strictly inside (0, eta) on the low side
+    while still collapsing onto the Gaussian sigma once a bin is well
+    populated.
+    """
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    res = formation_efficiency_binned(grid, Z, w, mean_mass_evolved=1e9, n_bins=15)
+    eta, err, lo, hi, ess = (
+        res[k]["total"] for k in ("eta", "eta_err", "eta_err_lo", "eta_err_hi", "ess")
+    )
+    live = eta > 0
+    assert (lo[live] < eta[live]).all(), "a bar foot would land on or below zero"
+    assert (lo[live] > 0).all() and (hi[live] > 0).all()
+    assert (hi[live] >= lo[live]).all(), "Poisson bars are skewed upward"
+    # Well-populated bins: both halves agree with sqrt(sum w^2) to a few
+    # per cent, so the change is a small-N refinement and not a rescaling.
+    fat = live & (ess > 100)
+    assert fat.any()
+    np.testing.assert_allclose(lo[fat], err[fat], rtol=0.05)
+    np.testing.assert_allclose(hi[fat], err[fat], rtol=0.05)
+
+    # A single-system bin is the case that motivated the change.
+    one = np.array([grid[0]])
+    thin = formation_efficiency_binned(
+        grid,
+        np.concatenate([Z, one]),
+        np.concatenate([w, [w[0]]]),
+        {"one": np.concatenate([np.zeros(Z.size, bool), [True]])},
+        mean_mass_evolved=1e9,
+        n_bins=15,
+    )
+    k = np.argmax(thin["n_raw"]["one"] == 1)
+    assert thin["n_raw"]["one"][k] == 1
+    assert 0.0 < thin["eta"]["one"][k] - thin["eta_err_lo"]["one"][k]
+    assert thin["eta_err_hi"]["one"][k] > thin["eta_err_lo"]["one"][k]
+
+
+def test_formation_efficiency_binned_upper_limit_marks_the_empty_bins():
+    """``eta_ul`` is finite exactly where a subset has no systems at all.
+
+    An empty bin is a stronger statement than an imprecise one, and a log
+    ordinate cannot draw the zero, so it is returned as a Gehrels (1986)
+    one-sigma bound instead of being indistinguishable from missing data.
+    """
+    from grb_rates import GEHRELS86_UL_ZERO_COUNTS, formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    low = Z < np.median(Z)
+    res = formation_efficiency_binned(grid, Z, w, {"low": low}, mean_mass_evolved=1e9, n_bins=15)
+    n, ul, eta = (res[k]["low"] for k in ("n_raw", "eta_ul", "eta"))
+    np.testing.assert_array_equal(np.isfinite(ul), n == 0)
+    assert (n == 0).any(), "the split has to leave at least one empty bin to test"
+    np.testing.assert_array_equal(eta[n == 0], 0.0)
+    assert (ul[n == 0] > 0).all()
+    assert GEHRELS86_UL_ZERO_COUNTS == pytest.approx(1.841)
+
+
+def test_formation_efficiency_binned_states_are_a_partition():
+    """Every bin of every curve is drawn, imprecise, or empty; never nothing."""
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs()
+    a = np.arange(Z.size) % 7 == 0
+    res = formation_efficiency_binned(
+        grid, Z, w, {"a": a, "b": ~a}, mean_mass_evolved=1e9, n_bins=15
+    )
+    for key in ("total", "a", "b"):
+        ok, n = res["ok"][key], res["n_raw"][key]
+        drawn, thin, empty = ok & (n > 0), (~ok) & (n > 0), n == 0
+        assert (drawn.astype(int) + thin + empty == 1).all(), key
+
+
+def test_formation_efficiency_binned_rejects_off_grid_metallicities():
+    """A system off the grid raises instead of vanishing from the numerator."""
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs(n_sys=100)
+    Z[0] = 0.00013  # between two grid points
+    with pytest.raises(ValueError, match="not on the supplied grid"):
+        formation_efficiency_binned(grid, Z, w, mean_mass_evolved=1e9)
+
+
+def test_formation_efficiency_binned_requires_mean_mass_evolved():
+    """The normalisation is mandatory, as in ``formation_efficiency``."""
+    from grb_rates import formation_efficiency_binned
+
+    grid, Z, w = _binned_inputs(n_sys=100)
+    with pytest.raises(ValueError, match="mean_mass_evolved"):
+        formation_efficiency_binned(grid, Z, w)
 
 
 # ---------------------------------------------------------------------------

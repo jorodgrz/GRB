@@ -3,7 +3,9 @@ Data loading and export helpers for COMPAS HDF5 compact-object outputs.
 
 Standardises how BNS and BHNS populations are read from the COMPAS
 doubleCompactObjects/formationChannels groups. All loaders filter to
-merging systems (mergesInHubbleTimeFlag == 1) and return plain numpy arrays.
+merging systems (mergesInHubbleTimeFlag == 1), drop failed common-envelope
+ejections (``_failed_ce_ejection``; pass ``drop_failed_ce=False`` for the raw
+file), and return plain numpy arrays.
 """
 
 import os
@@ -17,6 +19,23 @@ _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 DEFAULT_BNS_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BNS_A.h5")
 DEFAULT_BHNS_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BHNS_A.h5")
 DEFAULT_BNS_K_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BNS_K.h5")
+
+# IllustrisTNG star formation binned by gas metallicity, the S(Z, z) tables
+# Levina+ 2026 (arXiv:2601.20202) fit; distributed with their Fit_SFRD_TNG
+# repository.  TNG100-1 is the project fiducial.
+TNG_SFRD_PATHS = {
+    box: os.path.join(_DATA_DIR, f"SFRMetallicityFromGasWithMetals{box}.hdf5")
+    for box in ("TNG50-1", "TNG100-1", "TNG300-1")
+}
+
+# Comoving box side lengths in Mpc/h, Nelson+ 2019 (Comput. Astrophys.
+# Cosmol. 6, 2) Table 1.  TNG runs on the Planck 2015 cosmology, h = 0.6774.
+TNG_BOX_SIZE_MPC_H = {"TNG50-1": 35.0, "TNG100-1": 75.0, "TNG300-1": 205.0}
+
+# The rows the loaders return by default.  Caches built from loader output
+# store it in their stamp, so a change of selection forces a rebuild instead of
+# silently reusing rates from another population.
+LOADER_SELECTION = "merging, failed CE ejections dropped"
 
 # Track which paths we've already complained about so the "no metadata"
 # warning fires once per file per process instead of on every loader call.
@@ -115,6 +134,69 @@ def _check_weights_no_nan(w_masked, path):
         )
 
 
+def _failed_ce_ejection(f, dco_seed, path):
+    """True for DCO rows whose common envelope left a star overflowing its Roche lobe.
+
+    Broekgaarden+ 2021 Sec. 2 treat these as failed CE ejections and remove
+    them, but the Zenodo files keep them and ``weights_intrinsic/w_000``
+    counts them (38 percent of the Model A BNS local rate).  COMPAS sets
+    ``commonEnvelopes/immediateRLOFAfterCEE`` when either star's post-CE
+    radius reaches its Roche lobe (``BaseBinaryStar::SetPostCEEValues``), and
+    current COMPAS turns exactly this flag into a stellar merger by default.
+    The paper says "the secondary star", but star 2 reaches its Roche lobe in
+    only 14 of the 92,874 flagged Model A BNS rows (alone in one of them), and
+    dropping the flag as written, either star, reproduces the
+    per-metallicity channel yields of Broekgaarden+ 2026 to machine
+    precision.  The DCO column ``RLOFSecondaryAfterCEE`` is never set.  A
+    system is flagged if any of its CE rows is.
+    """
+    ce = f["commonEnvelopes"]
+    ce_seed = ce["randomSeed"][...].squeeze()
+    flag = ce["immediateRLOFAfterCEE"][...].squeeze().astype(bool)
+    flagged_seeds = np.unique(ce_seed[flag])
+    if not np.isin(flagged_seeds, dco_seed).all():
+        raise KeyError(
+            f"{os.path.basename(path)}: commonEnvelopes flags seeds absent from "
+            f"doubleCompactObjects; cannot seed-join the failed-CE flag."
+        )
+    return np.isin(dco_seed, flagged_seeds)
+
+
+def _row_selection(f, mh, w, drop_failed_ce, path):
+    """Rows a loader returns, and the failed-CE share of the merging weight.
+
+    The share is reported whether or not the systems are dropped, so a caller
+    loading the raw file can still quote it.
+    """
+    dco = f["doubleCompactObjects"]
+    dco_seed = dco["seed" if "seed" in dco else "m_randomSeed"][...].squeeze()
+    merging = mh == 1
+    failed = _failed_ce_ejection(f, dco_seed, path)
+    failed_ce_frac = float(w[merging & failed].sum() / w[merging].sum())
+    mask = merging & ~failed if drop_failed_ce else merging
+    return mask, failed_ce_frac
+
+
+def failed_ce_shares(path):
+    """Failed-CE share of a file's merging weight and of its ``w_000`` local rate.
+
+    Returns ``(weight_share, w000_share)``.  The second is the fraction of the
+    published Broekgaarden+ 2021 local rate carried by systems the loaders drop.
+    """
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        w = dco["weight"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        dco_seed = dco["seed" if "seed" in dco else "m_randomSeed"][...].squeeze()
+        _, weight_share = _row_selection(f, mh, w, True, path)
+        failed = _failed_ce_ejection(f, dco_seed, path)
+        wi = f["weights_intrinsic"]
+        w000_seed = wi["SEED"][...].squeeze()
+        w000 = wi["w_000"][...].squeeze()
+    w000_share = float(w000[np.isin(w000_seed, dco_seed[failed])].sum() / w000.sum())
+    return weight_share, w000_share
+
+
 def _validate_loader_dict(out, n_merging, path):
     """Assert all per-system arrays in a loader dict have length ``n_merging``.
 
@@ -133,6 +215,38 @@ def _validate_loader_dict(out, n_merging, path):
         f"Loader dict shape mismatch in {os.path.basename(path)}: "
         f"keys {bad} have wrong length, expected n_merging={n_merging}."
     )
+
+
+def filter_systems(d, mask):
+    """Apply a per-system boolean ``mask`` to every column of a loader dict.
+
+    Returns a shallow copy in which each length-``n_merging`` array
+    (``m1``, ``m2``, ``weights``, ``metallicity``, ``delay_time``, and
+    every optional channel / kick column) is subset by ``mask``.  Scalar
+    and metadata fields are carried through untouched except
+    ``n_merging``, which is reset to ``int(mask.sum())``, and
+    ``mask_merging``, which spans the full pre-merger-cut catalogue and is
+    left as-is so the merger selection stays reconstructable.
+
+    This exists so a downstream cut (the cold-stability ``m_i <= M_TOV``
+    filter) is applied to the whole dict at one call site.  Masking
+    ``m1`` / ``m2`` by hand and forgetting ``fc_mt_p1``, ``v_sys``, or
+    ``metallicity`` would silently misalign the per-channel and offset
+    arrays against the masses; routing every column through here makes
+    that class of bug impossible.
+    """
+    mask = np.asarray(mask, dtype=bool)
+    n = d.get("n_merging")
+    out = {}
+    for k, v in d.items():
+        if k == "mask_merging":
+            out[k] = v
+        elif isinstance(v, np.ndarray) and n is not None and v.shape[:1] == (n,):
+            out[k] = v[mask]
+        else:
+            out[k] = v
+    out["n_merging"] = int(mask.sum())
+    return out
 
 
 def verify_shared_metallicity_prior(path_a, path_b):
@@ -174,10 +288,46 @@ def read_metallicity_range(path):
     return float(Z.min()), float(Z.max())
 
 
+def load_tng_sfrd(box="TNG100-1", path=None):
+    """Read an IllustrisTNG S(Z, z) table as a comoving density.
+
+    The file stores ``Sfr``, the instantaneous star formation of the whole
+    box in Msun/yr, binned by snapshot (``Redshifts``, descending) and by
+    gas metallicity (``MetalBins``, 61 log-spaced edges from 1e-10 to 1).
+    Dividing by the box volume (L / h)^3 gives Msun/yr/Mpc^3, the same
+    conversion as ``readTNGdata`` in the Levina+ 2026 repository.
+
+    Returns a dict with ``z`` (ascending), ``Z_edges``, and ``sfrd``, shape
+    (n_z, n_Z_bins), the star formation per metallicity bin in
+    Msun/yr/Gpc^3 (an amount per bin, not a density per d ln Z).
+    """
+    from grb_physics import H0_PLANCK15
+
+    if box not in TNG_BOX_SIZE_MPC_H:
+        raise ValueError(f"box must be one of {sorted(TNG_BOX_SIZE_MPC_H)}, got {box!r}")
+    path = TNG_SFRD_PATHS[box] if path is None else path
+    with h5.File(path, "r") as f:
+        z = f["Redshifts"][...]
+        Z_edges = f["MetalBins"][...]
+        sfr_box = f["Sfr"][...]
+    if sfr_box.shape != (z.size, Z_edges.size - 1):
+        raise ValueError(f"{path}: Sfr shape {sfr_box.shape} does not match the bin axes")
+    order = np.argsort(z)
+    volume_Gpc3 = (TNG_BOX_SIZE_MPC_H[box] / (H0_PLANCK15 / 100.0) / 1e3) ** 3
+    return {
+        "z": z[order],
+        "Z_edges": Z_edges,
+        "sfrd": sfr_box[order] / volume_Gpc3,
+        "box": box,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # BNS data loading
 # ═══════════════════════════════════════════════════════════════════════════
-def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
+def load_bns(
+    path=None, sort_masses=True, expected_model=None, expected_ns_max=None, drop_failed_ce=True
+):
     """Load merging BNS population from COMPAS HDF5 file.
 
     Parameters
@@ -196,6 +346,11 @@ def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=N
     expected_ns_max : float, optional
         Validates the ``ns_max`` attribute the same way as
         ``expected_model`` (Models J / A / K = 2.0 / 2.5 / 3.0 Msun).
+    drop_failed_ce : bool
+        If True (the default), drop failed common-envelope ejections
+        (``_failed_ce_ejection``), as Broekgaarden+ 2021 Sec. 2 say they did.
+        Pass False only to compare against the raw file, for example its
+        ``w_000`` anchor, which counts them.
 
     Returns
     -------
@@ -205,7 +360,12 @@ def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=N
         'metallicity'      : birth metallicity (Metallicity1)
         'delay_time'       : tform + tc [Myr]
         'n_merging'        : number of merging systems
-        'mask_merging'     : boolean mask over the full catalogue
+        'mask_merging'     : boolean mask over the full catalogue, True for
+                             the rows returned (merging, and not a failed CE
+                             ejection unless drop_failed_ce=False)
+        'failed_ce_frac'   : failed-CE share of the merging weight, reported
+                             whether or not those systems were dropped
+        'drop_failed_ce'   : the flag the loader ran with
         'model'            : Broekgaarden+ 2021 model letter (or None
                              if the file carries no embedded metadata)
         'ns_max'           : maximum NS gravitational mass for this run
@@ -227,10 +387,10 @@ def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=N
         w = dco["weight"][...].squeeze()
         Z = dco["Metallicity1"][...].squeeze()
         mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        mask, failed_ce_frac = _row_selection(f, mh, w, drop_failed_ce, path)
         tc = dco["tc"][...].squeeze()
         tform = dco["tform"][...].squeeze()
 
-    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bns")
 
@@ -252,6 +412,8 @@ def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=N
         "delay_time": delay,
         "n_merging": int(mask.sum()),
         "mask_merging": mask,
+        "failed_ce_frac": failed_ce_frac,
+        "drop_failed_ce": bool(drop_failed_ce),
         "population": "BNS",
         "model": actual_model,
         "ns_max": actual_ns_max,
@@ -260,16 +422,23 @@ def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=N
     return out
 
 
-def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
+def load_bns_with_channels(
+    path=None, sort_masses=True, expected_model=None, expected_ns_max=None, drop_failed_ce=True
+):
     """Load merging BNS with formation-channel columns.
 
     Returns the same dict as load_bns, plus additional keys for the
     formation-channel classification:
         'dblCE', 'fc_CEE', 'fc_mt_p1', 'fc_mt_s1',
-        'fc_mt_p1_K1', 'fc_mt_s1_K2',
-        'm1zams', 'm2zams', 'sep_preCE', 'sep_postCE'
+        'fc_mt_p1_K1', 'fc_mt_p1_K2', 'fc_mt_s1_K1', 'fc_mt_s1_K2',
+        'm1zams', 'm2zams', 'sep_preCE', 'sep_postCE', 'a_zams',
+        and the first two RLOF episodes 'mt{1,2}_{star1,star2,CE,K1,K2}'
+        that classify_formation_channels reads (see _first_two_rlof)
 
-    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bns``.
+    ``a_zams`` is the ZAMS semi-major axis in AU (COMPAS ``separationInitial``).
+
+    ``expected_model`` / ``expected_ns_max`` / ``drop_failed_ce`` behave as in
+    ``load_bns``.
     """
     if path is None:
         path = DEFAULT_BNS_PATH
@@ -285,6 +454,7 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
         w = dco["weight"][...].squeeze()
         Z = dco["Metallicity1"][...].squeeze()
         mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        mask, failed_ce_frac = _row_selection(f, mh, w, drop_failed_ce, path)
         tc = dco["tc"][...].squeeze()
         tform = dco["tform"][...].squeeze()
         m1z = dco["M1ZAMS"][...].squeeze()
@@ -292,26 +462,32 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
         dblCE = dco["doubleCommonEnvelopeFlag"][...].squeeze()
         sep_pre = dco["SemiMajorAxisPreCEE"][...].squeeze()
         sep_post = dco["SemiMajorAxisPostCEE"][...].squeeze()
+        a_zams = dco["separationInitial"][...].squeeze()
         dco_seed = dco["seed"][...].squeeze()
 
         fc = f["formationChannels"]
         fc_seed = fc["m_randomSeed"][...].squeeze()
         fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
         fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
+        fc_mt_p1_K2 = fc["mt_primary_ep1_K2"][...].squeeze()
         fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
+        fc_mt_s1_K1 = fc["mt_secondary_ep1_K1"][...].squeeze()
         fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
         fc_CEE = fc["CEE"][...].squeeze()
+
+        rlof = _first_two_rlof(f, dco_seed, path)
 
     # Align channel columns to DCO rows by seed (positional join fails when the
     # channel group carries extra/duplicate rows, e.g. the no-PISN Model O).
     _fc_row = _fc_to_dco_index(fc_seed, dco_seed, path)
     fc_mt_p1 = fc_mt_p1[_fc_row]
     fc_mt_p1_K1 = fc_mt_p1_K1[_fc_row]
+    fc_mt_p1_K2 = fc_mt_p1_K2[_fc_row]
     fc_mt_s1 = fc_mt_s1[_fc_row]
+    fc_mt_s1_K1 = fc_mt_s1_K1[_fc_row]
     fc_mt_s1_K2 = fc_mt_s1_K2[_fc_row]
     fc_CEE = fc_CEE[_fc_row]
 
-    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bns_with_channels")
 
@@ -340,16 +516,22 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
         "delay_time": delay,
         "n_merging": int(mask.sum()),
         "mask_merging": mask,
+        "failed_ce_frac": failed_ce_frac,
+        "drop_failed_ce": bool(drop_failed_ce),
         "m1zams": m1z[mask],
         "m2zams": m2z[mask],
         "dblCE": dblCE[mask],
         "sep_preCE": sep_pre[mask],
         "sep_postCE": sep_post[mask],
+        "a_zams": a_zams[mask],
         "fc_mt_p1": fc_mt_p1[mask],
         "fc_mt_p1_K1": fc_mt_p1_K1[mask],
+        "fc_mt_p1_K2": fc_mt_p1_K2[mask],
         "fc_mt_s1": fc_mt_s1[mask],
+        "fc_mt_s1_K1": fc_mt_s1_K1[mask],
         "fc_mt_s1_K2": fc_mt_s1_K2[mask],
         "fc_CEE": fc_CEE[mask],
+        **{k: v[mask] for k, v in rlof.items()},
         "population": "BNS",
         "model": actual_model,
         "ns_max": actual_ns_max,
@@ -361,7 +543,7 @@ def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, exp
 # ═══════════════════════════════════════════════════════════════════════════
 # BHNS data loading
 # ═══════════════════════════════════════════════════════════════════════════
-def load_bhns(path=None, expected_model=None, expected_ns_max=None):
+def load_bhns(path=None, expected_model=None, expected_ns_max=None, drop_failed_ce=True):
     """Load merging BHNS population from COMPAS HDF5 file.
 
     BH/NS identity is resolved using stellarType1 (14 = BH).
@@ -375,6 +557,8 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         present and differs, raises ``ValueError``.
     expected_ns_max : float, optional
         See ``load_bns``.
+    drop_failed_ce : bool
+        See ``load_bns``.
 
     Returns
     -------
@@ -384,7 +568,12 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         'metallicity'      : birth metallicity (Metallicity1)
         'delay_time'       : tform + tc [Myr]
         'n_merging'        : number of merging systems
-        'mask_merging'     : boolean mask over the full catalogue
+        'mask_merging'     : boolean mask over the full catalogue, True for
+                             the rows returned (merging, and not a failed CE
+                             ejection unless drop_failed_ce=False)
+        'failed_ce_frac'   : failed-CE share of the merging weight, reported
+                             whether or not those systems were dropped
+        'drop_failed_ce'   : the flag the loader ran with
         'model'            : Broekgaarden+ 2021 model letter (or None)
         'ns_max'           : maximum NS gravitational mass for the run
     """
@@ -402,6 +591,7 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         w = dco["weight"][...].squeeze()
         Z = dco["Metallicity1"][...].squeeze()
         mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        mask, failed_ce_frac = _row_selection(f, mh, w, drop_failed_ce, path)
         tc = dco["tc"][...].squeeze()
         tform = dco["tform"][...].squeeze()
         st1 = dco["stellarType1"][...].squeeze()
@@ -410,7 +600,6 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
 
-    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bhns")
 
@@ -425,6 +614,8 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         "delay_time": delay,
         "n_merging": int(mask.sum()),
         "mask_merging": mask,
+        "failed_ce_frac": failed_ce_frac,
+        "drop_failed_ce": bool(drop_failed_ce),
         "population": "BHNS",
         "model": actual_model,
         "ns_max": actual_ns_max,
@@ -433,11 +624,17 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
     return out
 
 
-def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None):
+def load_bhns_with_channels(
+    path=None, expected_model=None, expected_ns_max=None, drop_failed_ce=True
+):
     """Load merging BHNS with formation-channel columns.
 
-    Same as load_bhns plus formation-channel keys for classify_formation_channels.
-    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bhns``.
+    Same as load_bhns plus formation-channel keys for classify_formation_channels
+    (the first two RLOF episodes ``mt{1,2}_*``, as in load_bns_with_channels),
+    and the ZAMS columns ``m1zams`` / ``m2zams`` (COMPAS star 1 / star 2, not
+    BH / NS) and ``a_zams`` (AU).
+    ``expected_model`` / ``expected_ns_max`` / ``drop_failed_ce`` behave as in
+    ``load_bhns``.
     """
     if path is None:
         path = DEFAULT_BHNS_PATH
@@ -453,11 +650,15 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
         w = dco["weight"][...].squeeze()
         Z = dco["Metallicity1"][...].squeeze()
         mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        mask, failed_ce_frac = _row_selection(f, mh, w, drop_failed_ce, path)
         tc = dco["tc"][...].squeeze()
         tform = dco["tform"][...].squeeze()
         st1 = dco["stellarType1"][...].squeeze()
         dblCE = dco["doubleCommonEnvelopeFlag"][...].squeeze()
         sep_pre = dco["SemiMajorAxisPreCEE"][...].squeeze()
+        m1z = dco["M1ZAMS"][...].squeeze()
+        m2z = dco["M2ZAMS"][...].squeeze()
+        a_zams = dco["separationInitial"][...].squeeze()
         _seed_key = "seed" if "seed" in dco else "m_randomSeed"
         dco_seed = dco[_seed_key][...].squeeze()
 
@@ -465,16 +666,22 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
         fc_seed = fc["m_randomSeed"][...].squeeze()
         fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
         fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
+        fc_mt_p1_K2 = fc["mt_primary_ep1_K2"][...].squeeze()
         fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
+        fc_mt_s1_K1 = fc["mt_secondary_ep1_K1"][...].squeeze()
         fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
         fc_CEE = fc["CEE"][...].squeeze()
+
+        rlof = _first_two_rlof(f, dco_seed, path)
 
     # Align channel columns to DCO rows by seed (positional join fails when the
     # channel group carries extra/duplicate rows, e.g. the no-PISN Model O).
     _fc_row = _fc_to_dco_index(fc_seed, dco_seed, path)
     fc_mt_p1 = fc_mt_p1[_fc_row]
     fc_mt_p1_K1 = fc_mt_p1_K1[_fc_row]
+    fc_mt_p1_K2 = fc_mt_p1_K2[_fc_row]
     fc_mt_s1 = fc_mt_s1[_fc_row]
+    fc_mt_s1_K1 = fc_mt_s1_K1[_fc_row]
     fc_mt_s1_K2 = fc_mt_s1_K2[_fc_row]
     fc_CEE = fc_CEE[_fc_row]
 
@@ -482,7 +689,6 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
 
-    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bhns_with_channels")
 
@@ -497,13 +703,21 @@ def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None
         "delay_time": delay,
         "n_merging": int(mask.sum()),
         "mask_merging": mask,
+        "failed_ce_frac": failed_ce_frac,
+        "drop_failed_ce": bool(drop_failed_ce),
         "dblCE": dblCE[mask],
         "sep_preCE": sep_pre[mask],
+        "m1zams": m1z[mask],
+        "m2zams": m2z[mask],
+        "a_zams": a_zams[mask],
         "fc_mt_p1": fc_mt_p1[mask],
         "fc_mt_p1_K1": fc_mt_p1_K1[mask],
+        "fc_mt_p1_K2": fc_mt_p1_K2[mask],
         "fc_mt_s1": fc_mt_s1[mask],
+        "fc_mt_s1_K1": fc_mt_s1_K1[mask],
         "fc_mt_s1_K2": fc_mt_s1_K2[mask],
         "fc_CEE": fc_CEE[mask],
+        **{k: v[mask] for k, v in rlof.items()},
         "population": "BHNS",
         "model": actual_model,
         "ns_max": actual_ns_max,
@@ -583,22 +797,104 @@ METALLICITY_GRID = np.array(
 # ═══════════════════════════════════════════════════════════════════════════
 # Observed BNS gravitational-wave events
 # ═══════════════════════════════════════════════════════════════════════════
-# Component-mass medians under the *low-spin* prior from the LIGO/Virgo
-# discovery papers.  These are the published medians, intended for figure
-# annotations and quick sanity checks against classification thresholds;
-# use the full posteriors (GWOSC) for any quantitative population work.
-# Each entry pairs the mass values with a single citation so plotting
-# code never needs to inline a hard-coded mass without a source.
+# Component-mass anchors under the *low-spin* (|chi| < 0.05) prior, for
+# figure annotations and quick sanity checks against classification
+# thresholds; use the full posteriors (GWOSC) for any quantitative
+# population work.  Each entry carries a central (M1, M2) point and the
+# 90% credible interval on each marginal (``M[12]_lo`` / ``M[12]_hi``),
+# which Section 1 draws as error bars.  The marginals are projections of
+# a thin banana along Mc = const, so the cross drawn from them covers far
+# more of the (M2, M1) plane than the joint posterior does.
 OBSERVED_GW_EVENTS = {
     "GW170817": {
+        # GWTC-1 (Abbott et al. 2019, PRX 9, 031040), Table III: medians
+        # with 90% CRs, IMRPhenomPv2NRT, low-spin prior.  m1 = 1.46 +0.12
+        # -0.10, m2 = 1.27 +0.09 -0.09.  Point and interval come from the
+        # same analysis.  The properties paper (PRX 9, 011001, Table II,
+        # low-spin) quotes one-sided limits instead, m1 in (1.36, 1.60) and
+        # m2 in (1.16, 1.36), each truncated at the equal-mass line.
         "M1": 1.46,
         "M2": 1.27,
-        "reference": "Abbott+ 2019, PRX 9, 011001 (Table I, low-spin prior)",
+        "M1_lo": 1.36,
+        "M1_hi": 1.58,
+        "M2_lo": 1.18,
+        "M2_hi": 1.36,
+        # Source-frame chirp mass and its 90% CR half-width, which is
+        # the actually well-measured combination that defines the shape
+        # of the joint 2D posterior (a thin banana along Mc = const in
+        # the (M2, M1) plane).
+        "Mc": 1.186,
+        "Mc_err_90": 0.001,
+        "reference": (
+            "Low-spin (|chi| < 0.05) medians with 90% CR from GWTC-1 "
+            "(Abbott et al. 2019, PRX 9, 031040, Table III)."
+        ),
     },
     "GW190425": {
+        # Low-spin 90% CR midpoint on each component; Table 1 reports
+        # intervals rather than tabulated single-value component-mass
+        # estimates, so this is not a "median" in any strict sense.  Sits
+        # ~0.02 Msun from the GWOSC low-spin 1D posterior medians.
         "M1": 1.73,
         "M2": 1.58,
-        "reference": "Abbott+ 2020, ApJL 892, L3 (Table 1, low-spin prior)",
+        # Low-spin (|chi| < 0.05) 90% credible ranges on the individual
+        # component masses (Abbott et al. 2020, ApJL 892, L3, Table 1).
+        "M1_lo": 1.60,
+        "M1_hi": 1.87,
+        "M2_lo": 1.46,
+        "M2_hi": 1.69,
+        # Source-frame chirp mass and its 90% CR half-width; the joint
+        # 2D posterior is a thin banana along Mc = const in (M2, M1).
+        "Mc": 1.44,
+        "Mc_err_90": 0.02,
+        "reference": (
+            "Low-spin (|chi| < 0.05) 90% CR from Abbott et al. 2020, "
+            "ApJL 892, L3, Table 1; the plotted (M1, M2) is the CR "
+            "midpoint since Table 1 reports intervals rather than "
+            "tabulated component-mass medians (~0.02 Msun from the "
+            "GWOSC low-spin 1D posterior medians)."
+        ),
+    },
+}
+
+
+# Observed NSBH GW events for annotation on the Section 1 BHNS mass
+# plane.  Published medians with 90% CRs on the individual component masses
+# (Abbott et al. 2021, ApJL 915, L5, arXiv:2106.15163, Table 2).  Table 2
+# has two columns per event, differing only in the prior on the secondary
+# spin: low spin (chi2 < 0.05) and high spin (chi2 < 0.99).  The paper
+# quotes the high-spin column throughout its text and abstract (Sec. 4),
+# and that is the column pinned here.  The two events are used only as
+# figure annotations on the BHNS panel; anything quantitative should use
+# the full posteriors from GWOSC.
+OBSERVED_NSBH_EVENTS = {
+    "GW200105": {
+        # Table 2, high-spin (chi2 < 0.99): m1 = 8.9 +1.2 -1.5,
+        # m2 = 1.9 +0.3 -0.2.
+        "M_BH": 8.9,
+        "M_NS": 1.9,
+        "M_BH_lo": 7.4,
+        "M_BH_hi": 10.1,
+        "M_NS_lo": 1.7,
+        "M_NS_hi": 2.2,
+        "reference": (
+            "Median with 90% CR, secondary-spin prior chi2 < 0.99, from "
+            "Abbott et al. 2021, ApJL 915, L5, Table 2 (GW200105_162426)."
+        ),
+    },
+    "GW200115": {
+        # Table 2, high-spin (chi2 < 0.99): m1 = 5.7 +1.8 -2.1,
+        # m2 = 1.5 +0.7 -0.3.
+        "M_BH": 5.7,
+        "M_NS": 1.5,
+        "M_BH_lo": 3.6,
+        "M_BH_hi": 7.5,
+        "M_NS_lo": 1.2,
+        "M_NS_hi": 2.2,
+        "reference": (
+            "Median with 90% CR, secondary-spin prior chi2 < 0.99, from "
+            "Abbott et al. 2021, ApJL 915, L5, Table 2 (GW200115_042309)."
+        ),
     },
 }
 
@@ -919,14 +1215,88 @@ def _fc_to_dco_index(fc_seed, dco_seed, path):
     return first[pos]
 
 
+_RLOF_COLUMNS = {
+    "star1": "flagRLOF1",
+    "star2": "flagRLOF2",
+    "CE": "flagCEE",
+    "K1": "type1Prev",
+    "K2": "type2Prev",
+}
+
+
+def _first_two_rlof(f, dco_seed, path):
+    """First and second rows of the ``RLOF`` group for each DCO seed.
+
+    These are the inputs of the Broekgaarden+ 2021 channel definitions
+    (their ``identify_formation_channels``, which numbers each seed's RLOF
+    rows in file order).  ``eventCounter`` is that per-seed row number in all
+    40 grid files, rows run forward in time, and every merging system has at
+    least one row.  Returns ``mt{1,2}_{star1,star2,CE,K1,K2}``: which star
+    overflowed, whether the episode became a CE, and the Hurley types before
+    it.  A missing episode reads False / -1, which no channel accepts.
+
+    Model L writes three histories twice, row for row; the first copy is the
+    one her row numbering reads, so a duplicate is used only after checking
+    it is identical.
+    """
+    g = f["RLOF"]
+    seed = g["randomSeed"][...].squeeze()
+    episode = g["eventCounter"][...].squeeze()
+    cols = {k: g[c][...].squeeze() for k, c in _RLOF_COLUMNS.items()}
+    time = g["time"][...].squeeze()
+
+    out = {}
+    rows_by_episode = []
+    for n in (0, 1):
+        rows = np.flatnonzero(episode == n)
+        u_seed, first = np.unique(seed[rows], return_index=True)
+        for k, col in cols.items():
+            dup_differs = col[rows] != col[rows[first]][np.searchsorted(u_seed, seed[rows])]
+            if np.any(dup_differs):
+                raise ValueError(
+                    f"{os.path.basename(path)}: RLOF episode {n + 1} is written more than "
+                    f"once for some seeds with different '{_RLOF_COLUMNS[k]}'."
+                )
+        if rows.size == 0:
+            found = np.zeros(dco_seed.shape, dtype=bool)
+            row = np.zeros(dco_seed.shape, dtype=int)
+        else:
+            pos = np.clip(np.searchsorted(u_seed, dco_seed), 0, u_seed.size - 1)
+            found = u_seed[pos] == dco_seed
+            row = rows[first[pos]]
+        rows_by_episode.append((found, row))
+        for k, col in cols.items():
+            fill = False if col.dtype == bool else -1
+            out[f"mt{n + 1}_{k}"] = np.where(found, col[row], fill)
+
+    (found1, row1), (found2, row2) = rows_by_episode
+    if np.any(found2 & ~found1) or np.any(found2 & (time[row2] < time[row1])):
+        raise ValueError(f"{os.path.basename(path)}: RLOF episodes are out of order.")
+    return out
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Kick / velocity loading (for kinematic offset analysis)
 # ═══════════════════════════════════════════════════════════════════════════
 def _match_sn_to_dco(f):
-    """Extract the post-2nd-SN systemic velocity matched to DCO rows.
+    """Join the per-supernova systemic velocities and times to DCO rows.
 
-    The supernovae group has two rows per system (one per SN).
-    We take the LAST SN event per seed (the 2nd SN that forms the DCO).
+    The supernovae group holds two rows per system, one per SN.  Ordered by
+    event time within each seed, the first row is the post-SN1 state and the
+    second is the post-SN2 state that forms the DCO.  ``systemicVelocity`` is
+    the cumulative center-of-mass speed after each kick, so ``v_sys_2`` is the
+    post-second-SN value the older code returned as ``v_sys``.
+
+    Returns a dict of full-length (pre-merger-mask) arrays aligned to the DCO
+    table:
+
+        ``v_sys_1`` / ``v_sys_2`` : COM speed [km/s] after SN1 / SN2.
+        ``t_sn1`` / ``t_sn2``     : time of SN1 / SN2 [Myr].
+
+    A DCO seed with no matching SN pair gets NaN in all four (dropped
+    downstream via ``np.isfinite``).  A matched DCO seed whose SN group does
+    not hold exactly two rows raises, because the two-leg kinematic treatment
+    in ``grb_offsets`` depends on the SN1/SN2 pairing.
 
     Vectorized with numpy for performance on large populations.
     """
@@ -942,41 +1312,79 @@ def _match_sn_to_dco(f):
     order = np.lexsort((sn_time, sn_seed))
     sn_seed_s = sn_seed[order]
     sn_vsys_s = sn_vsys[order]
+    sn_time_s = sn_time[order]
 
-    u_seeds, first_rev = np.unique(sn_seed_s[::-1], return_index=True)
-    last_idx = len(sn_seed_s) - 1 - first_rev
-    last_vsys = sn_vsys_s[last_idx]
+    u_seeds, first_idx, counts = np.unique(sn_seed_s, return_index=True, return_counts=True)
+    n_seeds = len(u_seeds)
 
-    vsys_out = np.full(len(dco_seed), np.nan)
+    # Per-seed SN1/SN2 arrays.  Only seeds with exactly two SN rows are filled;
+    # a positional (idx, idx+1) read for any other count would straddle the
+    # next seed's rows, so those stay NaN and are caught at match time below.
+    v1 = np.full(n_seeds, np.nan)
+    v2 = np.full(n_seeds, np.nan)
+    t1 = np.full(n_seeds, np.nan)
+    t2 = np.full(n_seeds, np.nan)
+    two = counts == 2
+    idx2 = first_idx[two]
+    v1[two], t1[two] = sn_vsys_s[idx2], sn_time_s[idx2]
+    v2[two], t2[two] = sn_vsys_s[idx2 + 1], sn_time_s[idx2 + 1]
+
+    # A matched seed contributes SN1/SN2 states only if it carries exactly two
+    # supernova rows.  Seeds with any other count (a few per model in the full
+    # grid, from bookkeeping gaps in the supernovae group) are left NaN and
+    # dropped downstream via np.isfinite, exactly like an unmatched seed; the
+    # two-leg treatment needs a clean SN1/SN2 pair.
     match = np.searchsorted(u_seeds, dco_seed)
-    match_clipped = np.clip(match, 0, len(u_seeds) - 1)
-    found = (match < len(u_seeds)) & (u_seeds[match_clipped] == dco_seed)
-    vsys_out[found] = last_vsys[match_clipped[found]]
+    match_clipped = np.clip(match, 0, n_seeds - 1)
+    paired = (match < n_seeds) & (u_seeds[match_clipped] == dco_seed) & (counts[match_clipped] == 2)
+    src = match_clipped[paired]
 
-    n_unmatched = int((~found).sum())
-    if n_unmatched > 0:
+    def _gather(per_seed):
+        out = np.full(len(dco_seed), np.nan)
+        out[paired] = per_seed[src]
+        return out
+
+    n_missing = int((~paired).sum())
+    if n_missing > 0:
         # NaN in v_sys silently disappears via np.isfinite(v_sys_km) in
         # compute_offsets_population (grb_offsets.py); surface it at
         # load time so the count is auditable in the notebook log.
         warnings.warn(
             f"_match_sn_to_dco ({os.path.basename(f.filename)}): "
-            f"{n_unmatched} of {len(dco_seed)} DCO seeds had no matching "
-            f"SN entry; v_sys is NaN for those rows.  Downstream offset "
+            f"{n_missing} of {len(dco_seed)} DCO seeds had no matching "
+            f"supernova pair; v_sys is NaN for those rows.  Downstream offset "
             f"analysis will silently drop them via np.isfinite() in "
             f"compute_offsets_population.",
             stacklevel=2,
         )
 
-    return vsys_out
+    return {
+        "v_sys_1": _gather(v1),
+        "v_sys_2": _gather(v2),
+        "t_sn1": _gather(t1),
+        "t_sn2": _gather(t2),
+    }
 
 
-def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
+def load_bns_with_kicks(
+    path=None, sort_masses=True, expected_model=None, expected_ns_max=None, drop_failed_ce=True
+):
     """Load merging BNS with kick/velocity columns for offset analysis.
 
     Returns the standard load_bns dict plus:
         'drawnKick1', 'drawnKick2', 'v_sys', 'sep_DCO', 'ecc_DCO'
 
-    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bns``.
+    For the two-leg kinematic treatment (drift at the post-SN1 velocity until
+    the second supernova, then at the post-SN2 velocity through the inspiral)
+    it also returns:
+        'v_sys_1', 'v_sys_2' : COM speed [km/s] after SN1 / SN2
+        't_sn1', 't_sn2'     : time of SN1 / SN2 [Myr]
+        't_inspiral'         : ``tc`` [Myr], the post-DCO gravitational-wave
+                               inspiral time
+    ``v_sys`` is kept as an alias of ``v_sys_2`` for backward compatibility.
+
+    ``expected_model`` / ``expected_ns_max`` / ``drop_failed_ce`` behave as in
+    ``load_bns``.
     """
     if path is None:
         path = DEFAULT_BNS_PATH
@@ -992,6 +1400,7 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
         w = dco["weight"][...].squeeze()
         Z = dco["Metallicity1"][...].squeeze()
         mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        mask, failed_ce_frac = _row_selection(f, mh, w, drop_failed_ce, path)
         tc = dco["tc"][...].squeeze()
         tform = dco["tform"][...].squeeze()
         dk1 = dco["drawnKick1"][...].squeeze()
@@ -999,9 +1408,8 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
         sep = dco["separationDCOFormation"][...].squeeze()
         ecc = dco["eccentricityDCOFormation"][...].squeeze()
 
-        vsys_all = _match_sn_to_dco(f)
+        sn = _match_sn_to_dco(f)
 
-    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bns_with_kicks")
 
@@ -1023,9 +1431,16 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
         "delay_time": delay,
         "n_merging": int(mask.sum()),
         "mask_merging": mask,
+        "failed_ce_frac": failed_ce_frac,
+        "drop_failed_ce": bool(drop_failed_ce),
         "drawnKick1": dk1[mask],
         "drawnKick2": dk2[mask],
-        "v_sys": vsys_all[mask],
+        "v_sys": sn["v_sys_2"][mask],
+        "v_sys_1": sn["v_sys_1"][mask],
+        "v_sys_2": sn["v_sys_2"][mask],
+        "t_sn1": sn["t_sn1"][mask],
+        "t_sn2": sn["t_sn2"][mask],
+        "t_inspiral": tc[mask],
         "sep_DCO": sep[mask],
         "ecc_DCO": ecc[mask],
         "population": "BNS",
@@ -1036,10 +1451,15 @@ def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expect
     return out
 
 
-def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
+def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None, drop_failed_ce=True):
     """Load merging BHNS with kick/velocity columns for offset analysis.
 
-    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bhns``.
+    Returns the same two-leg kinematic columns as ``load_bns_with_kicks``
+    (``v_sys_1``, ``v_sys_2``, ``t_sn1``, ``t_sn2``, ``t_inspiral``, with
+    ``v_sys`` aliased to ``v_sys_2``).
+
+    ``expected_model`` / ``expected_ns_max`` / ``drop_failed_ce`` behave as in
+    ``load_bhns``.
     """
     if path is None:
         path = DEFAULT_BHNS_PATH
@@ -1055,6 +1475,7 @@ def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
         w = dco["weight"][...].squeeze()
         Z = dco["Metallicity1"][...].squeeze()
         mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        mask, failed_ce_frac = _row_selection(f, mh, w, drop_failed_ce, path)
         tc = dco["tc"][...].squeeze()
         tform = dco["tform"][...].squeeze()
         st1 = dco["stellarType1"][...].squeeze()
@@ -1063,12 +1484,11 @@ def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
         sep = dco["separationDCOFormation"][...].squeeze()
         ecc = dco["eccentricityDCOFormation"][...].squeeze()
 
-        vsys_all = _match_sn_to_dco(f)
+        sn = _match_sn_to_dco(f)
 
     is_BH1 = st1 == 14
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
-    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bhns_with_kicks")
 
@@ -1083,9 +1503,16 @@ def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
         "delay_time": delay,
         "n_merging": int(mask.sum()),
         "mask_merging": mask,
+        "failed_ce_frac": failed_ce_frac,
+        "drop_failed_ce": bool(drop_failed_ce),
         "drawnKick1": dk1[mask],
         "drawnKick2": dk2[mask],
-        "v_sys": vsys_all[mask],
+        "v_sys": sn["v_sys_2"][mask],
+        "v_sys_1": sn["v_sys_1"][mask],
+        "v_sys_2": sn["v_sys_2"][mask],
+        "t_sn1": sn["t_sn1"][mask],
+        "t_sn2": sn["t_sn2"][mask],
+        "t_inspiral": tc[mask],
         "sep_DCO": sep[mask],
         "ecc_DCO": ecc[mask],
         "population": "BHNS",
